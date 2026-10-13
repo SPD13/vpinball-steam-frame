@@ -43,9 +43,7 @@ The game is not on the Steam store. It is installed on the Frame from another co
 ### What you need
 
 - A Steam Frame and a computer on the **same network**.
-- On the computer, a terminal with `bash` and `ssh`:
-  - **macOS, Linux:** nothing to install.
-  - **Windows 10 or 11:** WSL (recommended: in PowerShell, run `wsl --install`, restart, then use the Ubuntu terminal), or Git Bash from Git for Windows. With Git Bash the password is asked at each step, and every update sends the whole game again.
+- A computer with **Windows 10 (version 1809 or later) or 11, macOS or Linux**. Nothing needs to be installed on it: the installer only uses what these systems include (on Windows: PowerShell, `ssh` and `tar`).
 - Your own tables (`.vpx`) and, for the tables that need them, their ROMs: none are included.
 
 ### 1. Turn on Developer Mode on the Frame
@@ -57,24 +55,48 @@ Keep the headset on (or awake) while installing: it leaves the network when it g
 
 ### 2. Download
 
-Download the latest `vpx-steam-frame-<version>.tar.gz` from the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases) of this repository.
+From the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases) of this repository, download the latest version:
+
+- **Windows:** `vpx-steam-frame-<version>.zip`
+- **macOS, Linux:** `vpx-steam-frame-<version>.tar.gz`
+
+Both contain the same game and installers.
 
 ### 3. Install
 
-The installer is `install.sh`, a script in the download that you run in a terminal on your computer. It connects to the Frame over the network, copies the game to it, and adds it to the Steam library. Nothing is installed on the computer itself.
+The installer runs on your computer: it connects to the Frame over the network, copies the game to it, and adds it to the Steam library. Nothing is installed on the computer itself. Keep the headset awake while it runs.
+
+#### On Windows
+
+1. **Unpack the download:** right-click `vpx-steam-frame-<version>.zip` in your Downloads folder, choose **Extract All...**, then **Extract**. A folder of the same name opens.
+2. **Double-click `Install on Windows.bat`** in that folder. If Windows warns that the file comes from the internet ("Windows protected your PC"), choose **More info**, then **Run anyway**.
+3. A window opens and the installer starts. When asked, type **the password set in step 1** and press <kbd>Enter</kbd>: nothing shows while you type, this is normal. It is asked **twice**: once to send the game, once to install it.
+4. The game is sent (about 165 MB, a progress line shows), then installed. The window ends with:
+
+   ```text
+   ==> Done
+       On the Frame: Library > Non-Steam > "Visual Pinball X - Steam Frame Edition".
+   ```
+
+   Press a key to close the window.
+
+- **If the Frame is not found** (`frame.local` is not found on the network), the installer asks for its IP address instead, shown in the Frame's network settings (for example `192.168.1.42`).
+- **If something goes wrong**, the installer stops with a message saying what to check (see [Troubleshooting](#troubleshooting) below). Running it again is always safe.
+- The Windows installer only uses what Windows includes: PowerShell, and its `ssh` and `tar` commands. Windows Subsystem for Linux (WSL) and Git Bash are not needed, but they can also run `install.sh`, as on macOS and Linux.
+
+#### On macOS or Linux
+
+The installer is `install.sh`, a script in the download that you run in a terminal.
 
 **Open a terminal:**
 
 - **macOS:** open **Terminal** (press <kbd>Cmd</kbd>+<kbd>Space</kbd>, type `Terminal`, press <kbd>Enter</kbd>).
 - **Linux:** open your terminal application.
-- **Windows with WSL:** open **Ubuntu** from the Start menu.
-- **Windows with Git Bash:** open **Git Bash** from the Start menu.
 
 **Go to the folder of the download,** usually your Downloads folder:
 
 ```sh
-cd ~/Downloads                     # macOS, Linux, Git Bash
-cd /mnt/c/Users/<you>/Downloads    # WSL: <you> is your Windows user name
+cd ~/Downloads
 ```
 
 **Unpack the download and enter its folder** (replace `<version>` with the version you downloaded; press <kbd>Tab</kbd> after typing `vpx-steam-frame-` to complete the name):
@@ -141,36 +163,43 @@ On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Editio
 
 ### Updating
 
-Download the new version and run its `./install.sh` again. Tables, settings, scores and play statistics are kept.
+Download the new version and install it the same way: double-click its `Install on Windows.bat`, or run its `./install.sh`. Tables, settings, scores and play statistics are kept. On Windows, each update sends the whole game again (about 165 MB); on macOS and Linux, only what changed.
 
 ### Uninstalling
 
-From the folder of the download:
+- **Windows:** double-click `Uninstall on Windows.bat` in the folder of the download. It removes the game, its library entry and artwork. To also remove the settings, logs, scores and play statistics, run it from PowerShell in that folder: `.\uninstall.ps1 -Settings` (or `powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Settings` if PowerShell refuses to run scripts).
+- **macOS, Linux:** from the folder of the download:
 
-```sh
-./uninstall.sh              # removes the game, its library entry and artwork
-./uninstall.sh --settings   # also removes the settings, logs, scores and play statistics
-```
+  ```sh
+  ./uninstall.sh              # removes the game, its library entry and artwork
+  ./uninstall.sh --settings   # also removes the settings, logs, scores and play statistics
+  ```
 
 The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted.
 
 ### Installer options
 
 ```sh
-./install.sh [--name NAME] [--gameid ID] [--no-art] [user@]host
+./install.sh [--name NAME] [--gameid ID] [--no-art] [user@]host                                  # macOS, Linux
+powershell -ExecutionPolicy Bypass -File install.ps1 [-Name NAME] [-GameId ID] [-NoArt] [-Frame host]   # Windows
 ```
 
-- `--name` changes the name of the game in the library. `--name ''` keeps the name Steam gives it, "Devkit Game: VisualPinball".
-- `--gameid` installs another copy beside the first one (letters, digits, `_` and `.` only). Pass the same id to `uninstall.sh`.
-- `--no-art` skips the library artwork.
-- An ssh key avoids typing the password at each install: run `ssh-copy-id steamos@frame.local` once (macOS, Linux, WSL).
+The options can also follow `Install on Windows.bat` when it is started from a terminal, for example `& '.\Install on Windows.bat' 192.168.1.42` in PowerShell.
+
+- The host (`[user@]host`, `-Frame`) is the Frame's address: `frame.local` by default, or its IP address.
+- `--name` / `-Name` changes the name of the game in the library. An empty name (`--name ''`, `-Name ''`) keeps the name Steam gives it, "Devkit Game: VisualPinball".
+- `--gameid` / `-GameId` installs another copy beside the first one (letters, digits, `_` and `.` only). Pass the same id to the uninstaller.
+- `--no-art` / `-NoArt` skips the library artwork.
+- `--help` / `-Help` lists the options.
+- An ssh key avoids typing the password at each install: run `ssh-copy-id steamos@frame.local` once (macOS, Linux).
 
 ### Troubleshooting
 
 | Problem | What to do |
 | --- | --- |
-| `cannot connect to steamos@frame.local` | Wake the headset (put it on). Check that Developer Mode is on and that a password is set. Use the IP address instead of `frame.local`. |
-| `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address), then install again. |
+| `cannot connect to steamos@frame.local`, `cannot send the game` | Wake the headset (put it on). Check that Developer Mode is on and that a password is set. Use the IP address instead of `frame.local`. |
+| `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. It is included in Windows 10 version 1809 and later, but can have been removed. |
+| `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
 | The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
 | The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
