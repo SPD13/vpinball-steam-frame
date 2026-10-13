@@ -38,12 +38,13 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 
 ## How to install
 
-The game is not on the Steam store. It is installed on the Frame from another computer on the same network, over ssh: an installer copies the game to the headset and adds it to the Steam library, with its artwork.
+The game is not on the Steam store. It is installed on the Frame from a computer on the same network: the **installer app** finds the Frame, checks that it is ready, then downloads the latest version of the game and installs it, with its entry and artwork in the Steam library. The same app updates the game later. Nothing is installed on the computer itself.
 
 ### What you need
 
 - A Steam Frame and a computer on the **same network**.
-- A computer with **Windows 10 (version 1809 or later) or 11, macOS or Linux**. Nothing needs to be installed on it: the installer only uses what these systems include (on Windows: PowerShell, `ssh` and `tar`).
+- A computer with **Windows 10 or 11** (64-bit), **macOS 12 or later** (Apple silicon or Intel) or **Linux**. Nothing else is needed: the installer app brings everything it uses.
+- An internet connection: the app downloads the game (about 170 MB) from this repository's releases.
 - Your own tables (`.vpx`) and, for the tables that need them, their ROMs: none are included.
 
 ### 1. Turn on Developer Mode on the Frame
@@ -53,20 +54,83 @@ The game is not on the Steam store. It is installed on the Frame from another co
 
 Keep the headset on (or awake) while installing: it leaves the network when it goes to sleep.
 
-### 2. Download
+### 2. Download the installer app
 
-From the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases) of this repository, download the latest version:
+| Computer | Download |
+| --- | --- |
+| Windows 10, 11 | [VPX-Frame-Installer-Windows.exe](https://github.com/SPD13/vpinball-steam-frame/releases/latest/download/VPX-Frame-Installer-Windows.exe) |
+| macOS 12 or later | [VPX-Frame-Installer-macOS.zip](https://github.com/SPD13/vpinball-steam-frame/releases/latest/download/VPX-Frame-Installer-macOS.zip) |
+| Linux (PC, Steam Deck) | [VPX-Frame-Installer-Linux-x86_64.tar.gz](https://github.com/SPD13/vpinball-steam-frame/releases/latest/download/VPX-Frame-Installer-Linux-x86_64.tar.gz) |
+| Linux (ARM64) | [VPX-Frame-Installer-Linux-arm64.tar.gz](https://github.com/SPD13/vpinball-steam-frame/releases/latest/download/VPX-Frame-Installer-Linux-arm64.tar.gz) |
 
-- **Windows:** `vpx-steam-frame-<version>.zip`
-- **macOS, Linux:** `vpx-steam-frame-<version>.tar.gz`
+The links always give the latest version; they are also on the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases). The app does not need updating with each new version of the game: it always installs the latest one.
 
-Both contain the same game and installers.
+### 3. Run the installer app
 
-### 3. Install
+The app is not signed with a paid certificate, so Windows and macOS warn the first time it is opened:
 
-The installer runs on your computer: it connects to the Frame over the network, copies the game to it, and adds it to the Steam library. Nothing is installed on the computer itself. Keep the headset awake while it runs.
+- **Windows:** double-click `VPX-Frame-Installer-Windows.exe`. If Windows says "Windows protected your PC", choose **More info**, then **Run anyway**. (If the browser warns that the file is not commonly downloaded, choose to keep it.)
+- **macOS:** open the `.zip` (Safari may already have done it) and move **Visual Pinball X Installer** to your Applications folder if you like, then double-click it. If macOS says it cannot verify the app ("Not Opened"), choose **Done**, open **System Settings > Privacy & Security**, scroll down to **Security**, choose **Open Anyway** next to the app's name and confirm. When the app asks to **find devices on local networks**, choose **Allow**: it is how it reaches the Frame.
+- **Linux:** unpack the download and run the app, for example in a terminal: `tar -xzf VPX-Frame-Installer-Linux-x86_64.tar.gz && ./VPX-Frame-Installer`. It opens in your web browser; it quits when the page is closed.
 
-#### On Windows
+The app has two steps.
+
+**Step 1, connect to the Frame.** The app looks for the Frame on the network and shows it as found (`frame`, with its address). Type **the password set in step 1** and choose **Connect**. Four checks turn green:
+
+1. **Frame found on the network**
+2. **Developer Mode is on**
+3. **Signed in to the Frame**
+4. **Frame ready for the game** (Steam running, enough free space)
+
+If a check turns red, it says what is wrong and what to do, for example: wake the headset, turn Developer Mode on, use the right password, or type the Frame's IP address (shown on the Frame in **Settings > Network**) in **Frame address**. Fix it, then choose **Check again**.
+
+**Step 2, install.** The app shows what is on the Frame and the latest version on GitHub. Choose **Install**: the game is downloaded and sent to the Frame (a progress bar shows), then each step of the installation is listed. It ends with **Installed! Put the headset on and play.**
+
+### 4. Play
+
+On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Edition**. The library artwork appears after Steam restarts (restarting the headset does it). The first launch may wait while Steam downloads "Steam Linux Runtime 4.0 ARM64".
+
+> [!NOTE]
+> **The Steam dashboard opens when the game starts.** The game is already running behind it: select **Resume Game** with the controller's pointer to close the dashboard and reach the lobby. This happens every time the game is started: SteamVR shows its dashboard over the games added outside the Steam store ("Non-Steam" games) when they start. There is no workaround for the moment.
+
+### 5. Add tables
+
+- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder.
+- **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
+  `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
+
+### Updating
+
+Open the installer app again and connect (step 1). When a newer version is out, step 2 shows **Update available** with a button **Update to &lt;version&gt;**: choose it. **Up to date** means there is nothing to do. Tables, settings, scores and play statistics are kept.
+
+### Uninstalling
+
+In the installer app, after step 1: **Uninstall the game from the Frame...** at the bottom of step 2, then **Uninstall**. It removes the game, its library entry and artwork; tick **Also delete its settings, scores and play statistics** to remove those too. The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted.
+
+### Troubleshooting
+
+| Problem | What to do |
+| --- | --- |
+| The Frame is not found, or "No answer from" its address | Wake the headset (put it on). Check that the Frame and the computer are on the same network (a guest Wi-Fi often keeps devices apart) and that Developer Mode is on. Type the Frame's IP address in **Frame address**. |
+| "The Frame does not accept connections" | Developer Mode is off: turn it on (step 1). |
+| "The password was refused" | Type the password set in **Settings > Developer > Set User Password**, or set a new one there. |
+| "The Frame's identity has changed" | Expected after the Frame was reset: choose **Trust the Frame's new key**. |
+| "Steam is not running on the Frame" | Put the headset on so it is in its normal mode, then choose **Check again**. |
+| macOS: the app "cannot be opened" or is "Not Opened" | **System Settings > Privacy & Security > Open Anyway** (see step 3). If it cannot find the Frame, allow it in **System Settings > Privacy & Security > Local Network**. |
+| The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
+| The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
+| The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.8/vpinball.log` |
+| Something else | The installer app keeps a log of what it did: `installer.log` in `%LOCALAPPDATA%\vpx-frame-installer` (Windows), `~/Library/Caches/vpx-frame-installer` (macOS) or `~/.cache/vpx-frame-installer` (Linux). Attach it when you [report the problem](https://github.com/SPD13/vpinball-steam-frame/issues). |
+
+Developer Mode stays on after the install: it is how the game is installed and updated. Whether the game keeps working with Developer Mode turned off again has not been checked.
+
+### Installing with the scripts instead
+
+Each release also has the game in an archive with installer scripts, for macOS 11 and earlier, for scripted installs, or to choose the name and id of the game in the library. The scripts need nothing extra either: on Windows, they use PowerShell and the `ssh` and `tar` commands that Windows includes; on macOS and Linux, a terminal. To update, download the new version and install it the same way; to uninstall, run `Uninstall on Windows.bat` or `./uninstall.sh` (`-Settings` / `--settings` also removes the settings, scores and statistics).
+
+#### Scripts on Windows
+
+Download `vpx-steam-frame-<version>.zip` from the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases).
 
 1. **Unpack the download:** right-click `vpx-steam-frame-<version>.zip` in your Downloads folder, choose **Extract All...**, then **Extract**. A folder of the same name opens.
 2. **Double-click `Install on Windows.bat`** in that folder. If Windows warns that the file comes from the internet ("Windows protected your PC"), choose **More info**, then **Run anyway**.
@@ -81,10 +145,12 @@ The installer runs on your computer: it connects to the Frame over the network, 
    Press a key to close the window.
 
 - **If the Frame is not found** (`frame.local` is not found on the network), the installer asks for its IP address instead, shown in the Frame's network settings (for example `192.168.1.42`).
-- **If something goes wrong**, the installer stops with a message saying what to check (see [Troubleshooting](#troubleshooting) below). Running it again is always safe.
+- **If something goes wrong**, the installer stops with a message saying what to check (see [Script messages](#script-messages)). Running it again is always safe.
 - The Windows installer only uses what Windows includes: PowerShell, and its `ssh` and `tar` commands. Windows Subsystem for Linux (WSL) and Git Bash are not needed, but they can also run `install.sh`, as on macOS and Linux.
 
-#### On macOS or Linux
+#### Scripts on macOS or Linux
+
+Download `vpx-steam-frame-<version>.tar.gz` from the [releases page](https://github.com/SPD13/vpinball-steam-frame/releases).
 
 The installer is `install.sh`, a script in the download that you run in a terminal.
 
@@ -142,42 +208,13 @@ A successful install ends like this:
     On the Frame: Library > Non-Steam > "Visual Pinball X - Steam Frame Edition".
 ```
 
-If something goes wrong, the installer stops with a message saying what to check (see [Troubleshooting](#troubleshooting) below). Running it again is always safe.
+If something goes wrong, the installer stops with a message saying what to check (see [Script messages](#script-messages)). Running it again is always safe.
 
 - **If it cannot find the Frame** (`cannot connect to steamos@frame.local`), give the Frame's IP address instead, shown in the Frame's network settings: `./install.sh 192.168.1.42`.
 - **If the terminal says `Permission denied`** when starting the installer, run it with `bash install.sh` instead.
-- **To see the installer's options:** `./install.sh --help` (see also [Installer options](#installer-options)).
+- **To see the installer's options:** `./install.sh --help` (see also [Script options](#script-options)).
 
-### 4. Play
-
-On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Edition**. The library artwork appears after Steam restarts (restarting the headset does it). The first launch may wait while Steam downloads "Steam Linux Runtime 4.0 ARM64".
-
-> [!NOTE]
-> **The Steam dashboard opens when the game starts.** The game is already running behind it: select **Resume Game** with the controller's pointer to close the dashboard and reach the lobby. This happens every time the game is started: SteamVR shows its dashboard over the games added outside the Steam store ("Non-Steam" games) when they start. There is no workaround for the moment.
-
-### 5. Add tables
-
-- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder.
-- **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
-  `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
-
-### Updating
-
-Download the new version and install it the same way: double-click its `Install on Windows.bat`, or run its `./install.sh`. Tables, settings, scores and play statistics are kept. On Windows, each update sends the whole game again (about 165 MB); on macOS and Linux, only what changed.
-
-### Uninstalling
-
-- **Windows:** double-click `Uninstall on Windows.bat` in the folder of the download. It removes the game, its library entry and artwork. To also remove the settings, logs, scores and play statistics, run it from PowerShell in that folder: `.\uninstall.ps1 -Settings` (or `powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Settings` if PowerShell refuses to run scripts).
-- **macOS, Linux:** from the folder of the download:
-
-  ```sh
-  ./uninstall.sh              # removes the game, its library entry and artwork
-  ./uninstall.sh --settings   # also removes the settings, logs, scores and play statistics
-  ```
-
-The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted.
-
-### Installer options
+#### Script options
 
 ```sh
 ./install.sh [--name NAME] [--gameid ID] [--no-art] [user@]host                                  # macOS, Linux
@@ -193,19 +230,14 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 - `--help` / `-Help` lists the options.
 - An ssh key avoids typing the password at each install: run `ssh-copy-id steamos@frame.local` once (macOS, Linux).
 
-### Troubleshooting
+#### Script messages
 
-| Problem | What to do |
+| Message | What to do |
 | --- | --- |
 | `cannot connect to steamos@frame.local`, `cannot send the game` | Wake the headset (put it on). Check that Developer Mode is on and that a password is set. Use the IP address instead of `frame.local`. |
-| `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. It is included in Windows 10 version 1809 and later, but can have been removed. |
+| `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
-| The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
-| The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
-| The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.8/vpinball.log` |
-
-Developer Mode stays on after the install: it is how the game is installed and updated. Whether the game keeps working with Developer Mode turned off again has not been checked.
 
 ## Controllers
 
