@@ -61,19 +61,70 @@ Download the latest `vpx-steam-frame-<version>.tar.gz` from the [releases page](
 
 ### 3. Install
 
-In a terminal, unpack the download and run the installer from its folder:
+The installer is `install.sh`, a script in the download that you run in a terminal on your computer. It connects to the Frame over the network, copies the game to it, and adds it to the Steam library. Nothing is installed on the computer itself.
+
+**Open a terminal:**
+
+- **macOS:** open **Terminal** (press <kbd>Cmd</kbd>+<kbd>Space</kbd>, type `Terminal`, press <kbd>Enter</kbd>).
+- **Linux:** open your terminal application.
+- **Windows with WSL:** open **Ubuntu** from the Start menu.
+- **Windows with Git Bash:** open **Git Bash** from the Start menu.
+
+**Go to the folder of the download,** usually your Downloads folder:
+
+```sh
+cd ~/Downloads                     # macOS, Linux, Git Bash
+cd /mnt/c/Users/<you>/Downloads    # WSL: <you> is your Windows user name
+```
+
+**Unpack the download and enter its folder** (replace `<version>` with the version you downloaded; press <kbd>Tab</kbd> after typing `vpx-steam-frame-` to complete the name):
 
 ```sh
 tar -xzf vpx-steam-frame-<version>.tar.gz
 cd vpx-steam-frame-<version>
+```
+
+If your browser already unpacked the download into a folder (Safari can), skip `tar` and `cd` into that folder.
+
+**Run the installer**, with the headset awake:
+
+```sh
 ./install.sh
 ```
 
-On Windows with WSL, the Downloads folder is `/mnt/c/Users/<you>/Downloads`.
+What happens next:
 
-- The installer finds the Frame as `frame.local`. If it cannot connect, give the Frame's IP address instead (shown in the Frame's network settings): `./install.sh 192.168.1.42`.
-- The first time, ssh asks whether to trust the Frame (answer `yes`), then for the password of step 1.
-- The first install sends about 400 MB; updates only send what changed.
+1. **The first time only**, ssh asks whether to trust the Frame: `Are you sure you want to continue connecting (yes/no/[fingerprint])?`. Type `yes` and press <kbd>Enter</kbd>.
+2. ssh asks for **the password set in step 1** (`steamos@frame.local's password:`). Type it and press <kbd>Enter</kbd>: nothing shows while you type, this is normal.
+3. The installer goes through its steps and prints each one. The first install sends about 400 MB, which takes a few minutes; updates only send what changed.
+
+A successful install ends like this:
+
+```text
+==> Connecting to steamos@frame.local
+    type the Frame's user password when asked (the one set in Developer Mode)
+    Steam Frame found
+
+==> Valve's devkit scripts
+
+==> Game files
+    -> /home/steamos/devkit-game/VisualPinball (this takes a while the first time)
+
+==> Steam library
+    registered as "Visual Pinball X - Steam Frame Edition"
+
+==> Library artwork
+    Visual Pinball X - Steam Frame Edition: artwork installed for appid ...
+
+==> Done
+    On the Frame: Library > Non-Steam > "Visual Pinball X - Steam Frame Edition".
+```
+
+If something goes wrong, the installer stops with a message saying what to check (see [Troubleshooting](#troubleshooting) below). Running it again is always safe.
+
+- **If it cannot find the Frame** (`cannot connect to steamos@frame.local`), give the Frame's IP address instead, shown in the Frame's network settings: `./install.sh 192.168.1.42`.
+- **If the terminal says `Permission denied`** when starting the installer, run it with `bash install.sh` instead.
+- **To see the installer's options:** `./install.sh --help` (see also [Installer options](#installer-options)).
 
 ### 4. Play
 
