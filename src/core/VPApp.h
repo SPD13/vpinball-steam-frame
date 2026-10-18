@@ -5,10 +5,9 @@
 #include "Settings.h"
 #include "FileLocator.h"
 
-namespace VPinballLib { class TableLibrary; class ScoreStore; }
-class WebServer; // Only with VPX_TABLE_WEBSERVER, defined by the macOS, Linux and windows-mingw builds (mobile builds have their own instance)
 namespace VPX { class Window; }
 class VRDevice;
+class Launcher;
 
 
 class VPApp final
@@ -60,6 +59,10 @@ public:
    void ReleaseDisplayResources();
    uint64_t m_lastTableCloseTime = 0; // When the last table started to close (steady clock, in microseconds), to log how long switching tables takes
 
+#ifdef VPX_STEAM_FRAME
+   std::unique_ptr<Launcher> m_launcher; // Steam Frame Edition: table library, lobby, scores (see steamframe/Launcher.h)
+#endif
+
 #ifndef __STANDALONE__
    static CComModule m_module;
    class WinApp final : public CWinApp
@@ -73,66 +76,6 @@ public:
    HINSTANCE GetInstanceHandle() const { return m_winApp.GetInstanceHandle(); }
 #else
    HINSTANCE GetInstanceHandle() const { return nullptr; }
-
-   // Tables managed by the application (in-game table picker), created on first use
-   VPinballLib::TableLibrary& GetTableLibrary();
-
-   // Player profiles and the scores of their games (profiles.json, scores.json), created on first use
-   VPinballLib::ScoreStore& GetScoreStore();
-   // Scores recorded while playing the last table, shown by the lobby when it gets back (see ScoreTracker), then cleared
-   struct SessionResult
-   {
-      string tableUuid;
-      vector<string> scoreIds;
-   };
-   std::optional<SessionResult> m_lastSessionResult;
-
-#ifdef VPX_TABLE_WEBSERVER
-   // Web server to manage the table library from a browser. It runs from its activation in the table picker until the application is closed,
-   // across the lobby and the tables, and is started with the application when set to be always on (Standalone.WebServerAlwaysOn).
-   WebServer& GetWebServer();
-   void StartWebServerIfAlwaysOn();
-#endif
-
-   // When no PinMAME folder is defined, use a 'pinmame' folder shared by all tables inside the tables folder (created if needed),
-   // so that ROMs can be added like tables, for example from a browser. Must be called before the plugins are loaded.
-   void SetupSharedPinMAMEFolder();
-   bool IsSharedPinMAMEFolderUsed() const { return m_isSharedPinMAMEFolderApplied; }
-
-   // Table to play after the running one is closed, which allows to switch table without leaving the application
-   std::filesystem::path m_nextTableFilename;
-
-   // Launcher mode ('-Launcher' command line option): the application starts on a lobby table with the table picker opened,
-   // and gets back to it when a table is closed, until the user quits from the lobby or the picker
-   bool m_launcherMode = false;
-   std::filesystem::path GetLobbyTablePath() const;
-
-   // The VR room of a table can replace the default room of the lobby: the lobby then loads that table, and only keeps the parts of its room
-   // which were visible when it was chosen (kept in lobby-room.json). Without that table, the lobby gets back to the default room.
-   struct LobbyRoom
-   {
-      std::filesystem::path tablePath;
-      string tableName;
-      vector<string> parts;
-   };
-   std::optional<LobbyRoom> GetLobbyRoom();
-   int UseTableRoomInLobby(PinTable* table); // Returns the number of room parts kept, 0 if the table has no VR room (then nothing changes)
-   void ResetLobbyRoom();
-   static vector<IEditable*> GetRoomParts(PinTable* table); // All the parts of its VR room, visible or not
-   // The 'Visible' property that scripts use, for the parts which have one
-   static std::optional<bool> GetPartVisible(IEditable* part);
-   static void SetPartVisible(IEditable* part, bool visible);
-   bool m_playingLobby = false; // Set while the lobby is played
-
-   // What the images of the tables captured in VR show (Standalone.TableImageFocus), for the menus that choose it
-   static string GetTableImageFocusLabel();
-   static void NextTableImageFocus();
-   bool m_reloadLobby = false; // Load the lobby again when it closes, for example to apply a new room
-
-   // Message of the loading screen shown while switching tables (see LiveUI::SetLoadingText): for a table (its name in the library), or for what follows
-   // the table being closed (the next table, or the lobby in launcher mode; empty when the application quits)
-   string GetLoadingText(const std::filesystem::path& tablePath, bool lobby);
-   string GetNextLoadingText(bool playingLobby);
 #endif
 
 private:
@@ -146,14 +89,6 @@ private:
    vector<KeptWindow> m_usedWindows; // Windows acquired by the current table
    VRDevice* m_vrDevice = nullptr;
 
-#ifdef __STANDALONE__
-   std::unique_ptr<VPinballLib::TableLibrary> m_tableLibrary;
-   std::unique_ptr<VPinballLib::ScoreStore> m_scoreStore;
-   bool m_isSharedPinMAMEFolderApplied = false;
-#ifdef VPX_TABLE_WEBSERVER
-   std::unique_ptr<WebServer> m_webServer;
-#endif
-#endif
    std::filesystem::path m_commandLineCustomSettingsFileName; // Override default ini filename, must be defined before InitInstance
    int m_logicalNumberOfProcessors = -1;
 };

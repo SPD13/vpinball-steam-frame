@@ -4,9 +4,10 @@
 #include "ScoreTracker.h"
 
 #include "core/VPApp.h"
+#include "steamframe/Launcher.h"
 #include "core/player.h"
 #include "parts/pintable.h"
-#include "lib/src/ScoreStore.h"
+#include "steamframe/ScoreStore.h"
 #include "plugins/ScoreboardPlugin.h"
 
 #include <cmath>
@@ -440,7 +441,7 @@ void ScoreTracker::RecordGame(const vector<int64_t>& scores, int playerCount, So
       return;
    const int players = std::clamp(std::max(playerCount, lastScoring), 1, static_cast<int>(scores.size()));
 
-   VPinballLib::ScoreStore& store = g_app->GetScoreStore();
+   VPinballLib::ScoreStore& store = g_launcher->GetScoreStore();
    const vector<string> playerProfileIds = store.GetPlayerProfileIds();
    vector<VPinballLib::Score> records;
    string assigned; // For the log

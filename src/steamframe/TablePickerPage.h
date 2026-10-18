@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "InGameUIPage.h"
+#include "ui/live/ingameui/InGameUIPage.h"
 
 #ifdef __STANDALONE__
 

@@ -43,11 +43,16 @@ private:
    void Delete(struct mg_connection *c, struct mg_http_message* hm);
    void Rename(struct mg_connection *c, struct mg_http_message* hm);
    void Move(struct mg_connection *c, struct mg_http_message* hm);
-   void MissingRoms(struct mg_connection *c, struct mg_http_message* hm);
    void Folder(struct mg_connection *c, struct mg_http_message* hm);
    void Extract(struct mg_connection *c, struct mg_http_message* hm);
    void Command(struct mg_connection *c, struct mg_http_message* hm);
    void LogStream(struct mg_connection *c, struct mg_http_message* hm);
+#ifdef VPX_STEAM_FRAME
+   // Steam Frame Edition, implemented in steamframe/WebServerLibrary.cpp
+   using RouteHandler = void (WebServer::*)(struct mg_connection *c, struct mg_http_message* hm);
+   static RouteHandler GetLibraryRoute(struct mg_http_message* hm);
+   // The ROMs that tables need and could not find
+   void MissingRoms(struct mg_connection *c, struct mg_http_message* hm);
    // The table library, for the tables page: list, image, favorite, display name and deletion (desktop builds, the mobile launchers own their library)
    void Tables(struct mg_connection *c, struct mg_http_message* hm);
    void TableImage(struct mg_connection *c, struct mg_http_message* hm);
@@ -63,6 +68,7 @@ private:
    void ProfileRename(struct mg_connection *c, struct mg_http_message* hm);
    void ProfileDelete(struct mg_connection *c, struct mg_http_message* hm);
    void ProfileActive(struct mg_connection *c, struct mg_http_message* hm);
+#endif
 
    void AddLogEntry(const string& formattedLog);
    void BroadcastLogEntry(const string& formattedLog);

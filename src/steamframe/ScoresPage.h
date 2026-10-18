@@ -2,11 +2,11 @@
 
 #pragma once
 
-#include "InGameUIPage.h"
+#include "ui/live/ingameui/InGameUIPage.h"
 
 #ifdef __STANDALONE__
 
-#include "core/VPApp.h"
+#include "steamframe/Launcher.h"
 
 namespace VPX::InGameUI
 {
@@ -68,12 +68,12 @@ public:
    void AdjustItem(float direction, bool isInitialPress) override;
 
    // The result shown by the page, kept while the lobby runs as the page is recreated each time it is opened
-   static void SetResult(const VPApp::SessionResult& result) { s_result = result; }
+   static void SetResult(const Launcher::SessionResult& result) { s_result = result; }
 
 private:
    void BuildPage() override;
 
-   static VPApp::SessionResult s_result;
+   static Launcher::SessionResult s_result;
 };
 
 // The 'Player: <name>' item which opens the profiles page (with the names of the other players which have a profile)

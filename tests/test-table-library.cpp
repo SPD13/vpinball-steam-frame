@@ -7,7 +7,7 @@
 
 #include "doctest.h"
 
-#include "../lib/src/TableLibrary.h"
+#include "../src/steamframe/TableLibrary.h"
 
 #include <cstdlib>
 #include <fstream>

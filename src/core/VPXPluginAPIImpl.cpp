@@ -7,8 +7,9 @@
 #include "parts/flasher.h"
 #include "renderer/Renderer.h"
 #include "ui/live/LiveUI.h"
-#if defined(__STANDALONE__) && !defined(__LIBVPINBALL__)
-#include "lib/src/TableLibrary.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#include "steamframe/TableLibrary.h"
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -76,7 +77,7 @@ void MSGPIAPI VPXPluginAPIImpl::ReportMissingFile(const char* package, const cha
       PLOGE << "Invalid VPX API call 'ReportMissingFile'";
       return;
    }
-#if defined(__STANDALONE__) && !defined(__LIBVPINBALL__)
+#ifdef VPX_STEAM_FRAME
    // Listed by the web server of the table library, to tell the user what to upload
    vector<string> fileList;
    std::istringstream lines(files);
@@ -85,7 +86,7 @@ void MSGPIAPI VPXPluginAPIImpl::ReportMissingFile(const char* package, const cha
          fileList.push_back(line);
    const PinTable* const table = g_pplayer ? g_pplayer->m_ptable : nullptr;
    const string tableName = table == nullptr ? string() : !table->m_tableName.empty() ? table->m_tableName : table->m_filename.stem().string();
-   g_app->GetTableLibrary().AddMissingRom(package, std::filesystem::path(reinterpret_cast<const char8_t*>(folder)), fileList, tableName);
+   g_launcher->GetTableLibrary().AddMissingRom(package, std::filesystem::path(reinterpret_cast<const char8_t*>(folder)), fileList, tableName);
 #endif
 }
 

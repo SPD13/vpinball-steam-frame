@@ -11,6 +11,9 @@
 #include "renderer/RenderTarget.h"
 #include "renderer/Sampler.h"
 #include "renderer/VertexBuffer.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
@@ -2138,9 +2141,9 @@ void VRDevice::ReleaseSession()
 // to exit, also leave the launcher instead of getting back to the lobby.
 static void CloseTableOnRuntimeRequest(bool exitApplication)
 {
-   #ifdef __STANDALONE__
+   #ifdef VPX_STEAM_FRAME
    if (exitApplication)
-      g_app->m_launcherMode = false;
+      g_launcher->m_launcherMode = false;
    #endif
    if (g_pplayer)
       g_pplayer->SetCloseState(Player::CS_CLOSE_APP);

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "lib/src/TableLibrary.h"
+#include "steamframe/TableLibrary.h"
 #include "plugins/ControllerPlugin.h"
 
 #include <chrono>

@@ -5,6 +5,9 @@
 
 #include "core/VPApp.h"
 #include "ui/live/LiveUI.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 
 
 namespace VPX::InGameUI
@@ -29,8 +32,8 @@ void MessagePage::BuildPage()
 
    AddItem(std::make_unique<InGameUIItem>("Continue"s, "Close this message"s, [this]() { m_player->m_liveUI->m_inGameUI.NavigateBack(); }));
 
-#ifdef __STANDALONE__
-   const bool toLauncher = g_app->m_launcherMode;
+#ifdef VPX_STEAM_FRAME
+   const bool toLauncher = g_launcher->m_launcherMode;
 #else
    constexpr bool toLauncher = false;
 #endif
@@ -38,8 +41,10 @@ void MessagePage::BuildPage()
       [this]()
       {
          // Same as the Exit Game action
-#ifdef __STANDALONE__
-         m_player->SetCloseState((g_isMobile || g_app->m_launcherMode) ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP);
+#if defined(VPX_STEAM_FRAME)
+         m_player->SetCloseState(g_launcher->m_launcherMode ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP);
+#elif defined(__STANDALONE__)
+         m_player->SetCloseState(g_isMobile ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP);
 #else
          m_player->SetCloseState(Player::CS_STOP_PLAY);
 #endif

@@ -6,8 +6,8 @@
 #ifdef __STANDALONE__
 
 #include "TablePickerPage.h"
-#include "lib/src/ScoreStore.h"
-#include "lib/src/TableLibrary.h"
+#include "steamframe/ScoreStore.h"
+#include "steamframe/TableLibrary.h"
 #include "ui/live/LiveUI.h"
 
 #include "fonts/IconsForkAwesome.h"
@@ -46,7 +46,7 @@ static string GetPlayerName(const Score& score, const vector<Profile>& profiles)
 
 static string GetTableName(const string& uuid, const string& fallback)
 {
-   const std::optional<VPinballLib::Table> table = g_app->GetTableLibrary().GetTable(uuid);
+   const std::optional<VPinballLib::Table> table = g_launcher->GetTableLibrary().GetTable(uuid);
    return table ? table->name : fallback;
 }
 
@@ -84,7 +84,7 @@ static void OpenTableScores(Player* player, const string& uuid)
 
 void AddPlayerItem(InGameUIPage& page)
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    vector<std::pair<int, string>> players; // The players which have a profile, and its name
    for (int slot = 1; slot <= ScoreStore::MAX_PLAYERS; slot++)
       if (const std::optional<Profile> profile = store.GetPlayerProfile(slot); profile)
@@ -121,9 +121,9 @@ static void OpenNewProfile(Player* player, int slot)
          return std::make_unique<TextEntryPage>("New profile"s, ""s,
             [slot](const string& name)
             {
-               const std::optional<Profile> profile = g_app->GetScoreStore().AddProfile(name);
+               const std::optional<Profile> profile = g_launcher->GetScoreStore().AddProfile(name);
                if (profile)
-                  g_app->GetScoreStore().SetPlayerProfile(slot, profile->id);
+                  g_launcher->GetScoreStore().SetPlayerProfile(slot, profile->id);
                g_pplayer->m_liveUI->PushNotification(
                   !profile ? "A profile is already named " + name : slot == 1 ? "Playing as " + profile->name : std::format("{} is player {}", profile->name, slot), 3000);
             },
@@ -143,14 +143,14 @@ ProfilesPage::ProfilesPage()
 void ProfilesPage::Render(float elapsedS)
 {
    // Profiles may also be changed from a browser
-   if (m_revision != g_app->GetScoreStore().GetRevision())
+   if (m_revision != g_launcher->GetScoreStore().GetRevision())
       RequestRebuild();
    InGameUIPage::Render(elapsedS);
 }
 
 void ProfilesPage::BuildPage()
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    m_revision = store.GetRevision();
    const vector<Profile> profiles = store.GetProfiles();
 
@@ -192,14 +192,14 @@ PlayerProfilePage::PlayerProfilePage(int slot)
 void PlayerProfilePage::Render(float elapsedS)
 {
    // Profiles may also be changed from a browser
-   if (m_revision != g_app->GetScoreStore().GetRevision())
+   if (m_revision != g_launcher->GetScoreStore().GetRevision())
       RequestRebuild();
    InGameUIPage::Render(elapsedS);
 }
 
 void PlayerProfilePage::BuildPage()
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    m_revision = store.GetRevision();
    const vector<Profile> profiles = store.GetProfiles();
    const std::optional<Profile> current = store.GetPlayerProfile(m_slot);
@@ -220,7 +220,7 @@ void PlayerProfilePage::BuildPage()
       AddItem(std::make_unique<InGameUIItem>((isCurrent ? ICON_FK_CHECK " "s : "     "s) + profile.name, tooltip,
          [this, id = profile.id, name = profile.name, isCurrent]()
          {
-            g_app->GetScoreStore().SetPlayerProfile(m_slot, isCurrent ? string() : id);
+            g_launcher->GetScoreStore().SetPlayerProfile(m_slot, isCurrent ? string() : id);
             m_player->m_liveUI->PushNotification(isCurrent ? std::format("Player {} is unassigned", m_slot) : m_slot == 1 ? "Playing as " + name : std::format("{} is player {}", name, m_slot), 2000);
             m_player->m_liveUI->m_inGameUI.NavigateBack();
          }));
@@ -244,7 +244,7 @@ TableScoresPage::TableScoresPage(const string& uuid)
 void TableScoresPage::Render(float elapsedS)
 {
    // Scores may be deleted or given to another player from a browser
-   if (m_revision != g_app->GetScoreStore().GetRevision())
+   if (m_revision != g_launcher->GetScoreStore().GetRevision())
       RequestRebuild();
    InGameUIPage::Render(elapsedS);
 }
@@ -258,14 +258,14 @@ void TableScoresPage::AdjustItem(float direction, bool isInitialPress)
 
 void TableScoresPage::BuildPage()
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    m_revision = store.GetRevision();
    const vector<Profile> profiles = store.GetProfiles();
    const std::optional<Profile> active = store.GetActiveProfile();
    const vector<Score> scores = s_bestPerPlayer ? store.GetBestByProfile(m_uuid) : store.GetScores(m_uuid);
 
    // The table may be played from here, unless it is the one running
-   VPinballLib::TableLibrary& library = g_app->GetTableLibrary();
+   VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
    if (const std::optional<VPinballLib::Table> table = library.GetTable(m_uuid); table)
    {
       std::error_code ec;
@@ -273,7 +273,7 @@ void TableScoresPage::BuildPage()
          AddItem(std::make_unique<InGameUIItem>("Play"s, ""s,
             [this, tablePath = library.GetFullPath(*table)]()
             {
-               g_app->m_nextTableFilename = tablePath;
+               g_launcher->m_nextTableFilename = tablePath;
                m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
             }));
    }
@@ -310,7 +310,7 @@ void TableScoresPage::BuildPage()
 ///////////////////////////////////////////////////////////////////////////////
 // Result of the last games
 
-VPApp::SessionResult ScoreResultPage::s_result;
+Launcher::SessionResult ScoreResultPage::s_result;
 
 ScoreResultPage::ScoreResultPage()
    : InGameUIPage("Game over"s, "Scores of the games you just played, and where they stand among the others"s, SaveMode::None)
@@ -325,7 +325,7 @@ void ScoreResultPage::AdjustItem(float direction, bool isInitialPress)
 
 void ScoreResultPage::BuildPage()
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    const vector<Profile> profiles = store.GetProfiles();
    vector<Score> scores; // Of the session, in the order of the games
    for (const string& id : s_result.scoreIds)
@@ -399,15 +399,15 @@ void ScoreResultPage::BuildPage()
                   return std::make_unique<TextEntryPage>("New profile"s, ""s,
                      [ids](const string& name)
                      {
-                        const std::optional<Profile> profile = g_app->GetScoreStore().AddProfile(name);
+                        const std::optional<Profile> profile = g_launcher->GetScoreStore().AddProfile(name);
                         if (!profile)
                         {
                            g_pplayer->m_liveUI->PushNotification("A profile is already named " + name, 3000);
                            return;
                         }
-                        g_app->GetScoreStore().SetActiveProfile(profile->id);
+                        g_launcher->GetScoreStore().SetActiveProfile(profile->id);
                         for (const string& id : ids)
-                           g_app->GetScoreStore().AssignScore(id, profile->id);
+                           g_launcher->GetScoreStore().AssignScore(id, profile->id);
                         g_pplayer->m_liveUI->PushNotification("Scores saved for " + profile->name, 3000);
                      },
                      false, 32);
@@ -446,7 +446,7 @@ void ScoreResultPage::BuildPage()
 
 void AddTopScores(InGameUIPage& page, const string& tableUuid, size_t maxRows)
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    const vector<Score> scores = store.GetScores(tableUuid);
    if (scores.empty())
    {
@@ -470,7 +470,7 @@ void AddTopScores(InGameUIPage& page, const string& tableUuid, size_t maxRows)
 
 void BuildLeaderboardList(InGameUIPage& page)
 {
-   ScoreStore& store = g_app->GetScoreStore();
+   ScoreStore& store = g_launcher->GetScoreStore();
    const vector<Profile> profiles = store.GetProfiles();
    const std::optional<Profile> active = store.GetActiveProfile();
 

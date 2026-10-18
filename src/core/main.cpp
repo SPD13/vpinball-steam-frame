@@ -11,6 +11,9 @@
 
 #include "core/AppCommands.h"
 #include "core/VPApp.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 
 #include <initguid.h>
 
@@ -214,13 +217,13 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
       CommandLineProcessor cmdLine;
       cmdLine.ProcessCommandLine();
       bool isPlay = dynamic_cast<PlayTableCommand*>(cmdLine.m_command.get()) != nullptr;
-      #ifdef __STANDALONE__
+      #ifdef VPX_STEAM_FRAME
       isPlay |= dynamic_cast<LauncherCommand*>(cmdLine.m_command.get()) != nullptr;
       #endif
       theApp.InitInstance(isPlay);
       #ifdef VPX_TABLE_WEBSERVER
       if (isPlay)
-         theApp.StartWebServerIfAlwaysOn();
+         g_launcher->StartWebServerIfAlwaysOn();
       #endif
 
       // The video subsystem is initialized lazily when a window is created (see VPX::Window), so

@@ -79,8 +79,8 @@ public:
 
    bool IsEditorMode() const { return m_playMode == PlayMode::FullEdit; }
    const PlayMode m_playMode;
-   bool m_isLobby = false; // The lobby of the launcher mode, which may be loaded from a table of the library (see VPApp::GetLobbyRoom)
-#ifdef __STANDALONE__
+   bool m_isLobby = false; // The lobby of the launcher mode, which may be loaded from a table of the library (see Launcher::GetLobbyRoom)
+#ifdef VPX_STEAM_FRAME
    std::unique_ptr<ScoreTracker> m_scoreTracker; // Records the scores of the games, when playing a table of the library
 #endif
 
@@ -130,7 +130,7 @@ private:
 
 #ifdef ENABLE_BGFX
    bool CallbackSteppedGameLoop();
-#if defined(__STANDALONE__) && !defined(__LIBVPINBALL__)
+#ifdef VPX_STEAM_FRAME // Implemented in steamframe/PlayerTableImage.cpp
 public:
    // The image of a table in the table picker is captured the first time it is closed, and can be captured again from the in-game menu
    bool CanReplaceTableImage() const;

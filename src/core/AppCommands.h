@@ -58,19 +58,8 @@ public:
    explicit PlayTableCommand(const std::filesystem::path& tableFilename);
    ~PlayTableCommand() override = default;
    void Execute() override;
-   void Play(bool openTablePicker = false);
+   void Play(bool openTablePicker = false); // openTablePicker: the lobby of the launcher mode (Steam Frame Edition)
 };
-
-#ifdef __STANDALONE__
-// Play the lobby table with the table picker opened, then the tables selected by the user, until the user quits
-class LauncherCommand : public AppCommand
-{
-public:
-   LauncherCommand();
-   ~LauncherCommand() override = default;
-   void Execute() override;
-};
-#endif
 
 class AuditTableCommand : public TableBasedCommand
 {

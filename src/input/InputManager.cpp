@@ -11,6 +11,9 @@
 #include "physics/cabinet/NudgeHandler.h"
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 
 #include "ScanCodes.h"
 
@@ -807,8 +810,10 @@ void InputManager::CreateInputActions()
                CComVariant rgvar[1] = { CComVariant(0x10000 | static_cast<int>(action.GetActionId())) };
                DISPPARAMS dispparams = { rgvar, nullptr, 1, 0 };
                m_player->m_ptable->FireDispID(isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, &dispparams);
-#ifdef __STANDALONE__
-               m_player->SetCloseState((g_isMobile || g_app->m_launcherMode) ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP);
+#if defined(VPX_STEAM_FRAME)
+               m_player->SetCloseState(g_launcher->m_launcherMode ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP); // Back to the lobby in launcher mode
+#elif defined(__STANDALONE__)
+               m_player->SetCloseState(g_isMobile ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP);
 #else
                m_player->SetCloseState(Player::CS_STOP_PLAY);
 #endif

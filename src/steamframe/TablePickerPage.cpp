@@ -7,8 +7,9 @@
 #ifdef __STANDALONE__
 
 #include "core/VPApp.h"
-#include "lib/src/ScoreStore.h"
-#include "lib/src/TableLibrary.h"
+#include "steamframe/Launcher.h"
+#include "steamframe/ScoreStore.h"
+#include "steamframe/TableLibrary.h"
 #ifdef VPX_TABLE_WEBSERVER
 #include "lib/src/WebServer.h"
 #endif
@@ -48,7 +49,7 @@ static void SetWebServerPairing(bool required)
 {
    g_app->m_settings.SetStandalone_WebServerPairing(required, false);
    g_app->m_settings.Save();
-   g_app->GetWebServer().SetPairingRequired(required);
+   g_launcher->GetWebServer().SetPairingRequired(required);
    PLOGI << "Wi-Fi upload pairing code " << (required ? "enabled" : "disabled");
 }
 #endif
@@ -93,7 +94,7 @@ static bool IsRunningTable(const Player* player, const LibraryTable& table)
    if (player->m_isLobby)
       return false;
    std::error_code ec;
-   return std::filesystem::equivalent(player->m_ptable->m_filename, g_app->GetTableLibrary().GetFullPath(table), ec);
+   return std::filesystem::equivalent(player->m_ptable->m_filename, g_launcher->GetTableLibrary().GetFullPath(table), ec);
 }
 
 
@@ -132,7 +133,7 @@ ImTextureID TablePickerPage::GetThumbnail(const LibraryTable& table)
       if (loads < MAX_THUMBNAIL_LOADS)
       {
          thumbnail.loadingModifiedAt = table.modifiedAt;
-         thumbnail.loading = std::async(std::launch::async, [path = g_app->GetTableLibrary().GetImagePath(table)]() { return BaseTexture::CreateFromFile(path, 512); });
+         thumbnail.loading = std::async(std::launch::async, [path = g_launcher->GetTableLibrary().GetImagePath(table)]() { return BaseTexture::CreateFromFile(path, 512); });
       }
    }
    // Until then, the previous image if it was replaced
@@ -170,7 +171,7 @@ void TablePickerPage::Open(bool isBackwardAnimation)
 {
    InGameUIPage::Open(isBackwardAnimation);
    if (!isBackwardAnimation)
-      g_app->GetTableLibrary().RescanAsync();
+      g_launcher->GetTableLibrary().RescanAsync();
 }
 
 void TablePickerPage::Render(float elapsedS)
@@ -179,12 +180,12 @@ void TablePickerPage::Render(float elapsedS)
    UpdateThumbnailLoads();
 
    // Scans run on a worker thread (they may import large files) and are also triggered outside of this page
-   const TableLibrary& library = g_app->GetTableLibrary();
-   if (m_revision != library.GetRevision() || m_scanning != library.IsScanning() || m_scoresRevision != g_app->GetScoreStore().GetRevision())
+   const TableLibrary& library = g_launcher->GetTableLibrary();
+   if (m_revision != library.GetRevision() || m_scanning != library.IsScanning() || m_scoresRevision != g_launcher->GetScoreStore().GetRevision())
       RequestRebuild();
 #ifdef VPX_TABLE_WEBSERVER
    // The pairing code is renewed after failed attempts
-   if (m_webServerUrl != g_app->GetWebServer().GetUrl() || m_pairingCode != g_app->GetWebServer().GetPairingCode())
+   if (m_webServerUrl != g_launcher->GetWebServer().GetUrl() || m_pairingCode != g_launcher->GetWebServer().GetPairingCode())
       RequestRebuild();
 #endif
    InGameUIPage::Render(elapsedS);
@@ -243,7 +244,7 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
 #ifdef VPX_TABLE_WEBSERVER
       if (item->m_label == PAIRING_ITEM)
       {
-         SetWebServerPairing(!g_app->GetWebServer().IsPairingRequired());
+         SetWebServerPairing(!g_launcher->GetWebServer().IsPairingRequired());
          return;
       }
 #endif
@@ -259,7 +260,7 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
       {
          // Previous/next initial, going through 'All'
          string initials(1, '\0');
-         for (const LibraryTable& table : g_app->GetTableLibrary().GetTables())
+         for (const LibraryTable& table : g_launcher->GetTableLibrary().GetTables())
             if (initials.find(GetInitial(table)) == string::npos)
                initials += GetInitial(table);
          std::sort(initials.begin() + 1, initials.end());
@@ -321,7 +322,7 @@ void TablePickerPage::RenderTabs()
 // The pairing code, with a switch on its right to stop asking for it. With buttons, left/right flip the switch.
 void TablePickerPage::RenderPairing()
 {
-   const bool required = g_app->GetWebServer().IsPairingRequired();
+   const bool required = g_launcher->GetWebServer().IsPairingRequired();
    const InGameUIItem* const selectedItem = GetSelectedItem();
    const bool hasFocus = m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selectedItem != nullptr && selectedItem->m_label == PAIRING_ITEM;
    ImGui::AlignTextToFramePadding();
@@ -451,10 +452,10 @@ void TablePickerPage::RenderPager(const char* item)
 
 void TablePickerPage::BuildPage()
 {
-   TableLibrary& library = g_app->GetTableLibrary();
+   TableLibrary& library = g_launcher->GetTableLibrary();
    m_revision = library.GetRevision();
    m_scanning = library.IsScanning();
-   m_scoresRevision = g_app->GetScoreStore().GetRevision();
+   m_scoresRevision = g_launcher->GetScoreStore().GetRevision();
    const bool gridView = g_app->m_settings.GetStandalone_TablePickerGridView();
    const bool sortAscending = g_app->m_settings.GetStandalone_TablePickerSortAscending();
    vector<LibraryTable> tables = library.GetTables(s_tab != PickerTab::All || sortAscending);
@@ -580,7 +581,7 @@ void TablePickerPage::BuildPage()
          item.m_tileToggleIconOn = ICON_FK_STAR;
          item.m_tileToggleIconOff = ICON_FK_STAR_O;
          item.m_tileToggleState = [favorite = table.favorite]() { return favorite; };
-         item.m_tileToggleAction = [uuid, favorite = table.favorite]() { g_app->GetTableLibrary().SetFavorite(uuid, !favorite); }; // The page is rebuilt as the library changes
+         item.m_tileToggleAction = [uuid, favorite = table.favorite]() { g_launcher->GetTableLibrary().SetFavorite(uuid, !favorite); }; // The page is rebuilt as the library changes
       }
    }
 
@@ -611,7 +612,7 @@ void TablePickerPage::KeepThumbnails(const ankerl::unordered_dense::set<string>&
 // The MENU tab: the options of the library and of the application, which are not needed while choosing a table
 void TablePickerPage::BuildMenuTab()
 {
-   TableLibrary& library = g_app->GetTableLibrary();
+   TableLibrary& library = g_launcher->GetTableLibrary();
    const bool gridView = g_app->m_settings.GetStandalone_TablePickerGridView();
    const bool sortAscending = g_app->m_settings.GetStandalone_TablePickerSortAscending();
 
@@ -624,10 +625,10 @@ void TablePickerPage::BuildMenuTab()
          RequestRebuild();
       }));
 
-   AddItem(std::make_unique<InGameUIItem>(VPApp::GetTableImageFocusLabel(), "What the images of the tables captured in VR show: their backglass, their playfield seen from above, or their whole cabinet"s,
+   AddItem(std::make_unique<InGameUIItem>(Launcher::GetTableImageFocusLabel(), "What the images of the tables captured in VR show: their backglass, their playfield seen from above, or their whole cabinet"s,
       [this]()
       {
-         VPApp::NextTableImageFocus();
+         Launcher::NextTableImageFocus();
          RequestRebuild();
       }));
 
@@ -666,26 +667,26 @@ void TablePickerPage::BuildMenuTab()
          RequestRebuild();
       }));
 
-   AddItem(std::make_unique<InGameUIItem>("Rescan tables folder"s, "Look for tables added to, or removed from, the tables folder"s, []() { g_app->GetTableLibrary().RescanAsync(); }));
+   AddItem(std::make_unique<InGameUIItem>("Rescan tables folder"s, "Look for tables added to, or removed from, the tables folder"s, []() { g_launcher->GetTableLibrary().RescanAsync(); }));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Tables folder: " + library.GetTablesPath().string()));
-   if (g_app->IsSharedPinMAMEFolderUsed())
+   if (g_launcher->IsSharedPinMAMEFolderUsed())
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "ROMs (zipped): 'pinmame/roms' in the tables folder, or in a table's folder"s));
 
    // The lobby may use the room of a table, chosen from the menu of that table while it is played
-   if (g_app->m_launcherMode)
+   if (g_launcher->m_launcherMode)
    {
-      if (const std::optional<VPApp::LobbyRoom> room = g_app->GetLobbyRoom(); room)
+      if (const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom(); room)
       {
          AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: the room of " + room->tableName));
          AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the default room again"s,
             [this]()
             {
-               g_app->ResetLobbyRoom();
+               g_launcher->ResetLobbyRoom();
                if (m_player->m_isLobby)
                {
                   // Load the lobby again, with the default room
-                  g_app->m_reloadLobby = true;
+                  g_launcher->m_reloadLobby = true;
                   m_player->SetCloseState(Player::CS_CLOSE_APP);
                }
                else
@@ -697,21 +698,21 @@ void TablePickerPage::BuildMenuTab()
    }
 
    // In launcher mode, this page is the front door of the application: give access to the rest of the menu from it
-   if (g_app->m_launcherMode)
+   if (g_launcher->m_launcherMode)
       AddItem(std::make_unique<InGameUIItem>("Settings"s, "Controls, VR, graphics, sound and the other settings"s, "homepage"s));
 
-   if (g_app->m_launcherMode)
+   if (g_launcher->m_launcherMode)
       AddItem(std::make_unique<InGameUIItem>("Quit Visual Pinball"s, ""s,
          [this]()
          {
-            g_app->m_launcherMode = false;
+            g_launcher->m_launcherMode = false;
             m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
          }));
 
 #ifdef VPX_TABLE_WEBSERVER
    // The web server gives access to the tables folder to the local network, so it only runs on request and asks for a pairing code
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Add tables from a browser"s));
-   WebServer& webServer = g_app->GetWebServer();
+   WebServer& webServer = g_launcher->GetWebServer();
    m_webServerUrl = webServer.GetUrl();
    m_pairingCode = webServer.GetPairingCode();
    // 3 modes: off, on until the application is closed (to be turned on again at the next launch), or always on (started with the application)
@@ -720,7 +721,7 @@ void TablePickerPage::BuildMenuTab()
       "Manage tables from the browser of a phone or computer connected to the same network. Once on, it stays on while tables are played. 'Ask every time' turns it on until the application is closed, 'always on' also when the application starts."s,
       [this, alwaysOn]()
       {
-         WebServer& webServer = g_app->GetWebServer();
+         WebServer& webServer = g_launcher->GetWebServer();
          // Off -> On (ask every time) -> On (always on) -> Off
          const bool startWithApp = webServer.IsRunning() && !alwaysOn;
          if (webServer.IsRunning() && alwaysOn)
@@ -824,13 +825,13 @@ void TextEntryPage::BuildPage()
 
 static string GetTableTitle(const string& uuid)
 {
-   const std::optional<LibraryTable> table = g_app->GetTableLibrary().GetTable(uuid);
+   const std::optional<LibraryTable> table = g_launcher->GetTableLibrary().GetTable(uuid);
    return table ? table->name : "Table"s;
 }
 
 static string GetTableInfo(const string& uuid)
 {
-   const std::optional<LibraryTable> table = g_app->GetTableLibrary().GetTable(uuid);
+   const std::optional<LibraryTable> table = g_launcher->GetTableLibrary().GetTable(uuid);
    if (!table)
       return ""s;
    return table->path + '\n' + GetTableStatsInfo(*table, true);
@@ -851,7 +852,7 @@ void TableActionsPage::AdjustItem(float direction, bool isInitialPress)
 
 void TableActionsPage::BuildPage()
 {
-   TableLibrary& library = g_app->GetTableLibrary();
+   TableLibrary& library = g_launcher->GetTableLibrary();
    const std::optional<LibraryTable> table = library.GetTable(m_uuid);
    if (!table)
    {
@@ -872,7 +873,7 @@ void TableActionsPage::BuildPage()
       AddItem(std::make_unique<InGameUIItem>("Delete " + table->name, "This can not be undone"s,
          [this, name = table->name]()
          {
-            const bool deleted = g_app->GetTableLibrary().Delete(m_uuid);
+            const bool deleted = g_launcher->GetTableLibrary().Delete(m_uuid);
             m_player->m_liveUI->PushNotification(deleted ? name + " was deleted" : "Failed to delete " + name, 3000);
             m_player->m_liveUI->m_inGameUI.NavigateBack();
          }));
@@ -882,14 +883,14 @@ void TableActionsPage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>(isRunning ? "Restart"s : "Play"s, ""s,
       [this, tablePath = library.GetFullPath(*table)]()
       {
-         g_app->m_nextTableFilename = tablePath;
+         g_launcher->m_nextTableFilename = tablePath;
          m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
 
    AddItem(std::make_unique<InGameUIItem>(table->favorite ? ICON_FK_STAR " Remove from favorites"s : ICON_FK_STAR_O " Add to favorites"s, "Favorites have their own list in the table picker"s,
       [this, favorite = table->favorite]()
       {
-         g_app->GetTableLibrary().SetFavorite(m_uuid, !favorite);
+         g_launcher->GetTableLibrary().SetFavorite(m_uuid, !favorite);
          RequestRebuild();
       }));
 
@@ -898,7 +899,7 @@ void TableActionsPage::BuildPage()
       {
          const string uuid = m_uuid;
          m_player->m_liveUI->m_inGameUI.AddPage("tables/rename"s,
-            [uuid, name]() { return std::make_unique<TextEntryPage>("Rename table"s, name, [uuid](const string& newName) { g_app->GetTableLibrary().Rename(uuid, newName); }); });
+            [uuid, name]() { return std::make_unique<TextEntryPage>("Rename table"s, name, [uuid](const string& newName) { g_launcher->GetTableLibrary().Rename(uuid, newName); }); });
          m_player->m_liveUI->m_inGameUI.Navigate("tables/rename"s);
       }));
 
@@ -909,7 +910,7 @@ void TableActionsPage::BuildPage()
          AddItem(std::make_unique<InGameUIItem>("Reset table settings"s, "Remove the settings saved for this table (its .ini file)"s,
             [this]()
             {
-               const bool reset = g_app->GetTableLibrary().ResetIni(m_uuid);
+               const bool reset = g_launcher->GetTableLibrary().ResetIni(m_uuid);
                m_player->m_liveUI->PushNotification(reset ? "Table settings were reset"s : "Failed to reset table settings"s, 3000);
                RequestRebuild();
             }));

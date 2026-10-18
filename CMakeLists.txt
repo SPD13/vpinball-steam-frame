@@ -167,6 +167,7 @@ endif()
 if(BUILD_APP)
    include("${CMAKE_SOURCE_DIR}/make/CMakeLists_sources.txt")
    include("${CMAKE_SOURCE_DIR}/make/CMakeLists_app.txt")
+   include("${CMAKE_SOURCE_DIR}/steamframe/steamframe.cmake") # Steam Frame Edition
 endif()
 
 include("${CMAKE_SOURCE_DIR}/make/CMakeLists_plugins.txt")
