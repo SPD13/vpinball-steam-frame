@@ -43,9 +43,9 @@ upstream's files only get small, guarded hooks into it.
 ## Syncing with upstream
 
 ```sh
-steamframe/tools/sync-upstream.sh            # fetch, rebase our commits on origin/master, regenerate the shaders
-# on conflicts: resolve, git add, then
-steamframe/tools/sync-upstream.sh --continue
+steamframe/tools/sync-upstream.sh                   # fetch, rebase our commits on origin/master, regenerate the shaders
+# on conflicts: resolve, git add, then (during the rebase, the script runs from a copy in the git folder)
+.git/steamframe-sync/sync-upstream.sh --continue    # or --abort
 ```
 
 - The branch before the sync is kept as a local tag `pre-sync-<date>`; the script prints the `git range-diff` command to review

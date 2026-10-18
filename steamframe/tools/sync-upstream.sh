@@ -7,14 +7,18 @@
 #   so a conflict resolved once is resolved the same way at the next sync.
 # - Commits that upstream made redundant (for example a fix that was merged upstream) become empty and are dropped.
 # - The branch as it was before is kept as a local tag (pre-sync-<date>), to compare with 'git range-diff' or to go back to.
+# - During the rebase, the working tree holds older commits, which may not have this script: it copies itself to the git folder
+#   (.git/steamframe-sync), and --continue and --abort are run from there (the script prints the command).
 #
-# Usage: steamframe/tools/sync-upstream.sh [--continue | --abort] [--upstream <ref>] [--no-fetch]
+# Usage: steamframe/tools/sync-upstream.sh [--upstream <ref>] [--no-fetch]
+#        .git/steamframe-sync/sync-upstream.sh --continue | --abort
 # Remotes: 'origin' is upstream (github.com/vpinball/vpinball), 'fork' is ours (github.com/SPD13/vpinball-steam-frame).
 
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO="$(git rev-parse --show-toplevel)"
 cd "$REPO"
+STATE="$(cd "$(git rev-parse --git-path .)" && pwd)/steamframe-sync"
 
 UPSTREAM=origin/master
 MODE=start
@@ -35,7 +39,12 @@ rebase_in_progress() { [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d
 
 if [ "$MODE" = abort ]; then
    git rebase --abort
+   rm -rf "$STATE"
    exit 0
+fi
+
+if [ "$MODE" = continue ]; then
+   UPSTREAM="$(cat "$STATE/upstream")"
 fi
 
 if [ "$MODE" = start ]; then
@@ -55,6 +64,10 @@ if [ "$MODE" = start ]; then
    BRANCH="$(git branch --show-current)"
    TAG="pre-sync-$(date +%Y%m%d-%H%M)"
    git tag "$TAG" HEAD
+   rm -rf "$STATE"
+   mkdir -p "$STATE"
+   cp "$REPO"/steamframe/tools/*.sh "$STATE/"
+   echo "$UPSTREAM" > "$STATE/upstream"
    echo "$BRANCH: $(git rev-list --count "$UPSTREAM..HEAD") commits of ours, $(git rev-list --count "HEAD..$UPSTREAM") new upstream commits. Previous state: tag $TAG"
    git rebase "$UPSTREAM" || true
 fi
@@ -71,7 +84,7 @@ while rebase_in_progress; do
       echo
       echo "Conflicts to resolve in $(git log -1 --format='%h %s' REBASE_HEAD 2>/dev/null || echo 'the current commit'):"
       echo "$conflicts" | sed 's/^/   /'
-      echo "Resolve them, 'git add' the files, then run: $0 --continue"
+      echo "Resolve them, 'git add' the files, then run: $STATE/sync-upstream.sh --continue (or --abort)"
       exit 2
    fi
 
@@ -84,6 +97,7 @@ done
 
 echo
 echo "Rebased on $(git log -1 --format='%h %cs %s' "$UPSTREAM")"
+rm -rf "$STATE"
 
 "$REPO/steamframe/tools/regen-shaders.sh" --ref "$UPSTREAM"
 if ! git diff --quiet -- src/shaders; then
