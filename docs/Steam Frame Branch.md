@@ -8,6 +8,8 @@ This branch of the fork `SPD13/vpinball-steam-frame` prepares Visual Pinball's s
 
 This document lists everything the branch changes, where, and how far each part has been checked.
 
+Since 2026-10-18, the code of the fork lives in its own files (`src/steamframe/`, `steamframe/`), with small hooks guarded by `VPX_STEAM_FRAME` in upstream's files, so that upstream's changes can be taken every week: see [`steamframe/README.md`](../steamframe/README.md). The sections below describe each feature as it was built; their file lists give the current locations.
+
 ## What the player gets
 
 Changes a player sees, in the standalone builds (details in the numbered sections):
@@ -55,7 +57,7 @@ The launcher lives in the in-game menu and is compiled only in *standalone* buil
 
 ## 1. Table library
 
-New files: `lib/src/TableLibrary.h`, `lib/src/TableLibrary.cpp`, `tests/test-table-library.cpp`. Added to `VPX_STANDALONE_SOURCES`.
+New files: `src/steamframe/TableLibrary.h`, `src/steamframe/TableLibrary.cpp`, `tests/test-table-library.cpp`. Built by `steamframe/steamframe.cmake`.
 
 A C++ port of the Android `TableManager.kt` / iOS `TableManager.swift`, keeping `tables.json` in sync with a tables folder. It depends only on the standard library and the bundled `nlohmann/json`; zip, unzip and logging are passed in by the caller, so it can be tested without the application.
 
@@ -81,7 +83,7 @@ Files: `src/ui/live/ingameui/InGameUIItem.h`, `InGameUIPage.h/.cpp`, `InGameUI.h
 
 ## 3. Table picker
 
-New files: `src/ui/live/ingameui/TablePickerPage.h/.cpp`. Registered as `tables/picker` in `InGameUI.cpp`; "Tables" entry added at the top of `HomePage.cpp` for standalone builds other than the mobile library.
+New files: `src/steamframe/TablePickerPage.h/.cpp`. Registered as `tables/picker` in `InGameUI.cpp`; "Tables" entry added at the top of `HomePage.cpp` for standalone builds other than the mobile library.
 
 - **Tabs:** All, Recent (by last played), Newly added (by date added), Most played, Favorites, and MENU at the right end (the library and application options, section 8). They are drawn as padded buttons (`RenderTabs`); only the hovered button is highlighted, not the whole row (new `InGameUIItem::m_customHighlight`), and with buttons the current tab turns green when the row has the focus.
 - **Search box** filtering as you type, on every tab. In All, results are ordered by score.
@@ -96,13 +98,13 @@ New files: `src/ui/live/ingameui/TablePickerPage.h/.cpp`. Registered as `tables/
 
 New settings (`src/core/Settings_properties.inl`): `Standalone/TablesPath` (empty = `VPinballX/Tables` in the user's documents folder), `Standalone/TablePickerGridView`, `Standalone/TablePickerSortAscending`. The current tab, search text and page are kept for the session only.
 
-The library is owned by `VPApp::GetTableLibrary()` (`src/core/VPApp.h/.cpp`). It uses a dedicated sub folder because upstream's default tables location on desktop is the whole documents folder, which must not be scanned, served by the web server, or have its zips consumed.
+The library is owned by `Launcher::GetTableLibrary()` (`src/steamframe/Launcher.h/.cpp`). It uses a dedicated sub folder because upstream's default tables location on desktop is the whole documents folder, which must not be scanned, served by the web server, or have its zips consumed.
 
 Tested by hand on Windows (2026-09-28) and working: the tabs, the grid with its thumbnails, clicking a star, the pager arrows and the search box.
 
 ## 4. Launcher mode and lobby
 
-Files: `src/core/AppCommands.h/.cpp`, `src/core/main.cpp`, `src/core/VPApp.h/.cpp`, `src/core/player.h/.cpp`, `src/input/InputManager.cpp`.
+Files: `src/steamframe/Launcher.h/.cpp` (lobby, `LauncherCommand`), `src/core/AppCommands.h/.cpp`, `src/core/main.cpp`, `src/core/VPApp.h/.cpp`, `src/core/player.h/.cpp`, `src/input/InputManager.cpp`.
 
 - New command line option **`-Launcher`** (`LauncherCommand`). The application starts on a lobby with the picker opened; selecting a table closes the lobby and plays it **in the same process**; leaving a table returns to the lobby; quitting from the lobby or with "Quit Visual Pinball" ends the application.
 - `-Play <table>` is unchanged, plus: the picker can switch table from the menu (`VPApp::m_nextTableFilename`, loop in `PlayTableCommand::Execute`).
@@ -116,7 +118,7 @@ Files: `lib/src/WebServer.h/.cpp`, `src/assets/web/app.js`, `src/assets/web/vpx.
 
 The web server and its page are upstream's. Changes:
 
-- `WebServer`, `ZipUtils` and mongoose moved to a new `VPX_WEBSERVER_SOURCES` list, compiled into the macOS and Linux executables (`VPX_TABLE_WEBSERVER` compile definition, `zip` linked, `libzip.so*` copied on Linux). `VPApp::GetWebServer()` owns the instance.
+- `WebServer`, `ZipUtils` and mongoose compiled into the macOS, Linux and windows-mingw executables by `steamframe/steamframe.cmake` (`VPX_TABLE_WEBSERVER` compile definition, `zip` linked, `libzip.so*` copied on Linux). `Launcher::GetWebServer()` owns the instance. The routes of the tables and scores pages are in `src/steamframe/WebServerLibrary.cpp`.
 - No longer depends on the mobile library: events go through two functions that raise the mobile events or, on desktop, ask the table library to rescan.
 - On desktop it only exposes the table library folder, and any change made from the browser triggers a rescan.
 - **Pairing code** (desktop): API routes answer 401 until the browser has posted the 6-digit code shown in the picker to `/pair`; it then holds a random session token in an HttpOnly cookie. Five wrong codes replace the code. Codes and tokens are dropped when the server stops. `SetPairingRequired()` controls it; the mobile builds keep it off. The page asks for the code when it receives a 401, so with pairing off it opens directly.
@@ -156,7 +158,7 @@ Known gaps: plain HTTP; the static pages and `/assets/*` are served without pair
 
 ## 6. Shared ROM folder
 
-`VPApp::SetupSharedPinMAMEFolder()` (`src/core/VPApp.cpp`), called before each table loads because the PinMAME plugin reads its setting when it is loaded.
+`Launcher::SetupSharedPinMAMEFolder()` (`src/steamframe/Launcher.cpp`), called before each table loads because the PinMAME plugin reads its setting when it is loaded.
 
 The plugin looks for ROMs in `pinmame/roms` next to the table, then in its `PinMAMEPath` setting, then in `~/.pinmame`. When the setting is empty (or equal to the default below) and `~/.pinmame/roms` does not exist, the setting is pointed at `<tables folder>/pinmame` and `pinmame/roms` is created, so ROMs can be uploaded from the browser. The value is reset when the application closes, but it can still be written to `VPinballX.ini` if a settings page saves while it is applied. Desktop standalone builds only.
 
@@ -173,7 +175,7 @@ Files: `CMakeLists.txt`, `make/CMakeLists_app.txt`, `platforms/linux-x64/externa
 - **Windows standalone.** `ENABLE_XR` is also offered for `PLATFORM=windows-mingw`; standalone builds only use the Vulkan OpenXR backend.
 - **VR by default on standalone OpenXR builds.** `PlayerVR/AskToTurnOn` defaults to "Autodetect" when `__STANDALONE__` and `ENABLE_XR` are both defined (Steam Frame, windows-mingw with `ENABLE_XR`); it stays "Enabled" on Android and "Disabled" elsewhere. Without it the Frame ran the launcher in a flat window.
 - **No layout prompt for the virtual gamepad (2026-10-01, not yet run in the headset).** Steam Input also exposes the VR controllers as a virtual Xbox gamepad, so every table started with the "new controller detected" dialog, which had to be dismissed although the controllers were already mapped through OpenXR. `SDLInputHandler::OnJoystickAdded` now flags a joystick as a virtual gamepad of the VR controllers (`InputManager::SetDeviceIsVRVirtualGamepad`) when its vendor is Valve (`0x28de`) or its name contains "Steam" or "X-Box 360 pad" (the name of Steam's uinput pad on Linux), and logs every joystick's vendor and product ids. In VR (`STEREO_VR`), `InputManager` skips the layout proposal for flagged devices ("Skipping layout proposal for … virtual gamepad" in the log); outside VR they are still proposed. Side effect: a real wired Xbox 360 pad on Linux has the same name, so in VR it is not proposed either (it can still be mapped by hand in the input settings). To check on the device: that the dialog is gone, and the ids logged for the virtual pad, to match it exactly if needed.
-- **Steam Frame Vulkan driver workaround (Linux ARM64 only).** `platforms/linux-aarch64/bgfx-turnip-descriptor-pool.patch`, applied to bgfx by `platforms/linux-aarch64/external.sh`, creates bgfx's descriptor pools without `VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT` (bgfx never frees single sets, it resets whole pools every frame, so the flag was unused). With the flag, Turnip (Mesa 26.3.0-devel on the Frame, 2026-09-30) allocates sets from a free-list heap and places them partly outside the pool's memory: the first `vkUpdateDescriptorSets` of every run crashed inside the driver, and once that was padded around, every sampled texture read as black (the GPU was reading descriptors from unmapped memory), which showed as an empty black view in the headset and a black desktop window. Found with bgfx's own examples on the device: geometry and gradients rendered, every texture did not. The dependency script's cache key carries a `-turnip2` suffix so existing dependency builds rebuild bgfx. The change is harmless on other drivers and could go to bgfx upstream.
+- **Steam Frame Vulkan driver workaround (Linux ARM64 only).** `steamframe/patches/bgfx/01-turnip-descriptor-pool.patch`, applied to bgfx by `platforms/linux-aarch64/external.sh`, creates bgfx's descriptor pools without `VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT` (bgfx never frees single sets, it resets whole pools every frame, so the flag was unused). With the flag, Turnip (Mesa 26.3.0-devel on the Frame, 2026-09-30) allocates sets from a free-list heap and places them partly outside the pool's memory: the first `vkUpdateDescriptorSets` of every run crashed inside the driver, and once that was padded around, every sampled texture read as black (the GPU was reading descriptors from unmapped memory), which showed as an empty black view in the headset and a black desktop window. Found with bgfx's own examples on the device: geometry and gradients rendered, every texture did not. The dependency script's cache key carries a `-turnip2` suffix so existing dependency builds rebuild bgfx. The change is harmless on other drivers and could go to bgfx upstream.
 - Left as upstream: the desktop preview window created in VR.
 
 ## 8. Added on Windows with a PSVR2 (2026-09-26 to 28)
@@ -187,13 +189,13 @@ Used in the headset in the `windows-mingw` build with `ENABLE_XR`. Not compiled 
 - **Missing ROMs:** plugin API `ShowMessage` (a message page the player acknowledges, `MessagePage`, lines starting with `!` shown in red) and `ReportMissingFile`, used by the PinMAME plugin when a ROM cannot start. The library records them in `missing-roms.json` (preferences folder); the web page shows them, grouped by table, when browsing `pinmame/roms`, with a Clear button; an upload of a file with the same name removes the entry (`/missing-roms` route). "Back to the table picker" on the message used to hang when the table had no image (the capture waited for a menu that was no longer rendered, see section 4); fixed.
 - **Link to the ROM folder** on the web page: "PinMAME ROMs (pinmame/roms)" above the file list opens the shared ROM folder, which gets lost in a long list of tables; hidden when already there.
 - **RAR and 7z** imports and web extraction through libarchive (`ZipUtils::Extract`, `IsExtractable`, `GetExtractableExtensions`), see section 1.
-- **Lobby room from a table:** "Use this VR room in the lobby" in a table's menu (`VPApp::UseTableRoomInLobby`, `lobby-room.json`): the lobby is loaded from that table and keeps only the visible parts of its room (room space part groups, layers named after a room, collections named `VR…` that are not the cabinet). "Use the default lobby room" in the MENU tab. The lobby does not use the image or texture cache of that table, and the table itself still shows Play.
+- **Lobby room from a table:** "Use this VR room in the lobby" in a table's menu (`Launcher::UseTableRoomInLobby`, `lobby-room.json`): the lobby is loaded from that table and keeps only the visible parts of its room (room space part groups, layers named after a room, collections named `VR…` that are not the cabinet). "Use the default lobby room" in the MENU tab. The lobby does not use the image or texture cache of that table, and the table itself still shows Play.
 - **Notifications** in VR are stacked just above the menu window (`NotificationOverlay`).
 - **Web server on Windows** (network address through `GetAdaptersAddresses`, `std::filesystem` listing on all platforms, UTF-8 paths), and an upload progress banner on the web page.
 
 ## 9. Eye-tracked foveated rendering (branch `foveated-rendering`, 2026-10-01)
 
-Files: `src/core/Settings_properties.inl`, `src/core/main.cpp`, `src/renderer/VRDevice.h/.cpp`, `src/renderer/XRVulkanBackend.h`, `src/renderer/XRGraphicBackend.h`, `src/renderer/RenderTarget.h/.cpp`, `src/renderer/Renderer.h/.cpp`, `src/renderer/RenderPass.cpp`, `src/renderer/RenderDevice.h/.cpp`, `src/ui/live/ingameui/VRSettingsPage.cpp`, `platforms/linux-aarch64/bgfx-fragment-density-map.patch`, `platforms/linux-aarch64/bgfx-fragment-shading-rate.patch`, `platforms/linux-aarch64/external.sh`.
+Files: `src/core/Settings_properties.inl`, `src/core/main.cpp`, `src/renderer/VRDevice.h/.cpp`, `src/renderer/XRVulkanBackend.h`, `src/renderer/XRGraphicBackend.h`, `src/renderer/RenderTarget.h/.cpp`, `src/renderer/Renderer.h/.cpp`, `src/renderer/RenderPass.cpp`, `src/renderer/RenderDevice.h/.cpp`, `src/ui/live/ingameui/VRSettingsPage.cpp`, `steamframe/patches/bgfx/02-fragment-density-map.patch`, `steamframe/patches/bgfx/03-fragment-shading-rate.patch`, `platforms/linux-aarch64/external.sh`.
 
 Full shading only around the point the eyes look at, through a Vulkan fragment density map on the scene buffer. **Exclusive to this branch, and only built for the Steam Frame** (Linux aarch64 package: the bgfx patch is applied there alone, and the rest is under `#ifdef` on its macros, so Windows and macOS builds compile it out). Evaluation and plan in `Doc/foveated-rendering-plan.md`, full technical reference (mechanism, every layer of the implementation, verification, measurements, open performance analysis) in `Doc/foveated-rendering.md`; everything below was built and checked on the Steam Frame.
 
@@ -201,7 +203,7 @@ Full shading only around the point the eyes look at, through a Vulkan fragment d
 - **Runtime side** (`VRDevice`): the color swapchain is created with `XrSwapchainCreateInfoFoveationFB`, a profile (`XrFoveationLevelProfileCreateInfoFB` + `XrFoveationEyeTrackedProfileCreateInfoMETA`) is applied with `xrUpdateSwapchainFB`, the eye-tracked state and gaze come from `xrGetFoveationEyeTrackedStateMETA`. On the Frame this is what turns the eye tracking on (SteamVR/OpenXR 2.17.10; the user must have calibrated eye tracking in the headset settings). The runtime also hands density maps for its swapchain images (`XrSwapchainImageFoveationVulkanFB`, 68×68, one layer per eye), wrapped as bgfx textures by `XRVulkanBackend::CreateFoveationTextures`; they are kept as a fallback only, see below.
 - **Why the app builds its own map**: the gaze is applied through fragment density map *offsets* (`VK_EXT_fragment_density_map_offset`, passed at the end of the render pass), and Turnip only honors offsets on density map images created with `VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT` (`tu_enable_fdm_offset` in `tu_cmd_buffer.cc`), which the runtime's maps are not. So `VRDevice::CreateOwnFoveationMap` makes a 68×68 (eye size / 32, the driver's minimum texel), two-layer RG8 map, filled by `FillOwnFoveationMap` with flat rings per level (full density radius 0.45 / 0.30 / 0.20 of the half width, half density up to 0.80 / 0.55 / 0.38, quarter beyond), and every frame the gaze (normalized, y up) becomes pixel offsets (`x · W/2`, `−y · H/2`) for both eyes.
 - **Vulkan device** (`XRVulkanBackend.h`): enables `VK_EXT_fragment_density_map` (+ feature), `VK_VALVE_fragment_density_map_layered` (one map layer per eye on our layered scene buffer, Valve's extension, in upstream Mesa), `VK_EXT_fragment_density_map_offset` and `VK_KHR_create_renderpass2`, all when the driver has them; logs "Fragment density maps: supported, one layer per eye, with offsets".
-- **bgfx patch** `bgfx-fragment-density-map.patch` (Linux only, applied after the descriptor pool one, cache tag `-turnip4` with the shading rate patch): `BGFX_RESOLVE_FRAGMENT_DENSITY_MAP` tags a frame buffer attachment as the density map (kept out of the color/depth lists, `VkRenderPassFragmentDensityMapCreateInfoEXT` on the v1 render pass, extra attachment in the `VkFramebuffer`, layout barriers); `BGFX_TEXTURE_FRAGMENT_DENSITY_MAP` for textures that are maps (usage, offset-capable, kept in the density map layout; external images are taken as is); `VkPipelineFragmentDensityMapLayeredCreateInfoVALVE` on pipelines rendering into a layered map; render targets created offset-capable; `bgfx::setFragmentDensityMapOffsets(frameBuffer, offsetsXY, layers)` stored per frame and applied with `vkCmdEndRenderPass2KHR` (offsets rounded to the device granularity); `BGFX_CAPS_FRAGMENT_DENSITY_MAP`. Unpatched bgfx does not define these macros, so all the VPX code is under `#ifdef` and inert on Windows and macOS.
+- **bgfx patch** `02-fragment-density-map.patch` (Linux only, applied after the descriptor pool one, cache tag `-turnip4` with the shading rate patch): `BGFX_RESOLVE_FRAGMENT_DENSITY_MAP` tags a frame buffer attachment as the density map (kept out of the color/depth lists, `VkRenderPassFragmentDensityMapCreateInfoEXT` on the v1 render pass, extra attachment in the `VkFramebuffer`, layout barriers); `BGFX_TEXTURE_FRAGMENT_DENSITY_MAP` for textures that are maps (usage, offset-capable, kept in the density map layout; external images are taken as is); `VkPipelineFragmentDensityMapLayeredCreateInfoVALVE` on pipelines rendering into a layered map; render targets created offset-capable; `bgfx::setFragmentDensityMapOffsets(frameBuffer, offsetsXY, layers)` stored per frame and applied with `vkCmdEndRenderPass2KHR` (offsets rounded to the device granularity); `BGFX_CAPS_FRAGMENT_DENSITY_MAP`. Unpatched bgfx does not define these macros, so all the VPX code is under `#ifdef` and inert on Windows and macOS.
 - **Scene buffer** (`RenderTarget::SetFragmentDensityMap/Offsets`, `Renderer::SetFragmentDensityMap/Offsets`): `BackBuffer1` and `BackBuffer2` get a cached frame buffer variant carrying the map; `VRDevice::RenderFrame` selects it right after acquiring the swapchain image and sets the offsets of the frame. Post passes sample the resolved full-resolution image unchanged (non-subsampled image), so bloom, AA, tonemap and the preview need nothing.
 - **Measurement**: the runtime's counter `/perfmetrics_meta/app/gpu_frametime` (`XR_META_performance_metrics`), enabled with `VPX_XR_METRICS=1` in the environment, and, with `VPX_GPU_PROFILE=1`, that counter plus bgfx's per-view GPU timings grouped by render target (`VRDevice::LogRuntimeStatus`, every 5 s, needs the view names, which release builds now set when profiling — `RenderDevice::m_nameViews`). The counters are off otherwise, and always disabled before a session is destroyed: SteamVR 2.17.10 keeps their enabled state with the OpenXR instance but destroys the timestamp query pools it created for them with the session, then reads those pools again from the next session's `xrEndFrame` — a crash in the Vulkan driver when a table was started after the lobby on the Frame (found with the Vulkan API dump layer: no `vkCreateQueryPool` from `vrclient` for the second session, while its `vkGetQueryPoolResults` followed the begin/wait pattern of every frame).
 - **Shading rate image (2026-10-03), the path used on the Frame**: the driver only applies density maps in its tiled render path (next bullet), but programs a fragment shading rate attachment (`VK_KHR_fragment_shading_rate`) in both paths, so the scene pass stays direct. A third bgfx patch (`bgfx-fragment-shading-rate.patch`: `BGFX_TEXTURE_FRAGMENT_SHADING_RATE`, `BGFX_RESOLVE_FRAGMENT_SHADING_RATE`, render pass 2 with the rate attachment, pipeline combiner so the attachment's rate wins) lets `RenderTarget::SetFragmentDensityMap(map, shadingRate = true)` attach a single layer R8U image of one rate code per 8×8 block (270×270 at 2160²) to the scene buffer. `VRDevice::UpdateShadingRateMap` rewrites it whenever the gaze moves by half a texel: full rate in a disc around each eye's gaze (one image for both eyes: the union, hence tighter rings than the fixed profiles), 2×2 in a ring, 4×4 beyond, with the radii of the level; without a valid gaze the wide Low profile at the center. The gaze comes from `XR_EXT_eye_gaze_interaction` as a ray located at its sample time and projected with the frame's views (`LocateGaze`: a fixated object stays sharp while the head turns, which the runtime's per image foveation center could not do), smoothed over 35 ms; `VPX_FOVEATION_DEBUG=1|2|3` shrinks the sharp area to a spot, makes the rest very coarse and circles each spot in magenta, to check the tracking in the headset (`FoveationFlipY` default fixed to false that way): the procedure, what to look for and how to read the status line are in **`docs/Foveated Rendering on the Steam Frame.md`, section 8**, the technical reference of the whole feature (mechanisms, measurements, challenges met; the same document as `Doc/foveated-rendering.md`). Preferred over the density map wherever the driver has it; the status line says which ("Eye-tracked (shading rate image)"). Measured at native 2160×2160, dynamic resolution off, medians of 9 samples over 40 s, eye-tracked with the gaze ray (2026-10-03, headset at 67–71 °C): Addams Family Off 14.3 ms → **High 11.2, Medium 11.3, Low 11.5** (Off again at the end: 14.8), i.e. ≈ 3 ms or 22 % per frame, against an upper bound of 11.0 with 4×4 shading everywhere; with fixed images beforehand, Ghostbusters went 11.3 → 9.2. **`Foveation` defaults to Medium again on standalone OpenXR builds.**
@@ -209,7 +211,7 @@ Full shading only around the point the eyes look at, through a Vulkan fragment d
 
 ## 10. One game session across table switches (2026-10-01/02)
 
-Files: `src/core/VPApp.h/.cpp`, `src/core/player.h/.cpp`, `src/renderer/Window.h/.cpp`, `src/renderer/VRDevice.h/.cpp`, `src/ui/live/LiveUI.h/.cpp`, `src/ui/live/ingameui/TablePickerPage.cpp`, `lib/src/WebServer.cpp`, `src/core/AppCommands.cpp` (details in `Doc/steam-frame-port-plan.md`, section 6).
+Files: `src/core/VPApp.h/.cpp`, `src/core/player.h/.cpp`, `src/renderer/Window.h/.cpp`, `src/renderer/VRDevice.h/.cpp`, `src/ui/live/LiveUI.h/.cpp`, `src/steamframe/TablePickerPage.cpp`, `lib/src/WebServer.cpp`, `src/core/AppCommands.cpp` (details in `Doc/steam-frame-port-plan.md`, section 6).
 
 In launcher and play mode, `VPApp` keeps the OS windows (playfield, VR preview) from one table to the next (`AcquireWindow` / `ReleaseWindow`, matched on the settings they were created with), shows a "Loading <table>..." screen with a spinner while switching (`LiveUI::SetLoadingText`, `Player::RenderLoadingFrame`), and can keep the VR device, i.e. the OpenXR instance, so the runtime does not see the application quit and start again (`AcquireVRDevice` / `ReleaseVRDevice`, `VRDevice::ApplyTableSettings` for the per-table settings, `EndSession` / `ReleaseSession` for a clean session stop, `EXITING` and `LOSS_PENDING` handled).
 
@@ -249,7 +251,7 @@ Found on the first run: the runtime's recommended size (80 %) is not a low enoug
 
 ## 14. Scores and leaderboards (branch `leaderboards`, 2026-10-03/04)
 
-Files: `src/core/ScoreTracker.h/.cpp`, `lib/src/ScoreStore.h/.cpp`, `src/ui/live/ingameui/ScoresPage.h/.cpp` (new), `plugins/plugins/ScoreboardPlugin.h` (new), `src/assets/scores/score-rules.json` (new), `src/assets/pinmame/memmaps/` (new), `src/assets/web/scores.html/.js` (new), `src/core/player.h/.cpp`, `src/core/ScriptGlobalTable.cpp`, `src/core/VPApp.h/.cpp`, `src/core/AppCommands.cpp`, `lib/src/TableLibrary.h/.cpp`, `lib/src/WebServer.h/.cpp`, `plugins/flexdmd/FlexDMD.h/.cpp`, `plugins/flexdmd/UltraDMD.cpp`, `plugins/pinmame/PinMAMEPlugin.cpp`, `src/ui/live/ingameui/InGameUI.cpp`, `TablePickerPage.h/.cpp`, `src/assets/web/tables.html/.js`, `vpx.html`, `styles.css`, `make/CMakeLists_sources.txt`. The full description, from the capture to the routes, is in **`docs/Table Scores and Leaderboards.md`**.
+Files: `src/steamframe/ScoreTracker.h/.cpp`, `src/steamframe/ScoreStore.h/.cpp`, `src/steamframe/ScoresPage.h/.cpp` (new), `plugins/plugins/ScoreboardPlugin.h` (new), `src/assets/scores/score-rules.json` (new), `src/assets/pinmame/memmaps/` (new), `src/assets/web/scores.html/.js` (new), `src/core/player.h/.cpp`, `src/core/ScriptGlobalTable.cpp`, `src/core/VPApp.h/.cpp`, `src/core/AppCommands.cpp`, `src/steamframe/TableLibrary.h/.cpp`, `lib/src/WebServer.h/.cpp`, `plugins/flexdmd/FlexDMD.h/.cpp`, `plugins/flexdmd/UltraDMD.cpp`, `plugins/pinmame/PinMAMEPlugin.cpp`, `src/ui/live/ingameui/InGameUI.cpp`, `TablePickerPage.h/.cpp`, `src/assets/web/tables.html/.js`, `vpx.html`, `styles.css`, `make/CMakeLists_sources.txt`. The full description, from the capture to the routes, is in **`docs/Table Scores and Leaderboards.md`**.
 
 - **Capture** (`ScoreTracker`, one per table of the library played, not for the lobby nor files outside the library): every 250 ms it reads several sources and uses the most reliable one that shows a score: the RAM of the emulated machine through the `game_state` memory map of its ROM (`pinmame`), the scores the script sends to the B2S server (`b2s`, works without a `.directb2s`), the UltraDMD scoreboard (`ultradmd`, through a new `"Scores","OnScoreboard:1"` plugin message broadcast by FlexDMD), global variables of the script with the usual names (`script`), and, when nothing else showed a score, the high scores the script saves with `SaveValue` (`highscore`). A game ends on the machine's game over flag (or its player count back to 0, or, with a rule, its 'game on' flipper solenoid: Stern SAM), a game in play variable or the backglass game over light (each trusted only once it said a game runs, and debounced), or, without signal, when the script saves a score or the next game resets the scores. A game is recorded only if its scores were seen at zero near its start (NVRAM and scripts restore the last game's scores at boot); a game left in progress is discarded. Each player (1 to 6) gets the profile given to it in the lobby, the scores of unassigned players are stored without profile. One `[Scores]` line per session in the log tells what was found, or why nothing was.
 - **Rules** for the tables the heuristics miss: `score-rules.json` in `assets/scores` (bundled: 4 rules from the library coverage run) and in the preferences folder, matched on the table file name or the ROM: `disable`, the `source` to use, the names of the script variables (`scores`, `scoreBase`, `players`, `inGame`, `gameOver`), or the `gameOnSolenoid` of the ROM.
@@ -275,23 +277,34 @@ Files: `src/core/ScoreTracker.h/.cpp`, `lib/src/ScoreStore.h/.cpp`, `src/ui/live
 New:
 
 ```
-lib/src/TableLibrary.h
-lib/src/TableLibrary.cpp
-lib/src/ScoreStore.h
-lib/src/ScoreStore.cpp
-src/core/ScoreTracker.h
-src/core/ScoreTracker.cpp
+.github/README.md                       README of the fork (the root README.md stays upstream's)
+steamframe/README.md                    how the fork is organized, and how to sync with upstream
+steamframe/steamframe.cmake             build of the fork (sources, VPX_STEAM_FRAME, libraries)
+steamframe/deps/libarchive.sh           xz + libarchive, run by platforms/*/external.sh
+steamframe/deps/openxr-loader.sh        OpenXR loader, run by platforms/linux-*/external.sh
+steamframe/patches/bgfx/                bgfx patches (see below)
+steamframe/tools/                       sync-upstream.sh, regen-shaders.sh, shaderc-dx-from-ref.sh
+src/steamframe/Launcher.h
+src/steamframe/Launcher.cpp             table library, scores, web server, lobby and launcher mode (g_launcher, owned by VPApp)
+src/steamframe/PlayerTableImage.cpp     Player members for the table images
+src/steamframe/WebServerLibrary.cpp     WebServer routes of the tables and scores pages
+src/steamframe/TableLibrary.h
+src/steamframe/TableLibrary.cpp
+src/steamframe/ScoreStore.h
+src/steamframe/ScoreStore.cpp
+src/steamframe/ScoreTracker.h
+src/steamframe/ScoreTracker.cpp
 plugins/plugins/ScoreboardPlugin.h
-src/ui/live/ingameui/ScoresPage.h
-src/ui/live/ingameui/ScoresPage.cpp
+src/steamframe/ScoresPage.h
+src/steamframe/ScoresPage.cpp
 src/assets/scores/score-rules.json
 src/assets/pinmame/memmaps/
 src/assets/web/scores.html
 src/assets/web/scores.js
 src/assets/web/tables.html
 src/assets/web/tables.js
-src/ui/live/ingameui/TablePickerPage.h
-src/ui/live/ingameui/TablePickerPage.cpp
+src/steamframe/TablePickerPage.h
+src/steamframe/TablePickerPage.cpp
 src/ui/live/ingameui/MessagePage.h
 src/ui/live/ingameui/MessagePage.cpp
 tests/test-table-library.cpp
@@ -307,26 +320,25 @@ docs/Table Scores and Leaderboards.md
 Modified:
 
 ```
-README.md                               notice about this fork
-CMakeLists.txt                          ENABLE_XR option for Linux
-make/CMakeLists_sources.txt             new sources, VPX_WEBSERVER_SOURCES
-make/CMakeLists_app.txt                 web server, zip, ENABLE_XR and loader on macOS/Linux
-platforms/linux-aarch64/external.sh     OpenXR loader, xz + libarchive, bgfx patch for the Frame's driver
-platforms/linux-aarch64/bgfx-turnip-descriptor-pool.patch   descriptor pools without the free-set flag (section 7)
-platforms/linux-aarch64/bgfx-fragment-density-map.patch     fragment density map attachments and offsets (section 9)
-platforms/linux-aarch64/bgfx-fragment-shading-rate.patch   fragment shading rate attachments, the foveation path used on the Frame (section 9)
-platforms/linux-x64/external.sh         OpenXR loader
-lib/src/WebServer.h, WebServer.cpp      desktop use, pairing, staged uploads, tables routes, tables page as home page, scores and profiles routes
-lib/src/TableLibrary.h, .cpp            FindTable (library table of a file, for the scores)
+CMakeLists.txt                          ENABLE_XR option for Linux and windows-mingw, include of steamframe/steamframe.cmake
+make/CMakeLists_sources.txt             VRControllerModels, MessagePage
+make/vpx-core.vcxitems, .filters        VRControllerModels, MessagePage
+platforms/linux-aarch64/external.sh     bgfx patches of steamframe/patches/bgfx, steamframe/deps scripts
+steamframe/patches/bgfx/01-turnip-descriptor-pool.patch   descriptor pools without the free-set flag (section 7)
+steamframe/patches/bgfx/02-fragment-density-map.patch     fragment density map attachments and offsets (section 9)
+steamframe/patches/bgfx/03-fragment-shading-rate.patch   fragment shading rate attachments, the foveation path used on the Frame (section 9)
+platforms/linux-x64/external.sh         steamframe/deps scripts
+platforms/windows-mingw-x64/external.sh libzip without zstd/bzip2/lzma, steamframe/deps/libarchive.sh
+lib/src/WebServer.h, WebServer.cpp      desktop use, pairing, staged uploads, tables page as home page, dispatch to the routes of WebServerLibrary.cpp
 src/assets/web/app.js, vpx.html         pairing prompt, Upload Folder, missing ROMs, ROM folder link, Tables | Scores | Files switch
 src/assets/web/tables.html, tables.js   Scores link, "Show scores" in the table menu
 src/assets/web/styles.css               missing ROMs, ROM folder link, upload banner, tables page, scores page
 src/core/ScriptGlobalTable.cpp          SaveValue forwarded to the score tracker
 plugins/flexdmd/FlexDMD.h, .cpp, UltraDMD.cpp   UltraDMD scoreboard broadcast for the scores
 plugins/pinmame/PinMAMEPlugin.cpp       bundled memory maps as last resort
-src/core/AppCommands.h, AppCommands.cpp -Launcher, table switching, lobby, result or profiles page when the lobby opens
+src/core/AppCommands.h, AppCommands.cpp -Launcher option, launcher hooks in PlayTableCommand::Play, tables played one after the other
 src/core/main.cpp                       launcher counts as play mode, web server started with the application when always on
-src/core/VPApp.h, VPApp.cpp             table library, web server (pairing and always-on settings), ROM folder, lobby path, score store, last session result
+src/core/VPApp.h, VPApp.cpp             windows (and VR device) kept between tables, owns the Launcher
 src/core/Settings_properties.inl        Standalone settings (including WebServerPairing, WebServerAlwaysOn), VR autodetect and Standard FXAA defaults on standalone OpenXR builds
 src/shaders/bgfx/material.sh, fs_ball.sc   specular anti-aliasing (section 12)
 src/shaders/bgfx/fs_basic.sc, fs_ball.sc   clip-space lookups scaled for the dynamic resolution (section 13)
@@ -349,7 +361,7 @@ src/renderer/XRVulkanBackend.h          run-time libvulkan on Linux, extension f
 src/ui/live/LiveUI.h, LiveUI.cpp        pointer fed to ImGui, menu rendered while closing for the table image
 src/ui/live/ingameui/HomePage.cpp       "Tables" entry
 src/ui/live/ingameui/InGameUI.h, .cpp   page registration (profiles, scores/result), accessors
-src/ui/live/ingameui/TablePickerPage.h, .cpp   player item, Scores tab, top scores, reusable VR keyboard
+src/steamframe/TablePickerPage.h, .cpp   player item, Scores tab, top scores, reusable VR keyboard
 src/ui/live/ingameui/InGameUIItem.h     tile image and toggle
 src/ui/live/ingameui/InGameUIPage.h, .cpp  tile layout
 ```

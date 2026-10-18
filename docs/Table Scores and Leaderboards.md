@@ -28,7 +28,7 @@ These were chosen with the user before the implementation and shape the rest:
 
 ## 3. Capturing the scores: `ScoreTracker`
 
-Files: `src/core/ScoreTracker.h/.cpp`.
+Files: `src/steamframe/ScoreTracker.h/.cpp`.
 
 ### 3.1 Life of a tracker
 
@@ -161,7 +161,7 @@ Their `_notes` say how each address was found and what was verified (the Faeton 
 
 ## 6. Storing the scores: `ScoreStore`
 
-Files: `lib/src/ScoreStore.h/.cpp`, owned by `VPApp::GetScoreStore()`. Like `TableLibrary`, it depends only on the standard library and `nlohmann/json`, and logs through a callback.
+Files: `src/steamframe/ScoreStore.h/.cpp`, owned by `Launcher::GetScoreStore()`. Like `TableLibrary`, it depends only on the standard library and `nlohmann/json`, and logs through a callback.
 
 ### 6.1 Files
 
@@ -197,7 +197,7 @@ Both in the preferences folder, next to `tables.json`. They are written to a `.t
 
 ## 7. In the lobby
 
-Files: `src/ui/live/ingameui/ScoresPage.h/.cpp`, `TablePickerPage.h/.cpp`, `InGameUI.cpp`, `src/core/AppCommands.cpp`.
+Files: `src/steamframe/ScoresPage.h/.cpp`, `TablePickerPage.h/.cpp`, `InGameUI.cpp`, `src/steamframe/Launcher.cpp`.
 
 - **Player item.** `AddPlayerItem` puts "Player: <name>" (or "Player: nobody (choose who is playing)", or "Players: 1 Seb, 3 Ann" when other players have a profile, the full list in its details) at the top of the picker, on every tab. It opens `profiles`.
 - **Profiles page** (`ProfilesPage`, `profiles`, "Who is playing?"): "Player 1: Seb" to "Player 6: Unassigned", each opening `profiles/player<n>`, and "New profile..." (a `TextEntryPage` of 32 characters; the new profile is given to player 1). Without any profile, "New profile..." comes first.
@@ -268,17 +268,17 @@ Names are kept on one line (tabs and line breaks become spaces) and trimmed. Del
 - The scale of 10 of Juegos Populares Faeton (Ulysse 31) is inferred, not read on its display (section 12.6).
 - Two players could not always be started on the Stern SAM tables by the autoplay; their player 2 address is verified on Iron Man only (players 3 and 4 follow the stride on every local map).
 - The pages are served over plain HTTP, like the rest of the web server; the scores routes are behind the pairing code when it is on.
-- The Visual Studio project files were not updated; the CMake build lists the new files (`ScoreStore` and `ScoreTracker` in `VPX_STANDALONE_SOURCES`, `ScoresPage` in `VPX_SOURCES`).
+- The Visual Studio project files were not updated; the CMake build lists the new files (in `steamframe/steamframe.cmake`).
 
 ## 11. Files
 
 New:
 
 ```
-lib/src/ScoreStore.h, ScoreStore.cpp            profiles and scores, profiles.json / scores.json
-src/core/ScoreTracker.h, ScoreTracker.cpp       score capture
+src/steamframe/ScoreStore.h, ScoreStore.cpp            profiles and scores, profiles.json / scores.json
+src/steamframe/ScoreTracker.h, ScoreTracker.cpp       score capture
 plugins/plugins/ScoreboardPlugin.h              "Scores","OnScoreboard:1" plugin message
-src/ui/live/ingameui/ScoresPage.h, .cpp         profiles page, leaderboards, result page
+src/steamframe/ScoresPage.h, .cpp         profiles page, leaderboards, result page
 src/assets/scores/score-rules.json              per table rules (section 4)
 src/assets/pinmame/memmaps/                     Pinball Memory Maps (ODbL / DbCL), plus 4 maps and 2 platforms added locally (section 5)
 src/assets/web/scores.html, scores.js           Scores page of the web server
@@ -299,14 +299,13 @@ Modified:
 ```
 src/core/player.h, player.cpp                   tracker created, polled and finished
 src/core/ScriptGlobalTable.cpp                  SaveValue forwarded to the tracker
-src/core/VPApp.h, VPApp.cpp                     GetScoreStore, m_lastSessionResult
-src/core/AppCommands.cpp                        result page or profiles page when the lobby opens
-lib/src/TableLibrary.h, .cpp                    FindTable (table of a file)
+src/steamframe/Launcher.h, Launcher.cpp         GetScoreStore, m_lastSessionResult, result page or profiles page when the lobby opens
+src/steamframe/TableLibrary.h, .cpp                    FindTable (table of a file)
 lib/src/WebServer.h, .cpp                       scores and profiles routes, /info scores flag
 plugins/flexdmd/FlexDMD.h, .cpp, UltraDMD.cpp   scoreboard broadcast
 plugins/pinmame/PinMAMEPlugin.cpp               bundled memory maps as last resort
 src/ui/live/ingameui/InGameUI.cpp               profiles and scores/result pages
-src/ui/live/ingameui/TablePickerPage.h, .cpp    player item, Scores tab, top scores, reusable VR keyboard, TextEntryPage keyboard and length
+src/steamframe/TablePickerPage.h, .cpp    player item, Scores tab, top scores, reusable VR keyboard, TextEntryPage keyboard and length
 src/assets/web/tables.html, tables.js, vpx.html Scores link, "Show scores"
 src/assets/web/styles.css                       scores page
 make/CMakeLists_sources.txt                     new sources
