@@ -4,6 +4,10 @@
 
 #include "FileLocator.h"
 
+namespace VPX { class Window; }
+class VRDevice;
+class Launcher;
+
 
 class VPApp final
 {
@@ -31,12 +35,46 @@ public:
    // Script security level
    int m_securitylevel;
 
+   // Display resources kept from one table to the next when tables are played one after another (m_keepDisplayBetweenTables), so that
+   // switching tables neither closes the window nor makes the VR runtime see the application quit and start again. They are released
+   // when the application closes. Otherwise, they are released when the table which used them is closed (editor, mobile builds).
+   bool m_keepDisplayBetweenTables = false;
+   // The VR device (OpenXR instance) is not kept, only the windows are: SteamVR (2.17.10 on the Steam Frame) ties its Vulkan objects to the
+   // OpenXR instance and reuses them for the next session after destroying them with the previous one (crash in the driver at xrEndFrame),
+   // and creating a new Vulkan device under the same instance makes it call the destroyed VkInstance (abort in the loader). Found on the
+   // Frame on 2026-10-02 with the Vulkan API dump layer. A runtime fixing this could set it back to true.
+   static constexpr bool m_keepVRDeviceBetweenTables = false;
+   // Window kept from the previous table if it was created with the same settings, otherwise a new one
+   VPX::Window* AcquireWindow(int windowId, const string& title, const Settings& settings);
+   void ReleaseWindow(VPX::Window* wnd);
+#ifdef ENABLE_XR
+   // VR device (OpenXR instance) kept from the previous table, or a new one (which may not be ready, see VRDevice::IsOpenXRReady)
+   VRDevice* AcquireVRDevice(const Settings& settings);
+   void ReleaseVRDevice(bool discard); // discard: destroy it even if devices are kept, for example when the headset was not found
+#endif
+   void ReleaseDisplayResources();
+   uint64_t m_lastTableCloseTime = 0; // When the last table started to close (steady clock, in microseconds), to log how long switching tables takes
+
+#ifdef VPX_STEAM_FRAME
+   std::unique_ptr<Launcher> m_launcher; // Steam Frame Edition: table library, lobby, scores (see steamframe/Launcher.h)
+#endif
+
 #ifdef VPX_HAS_REGISTERED_TYPELIB
    static CComModule m_module;
 #endif
 
 
 private:
+   struct KeptWindow
+   {
+      VPX::Window* window;
+      int windowId;
+      string config; // Settings the window was created with (see VPX::Window::GetConfigKey)
+   };
+   vector<KeptWindow> m_keptWindows; // Windows not used by the current table, kept for the next one
+   vector<KeptWindow> m_usedWindows; // Windows acquired by the current table
+   VRDevice* m_vrDevice = nullptr;
+
    std::filesystem::path m_commandLineCustomSettingsFileName; // Override default ini filename, must be defined before InitInstance
    int m_logicalNumberOfProcessors = -1;
 };

@@ -26,6 +26,10 @@
 #include "VPXPluginAPIImpl.h"
 
 class Ball;
+class Renderer;
+class VRDevice;
+class LiveUI;
+class ScoreTracker;
 class BaseTexture;
 class Flasher;
 class HitTimer;
@@ -96,6 +100,10 @@ public:
 
    bool IsEditorMode() const { return m_playMode == PlayMode::FullEdit; }
    PlayMode m_playMode;
+   bool m_isLobby = false; // The lobby of the launcher mode, which may be loaded from a table of the library (see Launcher::GetLobbyRoom)
+#ifdef VPX_STEAM_FRAME
+   std::unique_ptr<ScoreTracker> m_scoreTracker; // Records the scores of the games, when playing a table of the library
+#endif
 
    // Request to replace the played table with a new one. The given reference on the table is adopted by
    // the player. It is safe to call this at any time (including from a UI or a script callback).
@@ -217,6 +225,32 @@ private:
 
 #ifdef ENABLE_BGFX
    bool CallbackSteppedGameLoop();
+#ifdef VPX_STEAM_FRAME // Implemented in steamframe/PlayerTableImage.cpp
+public:
+   // The image of a table in the table picker is captured the first time it is closed, and can be captured again from the in-game menu
+   bool CanReplaceTableImage() const;
+   void ReplaceTableImage();
+private:
+   void CaptureTableImageBeforeClosing();
+   void UpdateTableImageReplacement();
+   void CaptureTableImage(const std::filesystem::path& imagePath, const std::function<void(bool)>& onCaptured);
+   bool IsInGameUIClosed() const;
+   bool m_tableImageCaptureStarted = false;
+   bool m_tableImageMenuHidden = false;
+   std::atomic<bool> m_tableImageCaptureDone = false; // Set by the render thread when the capture is saved
+   void CloseAfterLoadingScreen();
+   unsigned int m_closingLoadingFrame = 0; // Frame from which the loading screen of what follows is shown, before closing
+   std::chrono::steady_clock::time_point m_closingLoadingTime;
+   std::filesystem::path m_tableImageReplacePath; // Set while waiting for the in-game menu to close
+   std::atomic<int> m_tableImageReplaced = 0; // Result of ReplaceTableImage, set by the render thread: 1 replaced, 2 failed
+   // The image is captured in full daylight, whatever the light level of the table and its room: their lighting is set back once it is captured
+   void SetTableImageLighting(bool capture);
+   bool m_tableImageLighting = false;
+   int m_tableImageLightMode = 0; // Renderer::SceneLighting::Mode and user light level before the capture
+   float m_tableImageLightLevel = 1.f;
+   std::atomic<bool> m_tableImageLightingDone = false; // Set by the render thread when the capture is saved
+public:
+#endif
    void MultithreadedGameLoop();
 #endif
    void FramePacingGameLoop();
@@ -297,6 +331,9 @@ private:
    void PrepareFrame();
    void SubmitFrame();
    void FinishFrame();
+   // While the table is loading, a frame with only the loading screen of the in-game UI, if the render thread accepts one
+   void RenderLoadingFrame(bool ownsFrameMutex);
+   std::chrono::steady_clock::time_point m_lastLoadingFrameTime;
 
    static void OnAuxRendererChanged(const unsigned int msgId, void *userData, void *msgData);
    unsigned int m_getAuxRendererId = 0, m_onAuxRendererChgId = 0;

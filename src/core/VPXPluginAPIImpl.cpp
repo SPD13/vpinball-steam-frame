@@ -10,6 +10,10 @@
 #include "ui/live/LiveUI.h"
 #include "input/PlungerHandler.h"
 #include "physics/cabinet/NudgeHandler.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#include "steamframe/TableLibrary.h"
+#endif
 
 VPXPluginAPIImpl* VPXPluginAPIImpl::s_instance = nullptr;
 
@@ -61,6 +65,36 @@ unsigned int MSGPIAPI VPXPluginAPIImpl::UpdateNotification(const unsigned int ha
    if (g_pplayer == nullptr || g_pplayer->m_liveUI == nullptr)
       return 0; // Only allowed in game, once the UI exists (not while plugins load or the player shuts down)
    return g_pplayer->m_liveUI->PushNotification(msg, lengthMs, handle);
+}
+
+void MSGPIAPI VPXPluginAPIImpl::ShowMessage(const char* title, const char* message)
+{
+   if (g_pplayer == nullptr || title == nullptr || message == nullptr)
+   {
+      PLOGE << "Invalid VPX API call 'ShowMessage'";
+      return;
+   }
+   g_pplayer->m_liveUI->ShowMessage(title, message);
+}
+
+void MSGPIAPI VPXPluginAPIImpl::ReportMissingFile(const char* package, const char* folder, const char* files)
+{
+   if (package == nullptr || folder == nullptr || files == nullptr)
+   {
+      PLOGE << "Invalid VPX API call 'ReportMissingFile'";
+      return;
+   }
+#ifdef VPX_STEAM_FRAME
+   // Listed by the web server of the table library, to tell the user what to upload
+   vector<string> fileList;
+   std::istringstream lines(files);
+   for (string line; std::getline(lines, line);)
+      if (!line.empty())
+         fileList.push_back(line);
+   const PinTable* const table = g_pplayer ? g_pplayer->m_ptable : nullptr;
+   const string tableName = table == nullptr ? string() : !table->m_tableName.empty() ? table->m_tableName : table->m_filename.stem().string();
+   g_launcher->GetTableLibrary().AddMissingRom(package, std::filesystem::path(reinterpret_cast<const char8_t*>(folder)), fileList, tableName);
+#endif
 }
 
 
@@ -685,6 +719,9 @@ VPXPluginAPIImpl::VPXPluginAPIImpl(MsgPI::MsgPluginManager& pluginManager, Setti
    m_api.DeleteTexture = DeleteTexture;
 
    m_api.RunScript = RunScript;
+
+   m_api.ShowMessage = ShowMessage;
+   m_api.ReportMissingFile = ReportMissingFile;
 
    m_vpxPlugin = pluginManager.RegisterPlugin(
       "vpx"s, "VPX"s, "Visual Pinball X"s, ""s, ""s, "https://github.com/vpinball/vpinball"s, //
