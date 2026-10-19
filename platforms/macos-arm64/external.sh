@@ -189,7 +189,7 @@ fi
 # build pinmame
 #
 
-PINMAME_EXPECTED_SHA="${PINMAME_SHA}"
+PINMAME_EXPECTED_SHA="${PINMAME_SHA}-memmap1" # Steam Frame Edition: -memmap1 for the patches of steamframe/patches/pinmame
 PINMAME_FOUND_SHA="$([ -f pinmame/cache.txt ] && cat pinmame/cache.txt || echo "")"
 
 if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
@@ -203,6 +203,7 @@ if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
    tar xzf pinmame-${PINMAME_SHA}.tar.gz
    mv pinmame-${PINMAME_SHA} pinmame
    cd pinmame
+   for p in ../../../../../steamframe/patches/pinmame/*.patch; do patch -p1 --forward < "$p"; done # Steam Frame Edition: memory maps, nibble of 4-bit memory before the mask (scores)
    cp cmake/libpinmame/CMakeLists.txt .
    cmake \
       -DPLATFORM=macos \
@@ -492,7 +493,7 @@ fi
 # build libspatialaudio
 #
 
-LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001"
+LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001-rotfix1" # Steam Frame Edition: -rotfix1 for the patches of steamframe/patches/libspatialaudio
 LIBSPATIALAUDIO_FOUND_SHA="$([ -f libspatialaudio/cache.txt ] && cat libspatialaudio/cache.txt || echo "")"
 
 if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
@@ -506,6 +507,7 @@ if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
    tar xzf libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
    mv libspatialaudio-${LIBSPATIALAUDIO_SHA} libspatialaudio
    cd libspatialaudio
+   for p in ../../../../../steamframe/patches/libspatialaudio/*.patch; do patch -p1 < "$p"; done # Steam Frame Edition: soundfield rotation fade (VR head tracking)
    cmake \
       -DBUILD_SHARED_LIBS=OFF \
       -DBUILD_TESTING=OFF \
@@ -607,3 +609,5 @@ cp libspatialaudio/libspatialaudio/build/libspatialaudio.a ../../../third-party/
 mkdir -p ../../../third-party/include/spatialaudio
 cp -r libspatialaudio/libspatialaudio/include/*.h libspatialaudio/libspatialaudio/include/{adm,dsp,hrtf,kiss_fft} ../../../third-party/include/spatialaudio
 cp libspatialaudio/libspatialaudio/build/include/SpatialaudioConfig.h ../../../third-party/include/spatialaudio
+
+source ../../../steamframe/deps/libzip.sh macos-arm64 # Steam Frame Edition: web server

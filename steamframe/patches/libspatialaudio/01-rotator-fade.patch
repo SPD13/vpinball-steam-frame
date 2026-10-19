@@ -1,0 +1,24 @@
+--- a/source/AmbisonicRotator.cpp
++++ b/source/AmbisonicRotator.cpp
+@@ -125,13 +125,20 @@
+         {
+             for (unsigned iOut = 0; iOut < m_nChannelCount; ++iOut)
+                 for (unsigned iIn = 0; iIn < m_nChannelCount; ++iIn)
+-                    if (std::abs(m_currentMatrix[iOut][iIn]) > 1e-6f && std::abs(m_targetMatrix[iOut][iIn]) > 1e-6f)
++                    // Fade every coefficient that is non-zero at either end of the fade: a coefficient that starts at
++                    // zero (the off-diagonal terms of the identity matrix set by Reset()) must still ramp up to its target
++                    if (std::abs(m_currentMatrix[iOut][iIn]) > 1e-6f || std::abs(m_targetMatrix[iOut][iIn]) > 1e-6f)
+                         for (unsigned iSamp = 0; iSamp < nFadeSamp; ++iSamp)
+                         {
+                             pBFSrcDst->m_ppfChannels[iOut][iSamp] += m_currentMatrix[iOut][iIn] * m_tempBuffer.m_ppfChannels[iIn][iSamp];
+                             m_currentMatrix[iOut][iIn] += m_deltaMatrix[iOut][iIn];
+                         }
++                    else // Negligible on both ends: not rendered, but kept in step with the fade
++                        m_currentMatrix[iOut][iIn] += m_deltaMatrix[iOut][iIn] * (float)nFadeSamp;
+             m_fadingCounter += nFadeSamp;
++            // Land exactly on the target at the end of the fade (no accumulated rounding error in the current matrix)
++            if (m_fadingCounter >= m_fadingSamples)
++                m_currentMatrix = m_targetMatrix;
+         }
+ 
+         // Process any remaining signal after cross-fading

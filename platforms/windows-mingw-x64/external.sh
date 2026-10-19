@@ -197,7 +197,7 @@ fi
 # build pinmame
 #
 
-PINMAME_EXPECTED_SHA="${PINMAME_SHA}-002"
+PINMAME_EXPECTED_SHA="${PINMAME_SHA}-002-memmap1" # Steam Frame Edition: -memmap1 for the patches of steamframe/patches/pinmame
 PINMAME_FOUND_SHA="$([ -f pinmame/cache.txt ] && cat pinmame/cache.txt || echo "")"
 
 if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
@@ -211,6 +211,7 @@ if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
    tar xzf pinmame-${PINMAME_SHA}.tar.gz
    mv pinmame-${PINMAME_SHA} pinmame
    cd pinmame
+   for p in ../../../../../steamframe/patches/pinmame/*.patch; do patch -p1 --forward < "$p"; done # Steam Frame Edition: memory maps, nibble of 4-bit memory before the mask (scores)
    cp cmake/libpinmame/CMakeLists.txt .
    sed -i.bak 's/set_target_properties(pinmame_shared PROPERTIES/set_target_properties(pinmame_shared PROPERTIES\n      PREFIX ""/' CMakeLists.txt
    cmake \
@@ -563,7 +564,7 @@ fi
 # build libspatialaudio
 #
 
-LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001"
+LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001-rotfix1" # Steam Frame Edition: -rotfix1 for the patches of steamframe/patches/libspatialaudio
 LIBSPATIALAUDIO_FOUND_SHA="$([ -f libspatialaudio/cache.txt ] && cat libspatialaudio/cache.txt || echo "")"
 
 if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
@@ -577,6 +578,7 @@ if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
    tar xzf libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
    mv libspatialaudio-${LIBSPATIALAUDIO_SHA} libspatialaudio
    cd libspatialaudio
+   for p in ../../../../../steamframe/patches/libspatialaudio/*.patch; do patch -p1 < "$p"; done # Steam Frame Edition: soundfield rotation fade (VR head tracking)
    cmake \
       -DBUILD_SHARED_LIBS=OFF \
       -DBUILD_TESTING=OFF \
@@ -704,6 +706,8 @@ cp "${UCRT64_BIN}/libbz2-1.dll" ../../../third-party/runtime-libs/windows-mingw-
 cp "${UCRT64_BIN}/libgcc_s_seh-1.dll" ../../../third-party/runtime-libs/windows-mingw-x64
 cp "${UCRT64_BIN}/libstdc++-6.dll" ../../../third-party/runtime-libs/windows-mingw-x64
 
+source ../../../steamframe/deps/libzip.sh windows-mingw-x64 # Steam Frame Edition: web server
+source ../../../steamframe/deps/libarchive.sh windows-mingw-x64 # Steam Frame Edition: RAR and 7z archives
 
 cp libbacktrace/libbacktrace/.libs/libbacktrace.a ../../../third-party/build-libs/windows-mingw-x64
 cp libbacktrace/libbacktrace/backtrace.h ../../../third-party/include

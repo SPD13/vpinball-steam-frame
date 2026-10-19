@@ -217,7 +217,7 @@ fi
 # build pinmame
 #
 
-PINMAME_EXPECTED_SHA="${PINMAME_SHA}"
+PINMAME_EXPECTED_SHA="${PINMAME_SHA}-memmap1" # Steam Frame Edition: -memmap1 for the patches of steamframe/patches/pinmame
 PINMAME_FOUND_SHA="$([ -f pinmame/cache.txt ] && cat pinmame/cache.txt || echo "")"
 
 echo "$(pwd)"
@@ -233,6 +233,7 @@ if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
    tar xzf pinmame-${PINMAME_SHA}.tar.gz
    mv pinmame-${PINMAME_SHA} pinmame
    cd pinmame
+   for p in ../../../../../steamframe/patches/pinmame/*.patch; do patch -p1 --forward < "$p"; done # Steam Frame Edition: memory maps, nibble of 4-bit memory before the mask (scores)
    cp cmake/libpinmame/CMakeLists.txt .
    cmake \
       -DPLATFORM=linux \
@@ -511,7 +512,7 @@ fi
 # build libspatialaudio
 #
 
-LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001"
+LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001-rotfix1" # Steam Frame Edition: -rotfix1 for the patches of steamframe/patches/libspatialaudio
 LIBSPATIALAUDIO_FOUND_SHA="$([ -f libspatialaudio/cache.txt ] && cat libspatialaudio/cache.txt || echo "")"
 
 if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
@@ -525,6 +526,7 @@ if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
    tar xzf libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
    mv libspatialaudio-${LIBSPATIALAUDIO_SHA} libspatialaudio
    cd libspatialaudio
+   for p in ../../../../../steamframe/patches/libspatialaudio/*.patch; do patch -p1 < "$p"; done # Steam Frame Edition: soundfield rotation fade (VR head tracking)
    cmake \
       -DBUILD_SHARED_LIBS=OFF \
       -DBUILD_TESTING=OFF \
@@ -607,6 +609,8 @@ for LIB in libavcodec libavformat libavutil libswresample libswscale; do
    cp ffmpeg/ffmpeg/${LIB}/*.h ../../../third-party/include/${LIB}
 done
 
+source ../../../steamframe/deps/libzip.sh linux-x64 # Steam Frame Edition: web server
+source ../../../steamframe/deps/libarchive.sh linux-x64 # Steam Frame Edition: RAR and 7z archives
 
 cp -a libwinevbs/libwinevbs/build/libwinevbs.so* ../../../third-party/runtime-libs/linux-x64
 mkdir -p ../../../third-party/include/libwinevbs/wine/include
