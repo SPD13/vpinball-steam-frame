@@ -30,6 +30,11 @@ public:
    void RequestRebuildAll();
 
    bool IsFlipperNav() const { return m_useFlipperNav; }
+   void UsePointerNav() { m_useFlipperNav = false; } // For pointers which can not be detected from mouse moves, like VR controllers
+#if defined(VPX_STEAM_FRAME)
+   bool UseButtonNav(); // Steam Frame Edition: any button of the UI switches to button navigation. Returns whether it was already used.
+   void OnUIConfirm(); // Steam Frame Edition: the OK button (Start, A on a VR controller) activates the selected item
+#endif
    void OnUIUpAction();
    void OnUIDownAction();
    void OnUILeftAction();
@@ -39,10 +44,14 @@ public:
    void OnUISaveChanges();
    void OnUINavigateBack();
 
+   InGameUIPage* GetActivePage() const { return m_activePages.empty() ? nullptr : m_activePages.back().get(); }
+
 private:
+#if defined(VPX_STEAM_FRAME)
+   friend class VRUINavigation; // Steam Frame Edition: the new VR menu goes to a screen with a fresh navigation history (src/steamframe/vrui/Shell.cpp)
+#endif
    void HandlePageInput();
    void HandleLegacyFlyOver();
-   InGameUIPage* GetActivePage() const { return m_activePages.empty() ? nullptr : m_activePages.back().get(); }
 
    Player *m_player;
    ImVec2 m_prevMousePos;
