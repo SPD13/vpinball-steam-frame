@@ -59,6 +59,7 @@ public:
    explicit PlayTableCommand(const std::filesystem::path& tableFilename);
    ~PlayTableCommand() override = default;
    void Execute() override;
+   void Play(bool openTablePicker = false); // openTablePicker: the lobby of the launcher mode (Steam Frame Edition)
 };
 
 class AuditTableCommand : public TableBasedCommand

@@ -55,7 +55,13 @@ void FileLocator::SetupPrefPath()
 #endif
 
    // Preference are stored per minor version (grouping all minor revision together, as minor revisions are not allowed to need user setup changes)
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the settings, the table library and the caches stay in the folder of the releases since 0.5.0 (10.8). Upstream's
+   // 10.9.0 would copy all of it, texture caches included, into a new 10.9 folder at the first start, and leave the old one behind.
+   static const string versionPath("10.8"s);
+#else
    static const string versionPath(STR(VP_VERSION_MAJOR) "." STR(VP_VERSION_MINOR));
+#endif
    m_prefPath = basePrefPath / versionPath;
    if (DirExists(m_prefPath))
       return;
