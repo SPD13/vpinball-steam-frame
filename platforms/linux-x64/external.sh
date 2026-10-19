@@ -590,6 +590,8 @@ for LIB in libavcodec libavformat libavutil libswresample libswscale; do
    cp ffmpeg/ffmpeg/${LIB}/*.h ../../../third-party/include/${LIB}
 done
 
+source ../../../steamframe/deps/libzip.sh linux-x64 # Steam Frame Edition: web server
+source ../../../steamframe/deps/libarchive.sh linux-x64 # Steam Frame Edition: RAR and 7z archives
 
 cp -a libwinevbs/libwinevbs/build/libwinevbs.so* ../../../third-party/runtime-libs/linux-x64
 mkdir -p ../../../third-party/include/libwinevbs/wine/include
