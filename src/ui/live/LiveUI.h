@@ -17,6 +17,8 @@
 #include "BallControl.h"
 #include "DebuggerUI.h"
 
+#include <deque>
+
 class LiveUI final : public UserMessageSink
 {
 public:
@@ -47,7 +49,19 @@ public:
    
    void ShowTouchOverlay(bool show) { m_showTouchOverlay = show; }
 
+   // Loading screen shown while switching tables (see Player::RenderLoadingFrame): a message with a spinner, drawn instead of the rest of the UI
+   // while the text is not empty
+   void SetLoadingText(const string& text) { m_loadingText = text; }
+   bool IsLoadingScreenShown() const { return !m_loadingText.empty(); }
+
    unsigned int PushNotification(const string &message, const int lengthMs, const unsigned int reuseId = 0) { return m_notificationOverlay.PushNotification(message, lengthMs, reuseId); }
+
+   // Messages that the player must acknowledge, shown one at a time in the in-game UI (which pauses the game). Lines starting with '!' are
+   // shown as errors. ShowMessage can be called from any thread, ShowPendingMessage is called by the game loop.
+   void ShowMessage(const string& title, const string& text);
+   void ShowPendingMessage();
+   const string& GetMessageTitle() const { return m_messageTitle; }
+   const string& GetMessageText() const { return m_messageText; }
 
    // Ball Control
    BallControl m_ballControl;
@@ -77,6 +91,13 @@ public:
    void HandleSDLEvent(SDL_Event &e) const;
 
 private:
+   string m_loadingText;
+   void RenderLoadingScreen();
+
+   std::mutex m_messageMutex;
+   std::deque<std::pair<string, string>> m_pendingMessages; // Title and text
+   string m_messageTitle, m_messageText; // Displayed by the 'misc/message' page
+
    void SetupImGuiStyle(const bool isEditor) const;
    
    void NewFrame();
@@ -86,6 +107,7 @@ private:
    bool m_playfieldWindowFramed = false;
 
    vector<std::shared_ptr<MeshBuffer>> m_meshBuffers;
+   std::shared_ptr<MeshBuffer> m_vrPointerRayMesh; // Ray from the VR controller to the pointed position on the UI panel
 
    // Touch UI overlay
    void UpdateTouchUI();
@@ -113,6 +135,17 @@ private:
    RenderDevice* const m_rd;
    int m_rotate = 0;
    float m_uiScale = 0.f;
+
+   // VR controller used as a pointer (Steam Frame Edition, src/steamframe/vrui/Pointer.cpp)
+   void UpdateVRPointer();
+   void RenderVRPointerDot();
+   void RenderVRPointerRay(bool onVRPanel, int depthSort);
+   bool m_vrPointerVisible = false;
+   bool m_vrPointerPressed = false;
+   ImVec2 m_vrPointerPos;
+   bool m_vrPointerClickSwallowed = false; // The trigger press switched from button to pointer navigation: it does not click
+   bool m_vrPointerScrollBlocked = false; // The thumbstick was used for button navigation and is not back to its center yet
+   bool m_vrInGameUIWasOpened = false; // To place the VR UI panel in front of the player each time the in-game UI opens
    ImFont *m_baseFont = nullptr;
    ImFont *m_overlayBoldFont = nullptr;
    ImFont *m_overlayFont = nullptr;

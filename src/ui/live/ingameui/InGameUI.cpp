@@ -26,6 +26,13 @@
 #include "TableRulesPage.h"
 #include "VRSettingsPage.h"
 #include "SystemInfoPage.h"
+#include "MessagePage.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/ScoresPage.h"
+#include "steamframe/TablePickerPage.h"
+#include "steamframe/vrui/Keyboard.h"
+#include "steamframe/vrui/UpdateCheck.h"
+#endif
 #include "parts/ball.h"
 
 
@@ -55,6 +62,12 @@ InGameUI::InGameUI(LiveUI &liveUI)
    AddPage("table/rules"s, []() { return std::make_unique<TableRulesPage>(); });
    AddPage("plugins/homepage"s, []() { return std::make_unique<PluginHomePage>(); });
    AddPage("misc/systeminfo"s, []() { return std::make_unique<SystemInfoPage>(); });
+   AddPage("misc/message"s, []() { return std::make_unique<MessagePage>(); });
+#ifdef VPX_STEAM_FRAME
+   AddPage("tables/picker"s, []() { return std::make_unique<TablePickerPage>(); });
+   AddPage("profiles"s, []() { return std::make_unique<ProfilesPage>(); });
+   AddPage("scores/result"s, []() { return std::make_unique<ScoreResultPage>(); });
+#endif
 }
 
 void InGameUI::AddPage(const string &path, const std::function<std::unique_ptr<InGameUIPage>()>& pageFactory)
@@ -121,8 +134,23 @@ void InGameUI::Open(const string& page)
 {
    assert(!IsOpened());
    Navigate(page);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: in VR, the controller points by default, until a button of the UI is pressed (see UseButtonNav)
+   m_useFlipperNav = !m_player->m_vrDevice && m_player->m_ptable->GetViewMode() == ViewSetupID::BG_FULLSCREEN;
+#else
    m_useFlipperNav = m_player->m_vrDevice || m_player->m_ptable->GetViewMode() == ViewSetupID::BG_FULLSCREEN;
+#endif
 }
+
+#if defined(VPX_STEAM_FRAME)
+bool InGameUI::UseButtonNav()
+{
+   const bool wasFlipperNav = m_useFlipperNav;
+   m_useFlipperNav = true;
+   SDL_HideCursor();
+   return wasFlipperNav;
+}
+#endif
 
 void InGameUI::Close()
 {
@@ -201,6 +229,11 @@ void InGameUI::OnUIUpAction()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Up)) // The keyboard of the new VR UI has the focus (OK on a text field): the buttons select and press its keys
+      return;
+#endif
+
    const bool wasFlipperNav = m_useFlipperNav;
    m_useFlipperNav = true;
    m_flipperNavStart = msec();
@@ -215,6 +248,11 @@ void InGameUI::OnUIDownAction()
 {
    if (ImGui::IsAnyItemActive())
       return;
+
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Down))
+      return;
+#endif
 
    const bool wasFlipperNav = m_useFlipperNav;
    m_useFlipperNav = true;
@@ -231,6 +269,12 @@ void InGameUI::OnUILeftAction()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Left))
+      return;
+   if (!UseButtonNav()) // The first press only shows the selected item, as up and down do
+      return;
+#endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(-1, true);
 }
@@ -240,6 +284,12 @@ void InGameUI::OnUIRightAction()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Right))
+      return;
+   if (!UseButtonNav())
+      return;
+#endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(1, true);
 }
@@ -249,6 +299,9 @@ void InGameUI::OnUIResetToDefaults()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->ResetToDefaults();
 }
 
@@ -257,6 +310,9 @@ void InGameUI::OnUICancelChanges()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->ResetToStoredValues();
 }
 
@@ -265,14 +321,36 @@ void InGameUI::OnUISaveChanges()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->Save();
 }
+
+#if defined(VPX_STEAM_FRAME)
+void InGameUI::OnUIConfirm()
+{
+   if (ImGui::IsAnyItemActive())
+      return;
+
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Confirm))
+      return;
+   if (!UseButtonNav()) // The first press only shows the selected item, as the directions do
+      return;
+   GetActivePage()->ActivateItem();
+}
+#endif
 
 void InGameUI::OnUINavigateBack()
 {
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Back))
+      return;
+   UseButtonNav();
+#endif
    NavigateBack();
 }
 
@@ -293,6 +371,13 @@ void InGameUI::HandlePageInput()
    // Allow pages to force flipper navigation (needed by anaglyph calibration)
    for (const auto &page : m_activePages)
       m_useFlipperNav |= page->IsFlipperNavNeeded();
+
+#if defined(VPX_STEAM_FRAME)
+   if (VRUI::Keyboard::HasFocus()) // The buttons select the keys of the keyboard of the new VR UI, one per press
+      return;
+   if (VRUI::UpdateCheck::IsInstalling()) // The menu shows only the progress of the update, its items stay as they are
+      return;
+#endif
 
    // Handle continuous press navigation
    const uint32_t now = msec();
