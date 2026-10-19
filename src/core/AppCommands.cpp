@@ -16,6 +16,9 @@
 #include "ui/win/WinApp.h"
 #include "ui/win/WinEditor.h"
 #endif
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 #include "utils/BiffReader.h"
 #include "utils/color.h"
 
@@ -185,7 +188,32 @@ PlayTableCommand::PlayTableCommand(const std::filesystem::path& tableFilename)
 {
 }
 
-void PlayTableCommand::Execute() { RunPlayerSessions(LoadTable(), Player::PlayMode::Play); }
+void PlayTableCommand::Play(bool openTablePicker)
+{
+#ifdef VPX_STEAM_FRAME
+   g_launcher->OnBeforeLoadTable();
+#endif
+   CComObject<PinTable>* table = LoadTable();
+#ifdef VPX_STEAM_FRAME
+   g_launcher->OnTableLoaded(table, m_tableFilename, openTablePicker);
+   RunPlayerSessions(table, Player::PlayMode::Play, [openTablePicker](Player* player) { g_launcher->OnPlayerCreated(player, openTablePicker); });
+   g_launcher->OnTableClosed();
+#else
+   RunPlayerSessions(table, Player::PlayMode::Play);
+#endif
+}
+
+void PlayTableCommand::Execute()
+{
+#ifdef VPX_STEAM_FRAME
+   // Another table may be picked from the in-game table picker: keep the window and the VR device for it (see VPApp::m_keepDisplayBetweenTables)
+   g_app->m_keepDisplayBetweenTables = true;
+#endif
+   Play();
+#ifdef VPX_STEAM_FRAME
+   g_launcher->PlaySelectedTables();
+#endif
+}
 
 
 AuditTableCommand::AuditTableCommand(const std::filesystem::path& tableFilename)
@@ -370,6 +398,9 @@ enum option_names
 #endif
    OPTION_LIVE_EDIT,
    OPTION_PLAY,
+#ifdef VPX_STEAM_FRAME
+   OPTION_LAUNCHER,
+#endif
    OPTION_POVEDIT,
    OPTION_POV,
    OPTION_EXTRACTVBS,
@@ -418,6 +449,9 @@ static const CommandLineOption options[] = {
 #endif
    { OPTION_LIVE_EDIT, "LiveEdit"s, "[opt filename]  Start in live editor mode. if a filename is provided, loads it as the table to edit. WARNING Unstable feature only provided for early testing"s },
    { OPTION_PLAY, "Play"s, "[filename]  Load and play file"s },
+#ifdef VPX_STEAM_FRAME
+   { OPTION_LAUNCHER, "Launcher"s, "Start with the table picker, to select and play tables without leaving the application"s },
+#endif
    { OPTION_POVEDIT, "PovEdit"s, "[filename]  Load and run file in live editing mode, then export new pov on exit"s },
    { OPTION_POV, "Pov"s, "[filename]  Load, export pov and close"s },
    { OPTION_EXTRACTVBS, "ExtractVBS"s, "[filename]  Load, export table script and close"s },
@@ -656,6 +690,12 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
       case OPTION_VERSION:
          commands.push_back(std::make_unique<ShowInfoAndExitCommand>("", "Visual Pinball "s + VP_VERSION_STRING_FULL_LITERAL, 0));
          break;
+
+#ifdef VPX_STEAM_FRAME
+      case OPTION_LAUNCHER:
+         commands.push_back(std::make_unique<LauncherCommand>());
+         break;
+#endif
 
       case OPTION_LIVE_EDIT:
          if (i + 1 < nArgs)
