@@ -385,6 +385,12 @@ public:
 
    RenderTarget* GetOffscreenVR(int eye) const { return m_activeView->GetOffscreenVR(eye); }
    RenderTarget* GetBackBufferTexture() const { return m_activeView->GetBackBufferTexture(); } // Main render target, with MSAA resolved if any, also may have stereo output (2 viewports)
+   #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
+   // Foveated rendering: the fragment density map (or shading rate image) the scene is rendered with this frame (the VR device sets it from the runtime's map for the acquired swapchain image)
+   void SetFragmentDensityMap(bgfx::TextureHandle map, bool shadingRate = false);
+   // Offsets of the map's high density area for this frame, in pixels of the scene buffer, one (x, y) pair per eye
+   void SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayers);
+   #endif
 
    // Renders a single part into the current pass, e.g. for editor previews of parts that are not (yet) in the table
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
@@ -484,8 +490,16 @@ public:
    float GetVisualNudgeStrength() const { return m_visualNudgeStrength; }
    void SetVisualNudgeStrength(float strength) { m_visualNudgeStrength = strength; }
 
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   bool RenderVRControllerMask(); // Steam Frame Edition: depth of the VR controllers for the UI pass, which keeps them in front of the UI (src/renderer/VRControllerModels.cpp)
+   #endif
+
 private:
    void ApplyTableSettings(); // (Re)load the cached table settings (called from ctor and SetTable)
+
+   #if defined(ENABLE_XR)
+   std::unique_ptr<class VRControllerModels> m_vrControllerModels; // Created on first use, in VR
+   #endif
 
    float m_visualNudgeStrength; // whether to shake the table/screen during nudges and how much
 
@@ -495,6 +509,7 @@ private:
    std::shared_ptr<BaseTexture> m_envRadianceTexture = nullptr;
 #else
    RenderTarget* m_envRadianceTexture = nullptr;
+   std::shared_ptr<BaseTexture> m_envRadianceBitmap = nullptr; // Computed on the CPU instead, in VR (see Renderer::Renderer)
 #endif
 
    // Segment display rendering, one atlas pair per SegmentFamily and segment layout

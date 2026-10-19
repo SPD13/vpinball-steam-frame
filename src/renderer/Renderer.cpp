@@ -18,6 +18,7 @@
 #include "renderer/Shader.h"
 #include "renderer/RenderCommand.h"
 #include "renderer/RenderDevice.h"
+#include "renderer/VRControllerModels.h"
 #include "renderer/VRDevice.h"
 #include "renderer/trace.h"
 #include "ui/live/LiveUI.h"
@@ -154,6 +155,10 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
 
    view->SetupTargets(renderWidthAA, renderHeightAA, rtType, renderFormat, nMSAASamples);
+   #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
+   if (m_stereo3D == STEREO_VR)
+      PLOGI << "Foveated rendering: scene buffer " << renderWidthAA << 'x' << renderHeightAA << " accepts a fragment density map";
+   #endif
 
    // Initialize shaders
    m_renderDevice->m_basicShader->SetVector(
@@ -215,20 +220,31 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture.get());
    m_renderDevice->m_ballShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture.get());
 #else // Compute radiance on the GPU
-   const colorFormat rad_format = envTex->m_format == BaseTexture::RGB_FP32 ? colorFormat::RGBA32F : colorFormat::RGBA16F;
-   m_envRadianceTexture
-      = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "Irradiance"s, envTexWidth, envTexHeight, rad_format, false, 1, "Failed to create irradiance render target");
-   m_renderDevice->ResetRenderState();
-   m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-   m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
-   m_renderDevice->SetRenderTarget("Env Irradiance PreCalc"s, m_envRadianceTexture);
-   m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::irradiance);
-   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_env, m_envSampler);
-   //m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / m_envSampler->GetWidth()), (float)(1.0 / m_envSampler->GetHeight()), 1.0f, 1.0f);
-   m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
-   m_renderDevice->SubmitRenderFrame(); // Force submission as result users do not explicitly declare the dependency on this pass
-   m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
-   m_renderDevice->m_ballShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
+   if (m_stereo3D == STEREO_VR)
+   {
+      // Same issue as Android VR on every platform: the render thread does not request a frame (m_frameRequested) until OpenXR gives it a swapchain image, so no frame can be submitted from here yet
+      m_envRadianceBitmap = EnvmapPrecalc(envTex, envTexWidth, envTexHeight);
+      m_renderDevice->m_texMan.SetDirty(m_envRadianceBitmap.get());
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceBitmap.get());
+      m_renderDevice->m_ballShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceBitmap.get());
+   }
+   else
+   {
+      const colorFormat rad_format = envTex->m_format == BaseTexture::RGB_FP32 ? colorFormat::RGBA32F : colorFormat::RGBA16F;
+      m_envRadianceTexture
+         = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "Irradiance"s, envTexWidth, envTexHeight, rad_format, false, 1, "Failed to create irradiance render target");
+      m_renderDevice->ResetRenderState();
+      m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderTarget("Env Irradiance PreCalc"s, m_envRadianceTexture);
+      m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::irradiance);
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_env, m_envSampler);
+      //m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / m_envSampler->GetWidth()), (float)(1.0 / m_envSampler->GetHeight()), 1.0f, 1.0f);
+      m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+      m_renderDevice->SubmitRenderFrame(); // Force submission as result users do not explicitly declare the dependency on this pass
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
+      m_renderDevice->m_ballShader->SetTexture(ShaderUniform::tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
+   }
 #endif
    envTex.reset();
    PLOGI << "Environment map radiance computed"; // For profiling
@@ -302,7 +318,13 @@ void Renderer::ApplyTableSettings()
    m_disableAO = m_table->GetSettings().GetPlayer_DisableAO();
    for (int wnd = VPXWindowId::VPXWINDOW_Backglass; wnd <= VPXWindowId::VPXWINDOW_Topper; wnd++)
       m_ancillaryWndRotation[wnd] = 90 * clamp(m_table->GetSettings().GetWindow_Rotation(wnd), 0, 3); // Setting is an index in the 0 / 90 / 180 / 270 literals
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   // The Steam Frame's desktop window is never seen, and rendering the scene for it costs 4.5 to 6.6 ms per frame on a heavy table
+   // (docs/Performance on the Steam Frame.md): the setting is ignored and not offered in the VR settings page
+   m_vrDesktop = VRDesktopMode::Disabled;
+#else
    m_vrDesktop = static_cast<VRDesktopMode>(m_table->GetSettings().GetPlayerVR_DesktopDisplay());
+#endif
    m_vrDesktopShrink = m_table->GetSettings().GetPlayerVR_ShrinkDesktopDisplay();
    m_FXAA = m_table->GetSettings().GetPlayer_FXAA();
    m_sharpen = m_table->GetSettings().GetPlayer_Sharpen();
@@ -397,6 +419,9 @@ void Renderer::SetTable(PinTable* const table)
 Renderer::~Renderer()
 {
    m_gpu_profiler.Shutdown();
+   #if defined(ENABLE_XR)
+   m_vrControllerModels = nullptr; // Releases its textures from the render device
+   #endif
    m_ballMeshBuffer = nullptr;
 #ifdef DEBUG_BALL_SPIN
    m_ballDebugPoints = nullptr;
@@ -409,6 +434,7 @@ Renderer::~Renderer()
    m_envRadianceTexture.reset();
 #else
    delete m_envRadianceTexture;
+   m_envRadianceBitmap.reset();
 #endif
    m_ballEnvSampler = nullptr;
    m_envSampler = nullptr;
@@ -486,6 +512,27 @@ void Renderer::SetAnisoFiltering(bool enable)
 }
 
 bool Renderer::IsBallLightingDisabled() const { return m_renderDevice->m_ballShader->GetVector(ShaderUniform::w_h_disableLighting).z != 0.f; }
+
+#if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
+void Renderer::SetFragmentDensityMap(bgfx::TextureHandle map, bool shadingRate)
+{
+   // Both scene buffers of the headset view: they are swapped every frame (previous frame kept for reflections and motion blur)
+   RenderView* const view = m_primaryView.get();
+   if (view->m_pOffscreenBackBufferTexture1)
+      view->m_pOffscreenBackBufferTexture1->SetFragmentDensityMap(map, shadingRate);
+   if (view->m_pOffscreenBackBufferTexture2)
+      view->m_pOffscreenBackBufferTexture2->SetFragmentDensityMap(map, shadingRate);
+}
+
+void Renderer::SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayers)
+{
+   RenderView* const view = m_primaryView.get();
+   if (view->m_pOffscreenBackBufferTexture1)
+      view->m_pOffscreenBackBufferTexture1->SetFragmentDensityMapOffsets(offsetsXY, nLayers);
+   if (view->m_pOffscreenBackBufferTexture2)
+      view->m_pOffscreenBackBufferTexture2->SetFragmentDensityMapOffsets(offsetsXY, nLayers);
+}
+#endif
 
 void Renderer::DisableBallLighting(bool disableLightingForBalls)
 {

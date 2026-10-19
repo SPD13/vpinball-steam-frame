@@ -17,6 +17,9 @@
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/VRDevice.h"
+#if defined(ENABLE_XR)
+#include "renderer/VRControllerModels.h"
+#endif
 #include "renderer/Window.h"
 #include "renderer/trace.h"
 #include "ui/live/LiveUI.h"
@@ -54,12 +57,18 @@ void RenderView::SetupTargets(const int width, const int height, const SurfaceTy
    // Either the main render target for non MSAA, or the buffer where the MSAA render is resolved
    m_pOffscreenBackBufferTexture1 = new RenderTarget(rd, rtType, "BackBuffer1"s, width, height, format, true, 1, "Fatal Error: unable to create offscreen back buffer");
 #endif
+   // Scene buffers follow the dynamic resolution of the frame (see Render), as every target rendered with the scene projection or
+   // sampled at screen coordinates
+   if (m_pOffscreenMSAABackBufferTexture)
+      m_pOffscreenMSAABackBufferTexture->m_dynamicResolution = true;
+   m_pOffscreenBackBufferTexture1->m_dynamicResolution = true;
    // Second render target to swap, allowing to read previous frame render for ball reflection and motion blur
    m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
 
    // alloc bloom tex at 1/4 x 1/4 res (allows for simple HQ downscale of clipped input while saving memory)
    m_pBloomBufferTexture = new RenderTarget(rd, m_pOffscreenBackBufferTexture1->m_type, "BloomBuffer1"s, max(1, m_renderWidth / 4), max(1, m_renderHeight / 4),
       m_pOffscreenBackBufferTexture1->GetColorFormat(), false, 1, "Fatal Error: unable to create bloom buffer!");
+   m_pBloomBufferTexture->m_dynamicResolution = true;
    m_pBloomTmpBufferTexture = m_pBloomBufferTexture->Duplicate("BloomBuffer2"s);
 }
 
@@ -198,9 +207,13 @@ void RenderView::ResizeRenderTargets()
          m_pOffscreenMSAABackBufferTexture->GetMSAASamples(), "Fatal Error: unable to create MSAA render buffer!");
    m_pOffscreenBackBufferTexture1
       = new RenderTarget(rd, rtType, "BackBuffer1"s, renderWidthAA, renderHeightAA, renderFormat, true, previous->GetMSAASamples(), "Fatal Error: unable to create offscreen back buffer");
+   if (m_pOffscreenMSAABackBufferTexture)
+      m_pOffscreenMSAABackBufferTexture->m_dynamicResolution = true;
+   m_pOffscreenBackBufferTexture1->m_dynamicResolution = true;
    m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
    m_pBloomBufferTexture
       = new RenderTarget(rd, rtType, "BloomBuffer1"s, max(1, m_renderWidth / 4), max(1, m_renderHeight / 4), renderFormat, false, 1, "Fatal Error: unable to create bloom buffer!");
+   m_pBloomBufferTexture->m_dynamicResolution = true;
    m_pBloomTmpBufferTexture = m_pBloomBufferTexture->Duplicate("BloomBuffer2"s);
 
    // Lazily recreated at the new size when next used
@@ -246,6 +259,7 @@ RenderTarget* RenderView::GetPostProcessRenderTarget1()
       m_pPostProcessRenderTarget1 = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "PostProcess1"s, min(GetBackBufferTexture()->GetWidth(), m_renderWidth),
          min(GetBackBufferTexture()->GetHeight(), m_renderHeight), GetBackBufferTexture()->GetColorFormat() == RGBA10 ? colorFormat::RGBA10 : colorFormat::RGBA8, false, 1,
          "Fatal Error: unable to create stereo3D/post-processing AA/sharpen buffer!");
+      m_pPostProcessRenderTarget1->m_dynamicResolution = true;
    }
    return m_pPostProcessRenderTarget1;
 }
@@ -284,6 +298,7 @@ RenderTarget* RenderView::GetReflectionBufferTexture()
    {
       m_pReflectionBufferTexture = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "ReflectionBuffer"s, GetBackBufferTexture()->GetWidth(),
          GetBackBufferTexture()->GetHeight(), GetBackBufferTexture()->GetColorFormat(), false, 1, "Fatal Error: unable to create Reflection buffer!");
+      m_pReflectionBufferTexture->m_dynamicResolution = true;
    }
    return m_pReflectionBufferTexture;
 }
@@ -294,6 +309,7 @@ RenderTarget* RenderView::GetMotionBlurBufferTexture()
    {
       m_pMotionBlurBufferTexture = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "MotionBlurBuffer"s, GetBackBufferTexture()->GetWidth(),
          GetBackBufferTexture()->GetHeight(), GetBackBufferTexture()->GetColorFormat(), false, 1, "Fatal Error: unable to create MotionBlur buffer!");
+      m_pMotionBlurBufferTexture->m_dynamicResolution = true;
    }
    return m_pMotionBlurBufferTexture;
 }
@@ -306,6 +322,7 @@ RenderTarget* RenderView::GetAORenderTarget(int idx)
       m_pAORenderTarget1
          = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "AO1"s, GetBackBufferTexture()->GetWidth(), GetBackBufferTexture()->GetHeight(), colorFormat::GREY8,
             false, 1, "Unable to create AO buffers!\r\nPlease disable Ambient Occlusion.\r\nOr try to (un)set \"Alternative Depth Buffer processing\" in the video options!");
+      m_pAORenderTarget1->m_dynamicResolution = true;
       m_pAORenderTarget2 = m_pAORenderTarget1->Duplicate("AO2"s);
    }
    return idx == 0 ? m_pAORenderTarget1 : m_pAORenderTarget2;
@@ -957,6 +974,17 @@ void RenderView::RenderDynamics()
       r->RenderItem(renderable, m_noBackdrop);
    }
 
+#if defined(ENABLE_XR)
+   // The controllers the player holds, as the headset system shows them, in the real world (room space reference)
+   if (r->m_stereo3D == STEREO_VR && g_pplayer->m_vrDevice && !IsMirror() && (r->m_render_mask & Renderer::REFLECTION_PASS) == 0)
+   {
+      if (r->m_vrControllerModels == nullptr)
+         r->m_vrControllerModels = std::make_unique<VRControllerModels>(rd);
+      SetSpaceReference(PartGroupData::SpaceReference::SR_ROOM, false);
+      r->m_vrControllerModels->Render(r, *g_pplayer->m_vrDevice);
+   }
+#endif
+
    rd->m_basicShader->SetTextureNull(ShaderUniform::tex_base_transmission); // need to reset the bulb light texture, as its used as render target for bloom again
 
    for (size_t i = 0; i < r->m_table->m_vrenderprobe.size(); ++i)
@@ -979,16 +1007,23 @@ void RenderView::DrawBackground()
 #ifdef ENABLE_XR
       if (std::shared_ptr<MeshBuffer> mask = g_pplayer->m_vrDevice->GetVisibilityMask(); mask)
       {
-         static constexpr Vertex3Ds pos { 0.f, 0.f, 200000.0f }; // Very high depth bias to ensure being rendered before other opaque parts (which are sorted front to back)
+         // Drawn before every other opaque part: the sort key of a draw is depthBias - z, and keys 50000 apart are ordered highest first (the rule that
+         // keeps old tables' playfield first, see RenderPass::SortCommands), so the bias must be large and positive. A z of 200000 gave a key of -200000
+         // and the mask ended up after all the opaque parts (seen in the driver's trace on the Steam Frame), which defeated it as an early depth mask.
+         static constexpr Vertex3Ds pos { 0.f, 0.f, 0.f };
+         static constexpr float maskDepthBias = 200000.0f;
          rd->ResetRenderState();
          rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
          rd->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RS_FALSE);
          rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
          rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
-         rd->SetRenderState(RenderState::ZFUNC, RenderState::Z_ALWAYS);
+         // The mask shader writes the near plane depth (z = 0), which passes a less-or-equal test against the cleared depth buffer just as an
+         // always-pass test would, while keeping the hierarchical depth rejection (LRZ on Adreno) that drivers disable for the rest of the pass
+         // after a depth write with an always-pass test
+         rd->SetRenderState(RenderState::ZFUNC, RenderState::Z_LESSEQUAL);
          rd->m_basicShader->SetMatrix(ShaderUniform::matWorldViewProj, g_pplayer->m_vrDevice->GetVisibilityMaskProjs(), 2);
          rd->m_basicShader->SetTechnique(ShaderTechnique::vr_mask);
-         rd->DrawMesh(rd->m_basicShader, false, pos, 0, mask, RenderDevice::TRIANGLELIST, 0, mask->m_ib->m_count);
+         rd->DrawMesh(rd->m_basicShader, false, pos, maskDepthBias, mask, RenderDevice::TRIANGLELIST, 0, mask->m_ib->m_count);
          UpdateBasicShaderMatrix();
       }
 #endif
@@ -1131,9 +1166,10 @@ void RenderView::UpdateBloom(RenderTarget* renderedRT)
 
    const double w = static_cast<double>(renderedRT->GetWidth());
    const double h = static_cast<double>(renderedRT->GetHeight());
+   const float s = rd->GetRenderScale(); // Dynamic resolution: the rendered part of the source
    const Vertex3D_TexelOnly shiftedVerts[4]
-      = { { 1.0f, 1.0f, 0.0f, 1.0f + (float)(2.25 / w), 0.0f + (float)(2.25 / h) }, { -1.0f, 1.0f, 0.0f, 0.0f + (float)(2.25 / w), 0.0f + (float)(2.25 / h) },
-           { 1.0f, -1.0f, 0.0f, 1.0f + (float)(2.25 / w), 1.0f + (float)(2.25 / h) }, { -1.0f, -1.0f, 0.0f, 0.0f + (float)(2.25 / w), 1.0f + (float)(2.25 / h) } };
+      = { { 1.0f, 1.0f, 0.0f, s + (float)(2.25 / w), 0.0f + (float)(2.25 / h) }, { -1.0f, 1.0f, 0.0f, 0.0f + (float)(2.25 / w), 0.0f + (float)(2.25 / h) },
+           { 1.0f, -1.0f, 0.0f, s + (float)(2.25 / w), s + (float)(2.25 / h) }, { -1.0f, -1.0f, 0.0f, 0.0f + (float)(2.25 / w), s + (float)(2.25 / h) } };
    {
       rd->m_FBShader->SetTextureNull(ShaderUniform::tex_fb_filtered);
 
@@ -1347,8 +1383,9 @@ RenderTarget* RenderView::ApplyTonemapping(RenderTarget* renderedRT, RenderTarge
    Renderer* const r = m_renderer;
    RenderDevice* const rd = r->m_renderDevice;
    SetupTonemapping(renderedRT, tonemapRT, true);
-   Vertex3D_TexelOnly shiftedVerts[4] = { { 1.0f + m_screenOffset.x, 1.0f + m_screenOffset.y, 0.0f, 1.0f, 0.0f }, { -1.0f + m_screenOffset.x, 1.0f + m_screenOffset.y, 0.0f, 0.0f, 0.0f },
-      { 1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, 1.0f, 1.0f }, { -1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, 0.0f, 1.0f } };
+   const float s = rd->GetRenderScale(); // Dynamic resolution: the rendered part of the source
+   Vertex3D_TexelOnly shiftedVerts[4] = { { 1.0f + m_screenOffset.x, 1.0f + m_screenOffset.y, 0.0f, s, 0.0f }, { -1.0f + m_screenOffset.x, 1.0f + m_screenOffset.y, 0.0f, 0.0f, 0.0f },
+      { 1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, s, s }, { -1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, 0.0f, s } };
    if (tonemapRT == GetOutput() && !IsFullOutputArea())
       MapToOutputArea(shiftedVerts);
    rd->DrawTexturedQuad(rd->m_FBShader, shiftedVerts);
@@ -1803,15 +1840,25 @@ RenderTarget* RenderView::ApplyStereo(RenderTarget* renderedRT, RenderTarget* ou
       // - BGFX does not support blitting depth to the default back buffer
       if (g_pplayer->m_vrDevice->UseDepthBuffer())
       {
-         // Copy depth buffer to OpenXR swapchain's current depth target
+         // Copy depth buffer to OpenXR swapchain's current depth target (the rendered part only, with dynamic resolution)
+         const float s = rd->GetRenderScale();
+         const int sw = GetBackBufferTexture()->GetScaledWidth(s), sh = GetBackBufferTexture()->GetScaledHeight(s);
          rd->SetRenderTarget("OpenXR-Depth"s, outputBackBuffer, true, true);
          rd->AddRenderTargetDependency(GetBackBufferTexture(), true);
-         rd->BlitRenderTarget(GetBackBufferTexture(), outputBackBuffer, false, true);
+         rd->BlitRenderTarget(GetBackBufferTexture(), outputBackBuffer, false, true, 0, 0, sw, sh, 0, 0, sw, sh);
       }
 
       // Mirror the rendered eye(s) to the desktop display (unless it shows a dedicated render of the scene, see VRMirror view)
       RenderTarget* desktopRT = nullptr;
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      // The Steam Frame's desktop window is never seen (the mirror is off, see Renderer::ApplyTableSettings), and drawing into it, even a clear, makes BGFX
+      // acquire and present its swapchain each frame: it is BGFX's main swapchain, presented into gamescope's Xwayland at 60 Hz, and tying
+      // it to the 72 Hz headset frames made the render thread wait for it in most table starts (frame pacing stall, 12 ms per frame in
+      // bgfx::frame for up to minutes) and cost 2 ms per frame otherwise (docs/Performance on the Steam Frame.md, section 7.6)
+      if (false)
+#else
       if (rd->m_outputWnd.size() >= 2 && !r->NeedsDesktopSceneRender())
+#endif
       {
          assert(rd->m_outputWnd.size() >= 2); // For the time being, we rely on the fact that the First output is the VR Headset, and the second is the desktop display OS window
          desktopRT = rd->m_outputWnd[1]->GetBackBuffer();
@@ -1955,7 +2002,13 @@ void RenderView::Render()
    RenderDevice* const rd = r->m_renderDevice;
 
    if (GetOutput() == nullptr)
+   {
+      // In VR, the back buffer is the swapchain image the render thread acquired for the frame: none means that the frame was started while the
+      // render thread was not waiting for one (see RenderDevice::BGFXOpenXRRenderLoop), it is left empty instead of failing
+      if (r->m_stereo3D == STEREO_VR && m_kind == Kind::Player)
+         PLOGW << "VR frame prepared without swapchain image, skipped";
       return;
+   }
 
    // The mirror view stays registered when the desktop display switches back to an eye mirror (e.g. after an
    // in-place table switch): it then records nothing and the eye mirror blit in ApplyStereo owns the output
@@ -2027,12 +2080,24 @@ void RenderView::Render()
    // For VR, the headset pose is updated in SetSpaceReference (through VRDevice::UpdateVRPosition)
    SetSpaceReference(PartGroupData::SpaceReference::SR_PLAYFIELD, true);
 
+   // Dynamic resolution (headset only): the scene passes of this frame render into the top left part of the scene buffers at the scale the
+   // VR device asks for, from the GPU time of the previous frames (see VRDevice::UpdateDynamicResolution); the runtime is told which part
+   // of the swapchain image was drawn. The shaders which derive texture coordinates from clip space get the scale through their uniforms.
+   float renderScale = 1.f;
+#if defined(ENABLE_XR)
+   if (r->m_stereo3D == STEREO_VR && m_kind == Kind::Player && g_pplayer->m_vrDevice)
+      renderScale = g_pplayer->m_vrDevice->GetDynamicRenderScale();
+#endif
+   rd->BeginScaledRendering(renderScale);
+
    // Per view shader state (the shared shaders are used by all views, each setting them before its own passes)
+   // z of w_h_height and w of w_h_disableLighting: dynamic resolution scale of the frame, applied by the shaders to the texture coordinates they
+   // derive from clip space (refraction probe, ball reflection of the previous frame)
    rd->m_basicShader->SetVector(
-      ShaderUniform::w_h_height, (float)(1.0 / (double)GetMSAABackBufferTexture()->GetWidth()), (float)(1.0 / (double)GetMSAABackBufferTexture()->GetHeight()), 0.0f, 0.0f);
+      ShaderUniform::w_h_height, (float)(1.0 / (double)GetMSAABackBufferTexture()->GetWidth()), (float)(1.0 / (double)GetMSAABackBufferTexture()->GetHeight()), renderScale, 0.0f);
    const vec4 ballLighting = rd->m_ballShader->GetVector(ShaderUniform::w_h_disableLighting);
    rd->m_ballShader->SetVector(ShaderUniform::w_h_disableLighting, 1.5f / (float)GetPreviousBackBufferTexture()->GetWidth(), 1.5f / (float)GetPreviousBackBufferTexture()->GetHeight(),
-      ballLighting.z, ballLighting.w);
+      ballLighting.z, renderScale);
 
    // Update backdrop visibility and visibility mask
    // For the time being, the Render3DScene only support rendering one 3D view for main scene: dedicated 3D rendering for backglass, topper, apron are not yet implemented
@@ -2093,6 +2158,25 @@ void RenderView::Render()
    // Render live UI 3D content (editors overlays, selection, ...)
    if (m_renderOverlay3D)
       g_pplayer->m_liveUI->Render3D();
+
+#ifdef ENABLE_XR
+   // Foveation debug (VPX_FOVEATION_DEBUG): a ring around the full quality spot of each eye, drawn on top of the scene like the visibility mask
+   if (g_pplayer->IsVR() && m_kind == Kind::Player)
+      if (std::shared_ptr<MeshBuffer> marker = g_pplayer->m_vrDevice->GetGazeMarker(); marker)
+      {
+         static constexpr Vertex3Ds pos { 0.f, 0.f, 0.f };
+         rd->SetRenderTarget("Gaze marker"s, GetMSAABackBufferTexture(), true, true); // Its own pass, after everything
+         rd->ResetRenderState();
+         rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+         rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+         rd->m_basicShader->SetMatrix(ShaderUniform::matWorldViewProj, g_pplayer->m_vrDevice->GetVisibilityMaskProjs(), 2);
+         rd->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, 1.f, 0.f, 1.f, 1.f);
+         rd->m_basicShader->SetTechnique(ShaderTechnique::vr_mask);
+         rd->DrawMesh(rd->m_basicShader, false, pos, 0.f, marker, RenderDevice::TRIANGLELIST, 0, marker->m_ib->m_count);
+         UpdateBasicShaderMatrix();
+      }
+#endif
 
    // Keep latency low by proceeding input, ... (as next passes are not affected by the game logic)
    if (m_runGameLogic)
@@ -2240,4 +2324,14 @@ void RenderView::Render()
    // The last rendered render target must be the output back buffer
    assert(renderedRT == GetOutput());
    rd->m_singleLayerRendering = -1;
+
+   // Whatever follows in this frame (captures, overlays, the other views) renders at full size
+   rd->EndScaledRendering();
+   if (renderScale != 1.f)
+   {
+      const vec4 whh = rd->m_basicShader->GetVector(ShaderUniform::w_h_height);
+      rd->m_basicShader->SetVector(ShaderUniform::w_h_height, whh.x, whh.y, 1.f, whh.w);
+      const vec4 whd = rd->m_ballShader->GetVector(ShaderUniform::w_h_disableLighting);
+      rd->m_ballShader->SetVector(ShaderUniform::w_h_disableLighting, whd.x, whd.y, whd.z, 1.f);
+   }
 }
