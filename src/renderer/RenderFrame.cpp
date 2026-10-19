@@ -37,6 +37,7 @@ RenderPass* RenderFrame::AddPass(const string& name, RenderTarget* const rt)
       m_passPool.pop_back();
       pass->Reset(name, rt);
    }
+   pass->m_renderScale = m_rd->GetRenderScale();
    m_passes.push_back(pass);
    return pass;
 }
@@ -274,6 +275,9 @@ bool RenderFrame::Execute(const bool log)
          cmd();
    }
 
+   // Dynamic resolution: what this frame drew into the output back buffer, for the presentation (see RenderDevice::BeginScaledRendering)
+   m_rd->SetExecutedRenderScale(m_outputRenderScale);
+   m_outputRenderScale = 1.f;
    return rendered;
 }
 

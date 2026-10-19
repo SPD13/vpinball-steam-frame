@@ -260,6 +260,7 @@ void RenderProbe::RenderScreenSpaceTransparency()
       const int w = renderedPass->m_rt->GetWidth() / downscale, h = renderedPass->m_rt->GetHeight() / downscale;
       m_dynamicRT = new RenderTarget(
          m_renderer->m_renderDevice, renderedPass->m_rt->m_type, m_name, w, h, renderedPass->m_rt->GetColorFormat(), true, 1, "Failed to create refraction render target", nullptr);
+      m_dynamicRT->m_dynamicResolution = true; // Copy of the scene buffer, sampled at screen coordinates
    }
    m_renderer->m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_refraction);
    m_renderer->m_renderDevice->SetRenderTarget(m_name, m_dynamicRT, false);
@@ -319,6 +320,8 @@ RenderTarget* RenderProbe::GetRenderTarget(bool isStaticRT)
       rt = new RenderTarget(m_renderer->m_renderDevice, m_renderer->IsStereo() ? SurfaceType::RT_STEREO : SurfaceType::RT_DEFAULT,
          m_name + (isStaticRT ? ".Stat" : ".Dyn"), w / downscale, h / downscale, m_renderer->GetRenderFormat(), true, 1,
          "Failed to create plane reflection render target", nullptr);
+      if (!isStaticRT)
+         rt->m_dynamicResolution = true; // Rendered with the scene projection, sampled at screen coordinates
    }
    return rt;
 }
