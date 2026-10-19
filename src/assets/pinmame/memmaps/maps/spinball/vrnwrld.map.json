@@ -1,0 +1,61 @@
+{
+  "_notes": [
+    "Locally added for the leaderboards of VPX -- upstream pinmame-nvram-maps has no map for Spinball games.",
+    "Found by watching every byte of the RAM (0x8000-0x86FF) through an automated 2-player game (Doc/test-hooks/score-probe.py),",
+    "played by Verne's World (Spinball 1996) 1.0.1.",
+    "Scores: one digit per byte (low nibble), least significant digit first, 8 digits per player from 0x8400 (NVRAM). Player 1",
+    "rose from 70,002 to 449,020 and player 2 from 500 to 238,018 through the game; players 3 and 4 follow the stride, unchecked.",
+    "game_over 0x84AD: 0 during the game, 1 in attract mode (0x84D8 is its opposite). No player count found (0x8116 reads 1 then 3,",
+    "likely a mask of the players)."
+  ],
+  "_fileformat": 0.7,
+  "_metadata": {
+    "version": 1,
+    "license": "Open Data Commons Open Database License (ODbL) v1.0",
+    "platform": "spinball",
+    "roms": [
+      "vrnwrld"
+    ]
+  },
+  "game_state": {
+    "scores": [
+      {
+        "label": "Player 1",
+        "encoding": "bcd",
+        "endian": "little",
+        "nibble": "low",
+        "length": 8,
+        "start": "0x8400"
+      },
+      {
+        "label": "Player 2",
+        "encoding": "bcd",
+        "endian": "little",
+        "nibble": "low",
+        "length": 8,
+        "start": "0x8408"
+      },
+      {
+        "label": "Player 3",
+        "encoding": "bcd",
+        "endian": "little",
+        "nibble": "low",
+        "length": 8,
+        "start": "0x8410"
+      },
+      {
+        "label": "Player 4",
+        "encoding": "bcd",
+        "endian": "little",
+        "nibble": "low",
+        "length": 8,
+        "start": "0x8418"
+      }
+    ],
+    "game_over": {
+      "label": "Game Over",
+      "encoding": "bool",
+      "start": "0x84AD"
+    }
+  }
+}

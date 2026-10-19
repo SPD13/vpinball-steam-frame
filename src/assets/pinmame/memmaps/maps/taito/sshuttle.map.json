@@ -1,0 +1,67 @@
+{
+  "_notes": [
+    "Locally added for the leaderboards of VPX -- upstream pinmame-nvram-maps has no map for Taito do Brasil games.",
+    "Found by watching every byte of the RAM (0x3E00-0x40FF) through an automated game (Doc/test-hooks/score-probe.py), played by TopGun (2019),",
+    "a table running this ROM; checked against the displays of the backglass (067348, 051839, 051875).",
+    "Scores: the score display 0x4080-0x408B (PinMAME taito.c, dma_display), 3 bytes of packed BCD per player, least significant first,",
+    "blank digits 0xF. After a game, the attract mode borrows these bytes for text about 5 s after the game over flag is set.",
+    "player_count 0x408F (0 after a game); current_ball 0x408C; game_over bit 0 of 0x409F (set by PinMAME's NVRAM handler at boot too)."
+  ],
+  "_fileformat": 0.7,
+  "_metadata": {
+    "version": 1,
+    "license": "Open Data Commons Open Database License (ODbL) v1.0",
+    "platform": "taito",
+    "roms": [
+      "sshuttle"
+    ]
+  },
+  "game_state": {
+    "scores": [
+      {
+        "label": "Player 1",
+        "encoding": "bcd",
+        "endian": "little",
+        "length": 3,
+        "start": "0x4080"
+      },
+      {
+        "label": "Player 2",
+        "encoding": "bcd",
+        "endian": "little",
+        "length": 3,
+        "start": "0x4083"
+      },
+      {
+        "label": "Player 3",
+        "encoding": "bcd",
+        "endian": "little",
+        "length": 3,
+        "start": "0x4086"
+      },
+      {
+        "label": "Player 4",
+        "encoding": "bcd",
+        "endian": "little",
+        "length": 3,
+        "start": "0x4089"
+      }
+    ],
+    "player_count": {
+      "label": "Players",
+      "encoding": "int",
+      "start": "0x408F"
+    },
+    "current_ball": {
+      "label": "Ball",
+      "encoding": "int",
+      "start": "0x408C"
+    },
+    "game_over": {
+      "label": "Game Over",
+      "encoding": "bool",
+      "start": "0x409F",
+      "mask": "0x1"
+    }
+  }
+}

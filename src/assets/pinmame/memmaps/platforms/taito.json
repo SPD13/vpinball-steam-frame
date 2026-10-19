@@ -1,0 +1,23 @@
+{
+  "_notes": [
+    "Taito do Brasil games of 1981-85: 8080, 512 bytes of RAM at 0x3E00-0x3FFF and 256 bytes at 0x4000-0x40FF, these saved as NVRAM",
+    "(PinMAME taito.c, taito_writemem and NVRAM_HANDLER(taito)); the score display is the DMA area 0x4080-0x408F.",
+    "Added locally for the leaderboards of VPX."
+  ],
+  "cpu": "8080",
+  "endian": "little",
+  "memory_layout": [
+    {
+      "label": "RAM",
+      "address": "0x3E00",
+      "size": "0x200",
+      "type": "ram"
+    },
+    {
+      "label": "NVRAM",
+      "address": "0x4000",
+      "size": "0x100",
+      "type": "nvram"
+    }
+  ]
+}
