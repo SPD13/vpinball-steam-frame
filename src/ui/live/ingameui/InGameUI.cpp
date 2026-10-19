@@ -26,6 +26,11 @@
 #include "TableRulesPage.h"
 #include "VRSettingsPage.h"
 #include "SystemInfoPage.h"
+#include "MessagePage.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/ScoresPage.h"
+#include "steamframe/TablePickerPage.h"
+#endif
 #include "parts/ball.h"
 
 
@@ -55,6 +60,12 @@ InGameUI::InGameUI(LiveUI &liveUI)
    AddPage("table/rules"s, []() { return std::make_unique<TableRulesPage>(); });
    AddPage("plugins/homepage"s, []() { return std::make_unique<PluginHomePage>(); });
    AddPage("misc/systeminfo"s, []() { return std::make_unique<SystemInfoPage>(); });
+   AddPage("misc/message"s, []() { return std::make_unique<MessagePage>(); });
+#ifdef VPX_STEAM_FRAME
+   AddPage("tables/picker"s, []() { return std::make_unique<TablePickerPage>(); });
+   AddPage("profiles"s, []() { return std::make_unique<ProfilesPage>(); });
+   AddPage("scores/result"s, []() { return std::make_unique<ScoreResultPage>(); });
+#endif
 }
 
 void InGameUI::AddPage(const string &path, const std::function<std::unique_ptr<InGameUIPage>()>& pageFactory)
