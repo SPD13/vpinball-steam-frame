@@ -681,6 +681,8 @@ cp "${UCRT64_BIN}/libbz2-1.dll" ../../../third-party/runtime-libs/windows-mingw-
 cp "${UCRT64_BIN}/libgcc_s_seh-1.dll" ../../../third-party/runtime-libs/windows-mingw-x64
 cp "${UCRT64_BIN}/libstdc++-6.dll" ../../../third-party/runtime-libs/windows-mingw-x64
 
+source ../../../steamframe/deps/libzip.sh windows-mingw-x64 # Steam Frame Edition: web server
+source ../../../steamframe/deps/libarchive.sh windows-mingw-x64 # Steam Frame Edition: RAR and 7z archives
 
 cp libbacktrace/libbacktrace/.libs/libbacktrace.a ../../../third-party/build-libs/windows-mingw-x64
 cp libbacktrace/libbacktrace/backtrace.h ../../../third-party/include

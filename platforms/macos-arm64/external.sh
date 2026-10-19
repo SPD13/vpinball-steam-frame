@@ -590,3 +590,5 @@ cp libspatialaudio/libspatialaudio/build/libspatialaudio.a ../../../third-party/
 mkdir -p ../../../third-party/include/spatialaudio
 cp -r libspatialaudio/libspatialaudio/include/*.h libspatialaudio/libspatialaudio/include/{adm,dsp,hrtf,kiss_fft} ../../../third-party/include/spatialaudio
 cp libspatialaudio/libspatialaudio/build/include/SpatialaudioConfig.h ../../../third-party/include/spatialaudio
+
+source ../../../steamframe/deps/libzip.sh macos-arm64 # Steam Frame Edition: web server
