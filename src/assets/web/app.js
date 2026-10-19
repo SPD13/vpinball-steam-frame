@@ -91,6 +91,30 @@ const UIState = {
   currentContextMenu: null
 };
 
+// Upload progress, fixed at the bottom of the window: the status line is at the top of the page and scrolls away with a long file list
+const UploadBanner = {
+  hideTimeout: null,
+  // percent: 0..100, or null while the size of the work is not known yet (reading, analyzing)
+  update(text, percent) {
+    const banner = DOMCache.get('upload-banner');
+    if (!banner) return;
+    clearTimeout(this.hideTimeout);
+    banner.hidden = false;
+    banner.classList.remove('success', 'error');
+    DOMCache.get('upload-banner-text').textContent = text;
+    const fill = DOMCache.get('upload-banner-fill');
+    fill.classList.toggle('indeterminate', percent === null);
+    fill.style.width = percent === null ? '100%' : `${Math.max(0, Math.min(100, percent))}%`;
+  },
+  finish(text, success) {
+    const banner = DOMCache.get('upload-banner');
+    if (!banner) return;
+    this.update(text, 100);
+    banner.classList.add(success ? 'success' : 'error');
+    this.hideTimeout = setTimeout(() => { banner.hidden = true; }, success ? 3000 : 8000);
+  }
+};
+
 const UPLOAD_CHUNK_SIZE = 1024 * 512;
 
 const UploadQueue = {
@@ -122,6 +146,7 @@ const UploadQueue = {
   report(name) {
     const count = this.totalFiles > 1 ? ` (${this.completedFiles + 1}/${this.totalFiles})` : "";
     showStatusMessage("main-status", `Uploading ${name}... ${this.percent()}%${count}`, "info", true);
+    UploadBanner.update(`Uploading ${name}... ${this.percent()}%${count}`, this.percent());
   },
 
   async run() {
@@ -159,8 +184,10 @@ const UploadQueue = {
 
     if (failures > 0) {
       showStatusMessage("main-status", `✗ ${failures} of ${files} file${files === 1 ? "" : "s"} failed to upload`, "error", true);
+      UploadBanner.finish(`${failures} of ${files} file${files === 1 ? "" : "s"} failed to upload`, false);
     } else {
       showStatusMessage("main-status", `✓ Uploaded ${files} file${files === 1 ? "" : "s"}`, "success");
+      UploadBanner.finish(`${files} file${files === 1 ? "" : "s"} uploaded`, true);
     }
     navigateToPath(_directory);
   }
@@ -294,6 +321,13 @@ function fetchInfo() {
     .then(response => response.json())
     .then(data => {
       _infoData = data;
+      // RAR and 7z archives are only supported by some builds
+      if (Array.isArray(data.extractableExtensions))
+        FileTypeHelper.EXTRACTABLE_EXTENSIONS = new Set(data.extractableExtensions);
+      // The tables page manages the table library of the desktop application: hidden for the mobile launchers, which have their own
+      const pageNav = DOMCache.get('page-nav');
+      if (pageNav)
+        pageNav.hidden = data.tableLibrary === false;
       updateStatusDisplay();
       return data;
     })
@@ -418,6 +452,96 @@ function updateStatusDisplay() {
   }
 }
 
+// ROMs that tables could not find when they were played, recorded by the application. They are only shown in the PinMAME ROM folders
+// ('pinmame/roms', shared or along a table), where they must be uploaded, and the application removes them from the list when a file with
+// their name is uploaded.
+function isRomsFolder(directory) {
+  const parts = (directory || '').toLowerCase().split('/').filter(part => part);
+  return parts.length >= 2 && parts[parts.length - 2] === 'pinmame' && parts[parts.length - 1] === 'roms';
+}
+
+function renderMissingRoms(missingRoms) {
+  const list = DOMCache.get('missing-roms-list');
+  list.innerHTML = '';
+  // Grouped by table, so that the user knows which table each ROM is for
+  const tables = new Map();
+  for (const missing of missingRoms) {
+    const table = missing.table || 'Unknown table';
+    if (!tables.has(table))
+      tables.set(table, []);
+    tables.get(table).push(missing);
+  }
+  for (const [table, roms] of [...tables].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const group = document.createElement('li');
+    group.className = 'missing-roms-table';
+    const title = document.createElement('div');
+    title.className = 'missing-roms-table-name';
+    title.textContent = table;
+    group.appendChild(title);
+    const romList = document.createElement('ul');
+    for (const missing of roms) {
+      const item = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'missing-rom-name';
+      name.textContent = missing.rom;
+      item.appendChild(name);
+      let details = '';
+      if (missing.files && missing.files.length)
+        details += ` (missing: ${missing.files.join(', ')})`;
+      if (missing.folder)
+        details += `: upload to ${missing.folder}`;
+      item.appendChild(document.createTextNode(details));
+      romList.appendChild(item);
+    }
+    group.appendChild(romList);
+    list.appendChild(group);
+  }
+  DOMCache.get('missing-roms').hidden = missingRoms.length === 0 || !isRomsFolder(_directory);
+}
+
+// The shared ROM folder, in the tables folder: a tab of its own next to the tables folder, as it gets lost in a long list of tables
+const ROMS_FOLDER = 'pinmame/roms';
+
+function updateFolderSwitch(directory) {
+  const tables = DOMCache.get('folder-switch-tables');
+  const roms = DOMCache.get('folder-switch-roms');
+  if (!tables || !roms) // A page cached from before the switch existed
+    return;
+  const path = (directory || '').toLowerCase();
+  const inRoms = path === ROMS_FOLDER || path.startsWith(ROMS_FOLDER + '/');
+  tables.classList.toggle('current', !inRoms);
+  roms.classList.toggle('current', inRoms);
+  tables.setAttribute('aria-selected', String(!inRoms));
+  roms.setAttribute('aria-selected', String(inRoms));
+}
+
+function updateMissingRoms(directory) {
+  updateFolderSwitch(directory);
+  const help = DOMCache.get('roms-help');
+  if (help)
+    help.hidden = !isRomsFolder(directory);
+  const panel = DOMCache.get('missing-roms');
+  if (!panel) // A page cached from before the panel existed
+    return;
+  if (!isRomsFolder(directory)) {
+    panel.hidden = true;
+    return;
+  }
+  fetch('missing-roms')
+    .then((response) => response.json())
+    .then((data) => renderMissingRoms(data.missingRoms || []))
+    .catch((error) => console.error('Error fetching missing ROMs:', error));
+}
+
+function clearMissingRoms() {
+  if (!confirm('Clear the list of missing ROMs?'))
+    return;
+  fetch('missing-roms?clear=1', { method: 'POST' })
+    .then((response) => response.json())
+    .then((data) => renderMissingRoms(data.missingRoms || []))
+    .catch((error) => console.error('Error clearing missing ROMs:', error));
+}
+
 function fetchFiles(directory) {
   const filesPromise = fetch(`files?q=${encodeURIComponent(directory)}`)
     .then((response) => response.json());
@@ -430,6 +554,7 @@ function fetchFiles(directory) {
       sortFiles(_lastSort);
       updateSortIndicators();
       updateFilesList();
+      updateMissingRoms(directory);
 
       return data;
     })
@@ -665,7 +790,7 @@ const FileTypeHelper = {
     const iconMap = {
       txt: SVG_ICONS.file, log: SVG_ICONS.file, ini: SVG_ICONS.settings,
       json: SVG_ICONS.code, xml: SVG_ICONS.code, vbs: SVG_ICONS.code,
-      html: SVG_ICONS.web, zip: SVG_ICONS.zip, fnt: SVG_ICONS.font,
+      html: SVG_ICONS.web, zip: SVG_ICONS.zip, rar: SVG_ICONS.zip, '7z': SVG_ICONS.zip, fnt: SVG_ICONS.font,
       nix: SVG_ICONS.settings, pup: SVG_ICONS.settings,
       mp4: SVG_ICONS.video, webm: SVG_ICONS.video, ogg: SVG_ICONS.video,
       mp3: SVG_ICONS.audio, wav: SVG_ICONS.audio, m4a: SVG_ICONS.audio
@@ -817,6 +942,46 @@ function enqueueFiles(files, targetDir) {
     getFile: () => Promise.resolve(file)
   }));
   UploadQueue.enqueue(jobs);
+}
+
+// Upload a whole folder chosen with the browser's folder picker, for example a table with its backglass, ROMs and music.
+// Dropping a folder on the page does the same, but drag and drop is not available on every device.
+function uploadFolder() {
+  const folderInput = document.createElement("input");
+  folderInput.type = "file";
+  folderInput.webkitdirectory = true;
+  folderInput.multiple = true;
+
+  folderInput.addEventListener("change", async () => {
+    // Skip hidden files like .DS_Store
+    const files = Array.from(folderInput.files).filter(file => !(file.webkitRelativePath || file.name).split('/').some(part => part.startsWith('.')));
+    if (files.length === 0) {
+      return;
+    }
+
+    const targetDir = _directory;
+    showStatusMessage("main-status", `Found ${files.length} files. Starting upload...`, "info", true);
+    UploadBanner.update(`Found ${files.length} files. Starting upload...`, null);
+    const createdDirs = new Set();
+    const jobs = [];
+    for (const file of files) {
+      const relativePath = file.webkitRelativePath || file.name;
+      const parts = relativePath.split('/');
+      parts.pop();
+      let dirPath = targetDir || '';
+      for (const part of parts) {
+        dirPath = dirPath ? `${dirPath}/${part}` : part;
+        if (!createdDirs.has(dirPath)) {
+          createdDirs.add(dirPath);
+          await createDirectory(dirPath);
+        }
+      }
+      jobs.push({ path: targetDir ? `${targetDir}/${relativePath}` : relativePath, size: file.size, getFile: () => Promise.resolve(file) });
+    }
+    UploadQueue.enqueue(jobs);
+  });
+
+  folderInput.click();
 }
 
 function openFile(fileName, editing = false) {
@@ -1382,6 +1547,7 @@ async function uploadDataTransferToDir(dataTransfer, targetDir) {
   }
 
   showStatusMessage("main-status", "Preparing upload...", "info", true);
+  UploadBanner.update("Preparing upload...", null);
   const jobs = [];
   try {
     await collectUploadJobs(entries, targetDir, jobs);
@@ -2425,4 +2591,26 @@ function refreshTables() {
     });
 }
 
-document.addEventListener("DOMContentLoaded", startup);
+// Servers that require pairing answer 401 until the code displayed by the application has been entered
+async function ensurePaired() {
+  for (;;) {
+    const response = await fetch('/info');
+    if (response.status !== 401) {
+      return true;
+    }
+    const code = window.prompt('Enter the pairing code displayed by Visual Pinball');
+    if (code === null) {
+      document.body.textContent = 'Pairing is required to manage this device. Reload the page to try again.';
+      return false;
+    }
+    await fetch(`/pair?code=${encodeURIComponent(code.trim())}`, { method: 'POST' });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  ensurePaired().then(paired => {
+    if (paired) {
+      startup();
+    }
+  });
+});
