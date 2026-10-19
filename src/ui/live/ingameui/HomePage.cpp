@@ -11,6 +11,9 @@
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/InGameUI.h"
 #include "ui/live/ingameui/PluginSettingsPage.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#endif
 
 
 namespace VPX::InGameUI
@@ -25,6 +28,10 @@ void HomePage::BuildPage()
 {
    constexpr bool hasKeyboard = !(g_isAndroid || g_isIOS);
    constexpr bool isTouch = g_isAndroid || g_isIOS;
+
+#ifdef VPX_STEAM_FRAME
+   Launcher::AddHomePageLauncherItems(*this); // Quit, Tables
+#endif
 
    ////////////////////////////////////////////////////////////////////////////////////////////////
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Table options"s));
@@ -41,6 +48,10 @@ void HomePage::BuildPage()
       AddItem(std::make_unique<InGameUIItem>("Point Of View"s, ""s, "settings/pov"s));
 
    AddItem(std::make_unique<InGameUIItem>("Generic Options"s, ""s, "table/general"s));
+
+#ifdef VPX_STEAM_FRAME
+   Launcher::AddHomePageTableItems(*this); // Table image, VR room of the lobby
+#endif
 
    if (m_player->m_ptable->TournamentModePossible())
       AddItem(std::make_unique<InGameUIItem>("Generate Tournament File"s, ""s,

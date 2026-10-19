@@ -43,8 +43,17 @@ public:
    virtual bool IsDefaults() const;
    virtual bool IsModified() const;
    virtual bool IsFlipperNavNeeded() const { return false; }
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: what the OK button (A) or a click does on the selected item, which may differ from Right (tiles move in their grid,
+   // text fields of the new VR UI give the focus to its keyboard: src/steamframe/vrui/PageAdapter.cpp)
+   virtual void ActivateItem();
+   // Moves the selection in the grid of tiles it is in (src/steamframe/vrui/LegacyTiles.cpp)
+   bool StepTileGrid(int dx, int dy);
+   int m_tileColumns = 1; // Columns of the grid of tiles, as last drawn by the view
+#endif
 
    InGameUIItem* GetItem(const string& label) const;
+   const InGameUIItem* GetSelectedItem() const { return (m_selectedItem >= 0 && m_selectedItem < (int)m_items.size()) ? m_items[m_selectedItem].get() : nullptr; }
 
    virtual bool IsPlayerPauseAllowed() const { return true; }
 
@@ -101,6 +110,12 @@ private:
    bool m_resettingToDefaults = false;
    bool m_resettingToInitialValues = false;
 
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition (src/steamframe/vrui/): tiles of the classic UI, and the new VR UI which draws the page instead of Render when it is active
+   void RenderTile(int index, const ImVec2& pos, const ImVec2& size, const InGameUIItem*& hoveredItem);
+   friend class InGameUIPageView;
+   bool RenderVRUI(float elapsedS);
+#endif
    void RenderInputActionPopup();
    bool m_defineActionPopup = false;
    InGameUIItem* m_defineActionItem = nullptr;

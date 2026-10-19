@@ -473,6 +473,11 @@ void InGameUIPage::Render(float elapsedS)
    }
    const float animPos = m_openAnimPos;
 
+#if defined(VPX_STEAM_FRAME)
+   if (RenderVRUI(elapsedS)) // Steam Frame Edition: the new VR UI draws the page (src/steamframe/vrui/PageAdapter.cpp)
+      return;
+#endif
+
    ImGui::SetNextWindowBgAlpha(m_player->m_renderer->m_vrApplyColorKey ? 1.f : 0.666f);
    // Size is selected to match pinball instruction cards format which have an aspect ratio of roughly 6" x 3.25" (WPC, other varies), except for mobile where we favor size
    constexpr float pinballCardAR = 6.f / 3.5f;
@@ -710,6 +715,15 @@ void InGameUIPage::Render(float elapsedS)
    const float labelMaxWidth = stackFields ? itemEndScreenX - rowStartScreenX : maxLabelWidth;
    const float closeButtonWidth = ImGui::CalcTextSize(ICON_FK_TIMES, nullptr, true).x + style.FramePadding.x * 2.0f;
    const float circleTextWidth = ImGui::CalcTextSize(ICON_FK_CIRCLE, nullptr, true).x + style.FramePadding.x * 2.0f;
+#if defined(VPX_STEAM_FRAME)
+   // Consecutive tiles are laid out as a grid, which still is navigated as a list (Steam Frame Edition, see src/steamframe/vrui/LegacyTiles.cpp)
+   const int tileColumns = clamp(static_cast<int>((itemEndScreenX - rowStartScreenX) / (11.f * ImGui::GetFontSize())), 1, 6);
+   m_tileColumns = tileColumns;
+   const float tileWidth = (itemEndScreenX - rowStartScreenX) / static_cast<float>(tileColumns);
+   const ImVec2 tileSize(tileWidth, (tileWidth - 2.f * itemPadding.x) * 0.625f + ImGui::GetTextLineHeight() + 3.f * itemPadding.y);
+   int tileColumn = 0;
+   float tileRowScreenY = 0.f;
+#endif
    for (int i = 0; i < (int)m_items.size(); i++)
    {
       // A value change handled while rendering a previous item may have requested a page rebuild (e.g.
@@ -726,6 +740,18 @@ void InGameUIPage::Render(float elapsedS)
       if (item->m_type == Back || item->m_type == SaveChanges || item->m_type == ResetToDefaults || item->m_type == ResetToStoredValues)
          continue;
 
+#if defined(VPX_STEAM_FRAME)
+      if (item->m_tileImage && (item->m_type == Navigation || item->m_type == Runnable))
+      {
+         if (tileColumn == 0)
+            tileRowScreenY = ImGui::GetCursorScreenPos().y;
+         RenderTile(i, ImVec2(rowStartScreenX + static_cast<float>(tileColumn) * tileWidth, tileRowScreenY), tileSize, hoveredItem);
+         tileColumn = (tileColumn + 1) % tileColumns;
+         continue;
+      }
+      tileColumn = 0;
+#endif
+
       const bool isStackedItem = stackFields && item->IsAdjustable() && !(item->m_type == Property && item->m_property->m_type == VPX::Properties::PropertyDef::Type::Bool);
       const float rowHeight = isStackedItem ? ImGui::GetTextLineHeight() + itemPadding.y + ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
       const float itemHeight = rowHeight + itemPadding.y * 2.f;
@@ -736,9 +762,10 @@ void InGameUIPage::Render(float elapsedS)
       {
          hoveredItem = item.get();
          ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
-         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetCursorScreenPos() - itemPadding,
-            ImGui::GetCursorScreenPos() + ImVec2(itemPadding.x, itemPadding.y * 2.f) + ImVec2(itemEndScreenX - ImGui::GetCursorScreenPos().x + itemPadding.x, rowHeight),
-            IM_COL32(0, 255, 0, 50));
+         if (!item->m_customHighlight)
+            ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetCursorScreenPos() - itemPadding,
+               ImGui::GetCursorScreenPos() + ImVec2(itemPadding.x, itemPadding.y * 2.f) + ImVec2(itemEndScreenX - ImGui::GetCursorScreenPos().x + itemPadding.x, rowHeight),
+               IM_COL32(0, 255, 0, 50));
          if (m_player->m_liveUI->m_inGameUI.IsFlipperNav())
          {
             if (ImGui::GetCursorPosY() - ImGui::GetScrollY() < 0.f)
@@ -763,6 +790,10 @@ void InGameUIPage::Render(float elapsedS)
          {
          case InGameUIItem::LabelType::Info:
             ImGui::TextWrapped("%s", item->m_label.c_str());
+            ImGui::SetCursorScreenPos(ImGui::GetCursorScreenPos() + ImVec2(0.f, itemPadding.y));
+            break;
+         case InGameUIItem::LabelType::Error:
+            ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, 1.f), "%s", item->m_label.c_str());
             ImGui::SetCursorScreenPos(ImGui::GetCursorScreenPos() + ImVec2(0.f, itemPadding.y));
             break;
          case InGameUIItem::LabelType::Header:
@@ -1063,6 +1094,17 @@ void InGameUIPage::Render(float elapsedS)
    ImGui::BeginChild("Info", ImVec2(), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
    if (hoveredItem && std::ranges::find_if(m_items, [hoveredItem](auto& item) { return item.get() == hoveredItem; }) != m_items.end() && !hoveredItem->m_tooltip.empty())
       ImGui::TextWrapped("%s", hoveredItem->m_tooltip.c_str());
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: in the menu, the Start and Credit buttons are OK and Back (see InputManager::CreateInputActions)
+   else if (undoHovered)
+      ImGui::TextWrapped("Undo changes");
+   else if (defaultHovered)
+      ImGui::TextWrapped("Reset page to defaults\n[Input shortcut: Launch Button]");
+   else if (saveHovered)
+      ImGui::TextWrapped("Save changes");
+   else if (backHovered)
+      ImGui::TextWrapped("Get back\n[Input shortcut: Credit or Quit Button]");
+#else
    else if (undoHovered)
       ImGui::TextWrapped("Undo changes\n[Input shortcut: Credit Button]");
    else if (defaultHovered)
@@ -1071,6 +1113,7 @@ void InGameUIPage::Render(float elapsedS)
       ImGui::TextWrapped("Save changes\n[Input shortcut: Start Button]");
    else if (backHovered)
       ImGui::TextWrapped("Get back\n[Input shortcut: Quit Button]");
+#endif
    else if (!m_info.empty())
       ImGui::TextWrapped("%s", m_info.c_str());
    ImGui::EndChild();
