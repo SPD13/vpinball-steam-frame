@@ -1,6 +1,7 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "core/VPApp.h"
 #include "renderer/Renderer.h"
 
 #include "math/matrix.h"
@@ -408,6 +409,8 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
       if (init.type == bgfx::RendererType::Vulkan && !g_isAndroid)
          init.platformData.queue = g_pplayer->m_vrDevice->GetGraphicPlatformQueue();
       assert(init.platformData.context != nullptr);
+      // The context is a device of this backend (created by OpenXR), so BGFX must not fall back to another backend which would use it as its own device type and crash
+      init.fallback = false;
       // For the time being, we do not support having a desktop swapchain along the headset swapchain under Vulkan, so we run BGFX in headless mode
       // Note that this is needed for native VR (running directly on the headset)
       if (init.type == bgfx::RendererType::Vulkan && g_isAndroid)
@@ -493,6 +496,16 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 
    PLOGI << "BGFX initialized using " << bgfx::getRendererName(bgfx::getRendererType()) << " backend (" << init.swapChain.width << 'x' << init.swapChain.height << " "
          << bimg::getName(bimg::TextureFormat::Enum(init.swapChain.formatColor)) << ')';
+   #ifdef _DEBUG
+   rd->m_nameViews = true;
+   #endif
+   if (getenv("VPX_GPU_PROFILE") != nullptr)
+   {
+      // Per view GPU timings in bgfx::getStats(), logged by the VR device with the runtime's counters
+      bgfx::setDebug(BGFX_DEBUG_PROFILER);
+      rd->m_nameViews = true;
+      PLOGI << "BGFX profiler enabled (VPX_GPU_PROFILE)";
+   }
 
    const uint16_t vendorId = bgfx::getCaps()->vendorId;
    string vendorString;
@@ -548,6 +561,20 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 
    // Wait until main thread has released all native resources
    rd->m_rendererInitialized.acquire();
+
+   // Everything should be destroyed by now: report what is left. Not a problem as long as BGFX is shut down with each table, but these would
+   // add up from one table to the next if the device was kept. A frame is submitted first since BGFX frees the destroyed handles with frames.
+   bgfx::frame();
+   if (const bgfx::Stats* stats = bgfx::getStats(); stats->numTextures || stats->numFrameBuffers || stats->numVertexBuffers || stats->numIndexBuffers
+      || stats->numDynamicVertexBuffers || stats->numDynamicIndexBuffers || stats->numPrograms || stats->numShaders || stats->numUniforms)
+   {
+      PLOGW << "BGFX resources not released by the table: " << stats->numTextures << " textures, " << stats->numFrameBuffers << " frame buffers, "
+            << stats->numVertexBuffers << " vertex buffers, " << stats->numIndexBuffers << " index buffers, " << stats->numDynamicVertexBuffers << " dynamic vertex buffers, "
+            << stats->numDynamicIndexBuffers << " dynamic index buffers, " << stats->numPrograms << " programs, " << stats->numShaders << " shaders, "
+            << stats->numUniforms << " uniforms";
+   }
+   else
+      PLOGI << "BGFX resources all released by the table";
    bgfx::shutdown();
    rd->m_renderDeviceAlive = true;
 }
@@ -575,12 +602,37 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_WAIT);
             m_outputWnd[0]->SetBackBuffer(vrRenderTarget, false);
             m_frameRequested = true; // Open the render frame gate while a valid output target is bound
-            m_frameReadySem.acquire();
-            m_frameRequested = false;
+            while (true)
+            {
+               m_frameReadySem.acquire();
+               // A frame with nothing to present (texture uploads submitted by the loading threads, see SubmitRenderFrame) is processed now,
+               // keeping the swapchain image for the frame that draws into it. Giving the image back to the runtime as it is would display
+               // its stale content, a frame from a few frames back at the head pose of that time: the loading screen appeared doubled, moving
+               // and ghosting in the headset while a table loaded.
+               if (!m_framePending || !m_frameNoPresent)
+                  break;
+               {
+                  std::lock_guard lock(m_frameMutex);
+                  SubmitRenderFrame();
+               }
+               m_frameNoPresent = false;
+               m_framePending = false;
+               SubmitAndFlipFrame(false);
+            }
+            // The logic thread prepares a frame only while the swapchain image is the back buffer (m_frameRequested). When the wait ends
+            // without a frame (GameLoop releases the semaphore to flush, for example), close the gate before the back buffer is cleared,
+            // under the frame mutex so that a frame being prepared is finished and submitted first: clearing it first let the logic
+            // thread start a frame without back buffer (crash in Renderer::ApplyStereo when getting back to the lobby on the Steam Frame).
+            bool framePrepared;
+            {
+               std::lock_guard lock(m_frameMutex);
+               framePrepared = m_framePending;
+               m_frameRequested = false;
+            }
             m_outputWnd[0]->SetBackBuffer(nullptr, false); // as the vrRenderTarget is not valid outside of this scope
             g_pplayer->m_renderProfiler->ExitProfileSection();
             END_SPAN(tagSpanFF)
-            if (!m_framePending)
+            if (!framePrepared)
                return; // Nothing was submitted (spurious release or shutdown), wait for the next swapchain acquire
 
             // Submit frame to BGFX (which contains all rendering commands, for VR headset but also other windows like the desktop display,...)
@@ -645,8 +697,11 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
 
 void RenderDevice::RequestVRScreenshot(RenderTarget* vrRenderTarget, const std::filesystem::path& filename)
 {
-   const uint16_t width = static_cast<uint16_t>(vrRenderTarget->GetWidth());
-   const uint16_t height = static_cast<uint16_t>(vrRenderTarget->GetHeight());
+   // Dynamic resolution: the frame drew the top left part of the swapchain image only, the rest is left black (the capture views ask for
+   // full size frames, see VRDevice::GetDynamicRenderScale, this keeps the image framed if a smaller one was captured anyway)
+   const float executedScale = GetExecutedRenderScale();
+   const uint16_t width = static_cast<uint16_t>(vrRenderTarget->GetScaledWidth(executedScale));
+   const uint16_t height = static_cast<uint16_t>(vrRenderTarget->GetScaledHeight(executedScale));
    if (bgfx::isValid(m_vrScreenshotTex) && (m_vrScreenshotWidth != width || m_vrScreenshotHeight != height))
    {
       bgfx::destroy(m_vrScreenshotTex);
@@ -1295,7 +1350,8 @@ RenderDevice::RenderDevice(
    // It is configured as the playfield display: all of its settings come from the playfield window properties
    if (isVR && !g_isAndroid)
    {
-      VPX::Window* desktopWnd = new VPX::Window("Visual Pinball Desktop Display"s, g_settingsService.GetActiveSettings(), VPXWindowId::VPXWINDOW_Playfield);
+      // The window may be kept from the previous table (see VPApp::AcquireWindow)
+      VPX::Window* desktopWnd = g_app->AcquireWindow(VPXWindowId::VPXWINDOW_Playfield, "Visual Pinball Desktop Display"s, g_settingsService.GetActiveSettings());
 #ifdef ENABLE_BGFX
       // Color and depth format are likely wrong => use the ones selected by the OpenXR backend
       RenderTarget* backbuffer = new RenderTarget(this, SurfaceType::RT_DEFAULT, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, bgfx::TextureFormat::RGBA8, BGFX_INVALID_HANDLE,
@@ -1387,7 +1443,13 @@ RenderDevice::RenderDevice(
       init.swapChain.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
    }
    #elif BX_PLATFORM_OSX
-   init.swapChain.nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(swapchainWnd->GetCore(), "Metal"));
+   {
+      // A window kept from the previous table already has its renderer (a window can only have one)
+      SDL_Renderer* renderer = SDL_GetRenderer(swapchainWnd->GetCore());
+      if (renderer == nullptr)
+         renderer = SDL_CreateRenderer(swapchainWnd->GetCore(), "Metal");
+      init.swapChain.nwh = SDL_GetRenderMetalLayer(renderer);
+   }
    #elif BX_PLATFORM_IOS
    init.swapChain.nwh = VPinballLib::VPinballLib::Instance().GetMetalLayer();
    #elif BX_PLATFORM_ANDROID
@@ -2058,7 +2120,7 @@ RenderDevice::~RenderDevice()
    // thread is fully stopped (under BGFX, its swapchain rendering to this window is destroyed by
    // bgfx::shutdown in the render thread, so the native window must outlive it)
    if (g_pplayer->IsVR() && m_outputWnd.size() > 1)
-      delete m_outputWnd[1];
+      g_app->ReleaseWindow(m_outputWnd[1]); // Deleted, or kept for the next table
 
    assert(m_pendingSharedIndexBuffers.empty());
    assert(m_pendingSharedVertexBuffers.empty());
@@ -2851,6 +2913,14 @@ void RenderDevice::DrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* verti
 void RenderDevice::DrawFullscreenTexturedQuad(Shader* shader)
 {
    assert(shader == m_FBShader || shader == m_stereoShader); // FrameBuffer/Stereo shaders are the only ones using Position/Texture vertex format
+   if (m_renderScale < 1.f)
+   {
+      // Dynamic resolution: the source was rendered into its top left part at the scale of the frame (see BeginScaledRendering)
+      const float s = m_renderScale;
+      const Vertex3D_TexelOnly verts[4] = { { 1.0f, 1.0f, 0.0f, s, 0.0f }, { -1.0f, 1.0f, 0.0f, 0.0f, 0.0f }, { 1.0f, -1.0f, 0.0f, s, s }, { -1.0f, -1.0f, 0.0f, 0.0f, s } };
+      DrawTexturedQuad(shader, verts);
+      return;
+   }
    static constexpr Vertex3Ds pos { 0.f, 0.f, 0.f };
    DrawMesh(shader, false, pos, 0.f, m_quadMeshBuffer, TRIANGLESTRIP, 0, 4);
 }
