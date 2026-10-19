@@ -12,6 +12,10 @@
 #include "physics/cabinet/NudgeHandler.h"
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/Launcher.h"
+#include "steamframe/vrui/UpdateCheck.h"
+#endif
 
 #include "ScanCodes.h"
 
@@ -479,10 +483,18 @@ void InputManager::ProcessInput()
    if (m_hasPendingLayoutApply)
    {
       m_hasPendingLayoutApply = false;
+      const bool isVR = m_player->m_renderer && m_player->m_renderer->m_stereo3D == STEREO_VR;
       for (auto& device : m_inputDevices)
       {
          if (!device.m_hasPendingLayoutApply)
             continue;
+         if (isVR && device.m_isVRVirtualGamepad)
+         {
+            // The VR controllers are also exposed as a virtual gamepad (Steam Input on Steam Frame), don't propose a layout for it as they are already mapped through OpenXR
+            PLOGI << "Skipping layout proposal for '" << device.m_name << "' as it is a virtual gamepad emulated from the VR controllers";
+            device.m_hasPendingLayoutApply = false;
+            continue;
+         }
          const auto noAutoLayoutId = Settings::GetRegistry().GetPropertyId("Input"s, "Device." + device.m_settingsId + ".NoAutoLayout").value();
          if (m_appSettings.GetBool(noAutoLayoutId))
             device.m_hasPendingLayoutApply = false;
@@ -693,10 +705,18 @@ void InputManager::CreateInputActions()
                   // Somewhat hacky direct UI action mapping (inherited from legacy POV adjustment mode, could benefit from some additional cleanups)
                   else if (action.GetActionId() == m_launchBallActionId)
                      m_player->m_liveUI->m_inGameUI.OnUIResetToDefaults();
+#if defined(VPX_STEAM_FRAME)
+                  // Steam Frame Edition: OK and Back, as on a gamepad (A and B of a VR controller), Save and Undo being buttons of the page
+                  else if (action.GetActionId() == m_addCreditActionId[0])
+                     m_player->m_liveUI->m_inGameUI.OnUINavigateBack();
+                  else if (action.GetActionId() == m_startActionId)
+                     m_player->m_liveUI->m_inGameUI.OnUIConfirm();
+#else
                   else if (action.GetActionId() == m_addCreditActionId[0])
                      m_player->m_liveUI->m_inGameUI.OnUICancelChanges();
                   else if (action.GetActionId() == m_startActionId)
                      m_player->m_liveUI->m_inGameUI.OnUISaveChanges();
+#endif
                }
             }
             else
@@ -806,8 +826,12 @@ void InputManager::CreateInputActions()
                CComVariant rgvar[1] = { CComVariant(0x10000 | static_cast<int>(action.GetActionId())) };
                DISPPARAMS dispparams = { rgvar, nullptr, 1, 0 };
                m_player->m_ptable->FireDispID(isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, &dispparams);
+#if defined(VPX_STEAM_FRAME)
+               m_player->SetCloseState(m_player->HasStackedTableSession() ? Player::CS_STOP_PLAY : g_launcher->m_launcherMode ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : Player::CS_CLOSE_APP); // Back to the lobby in launcher mode
+#else
                // A play test stacked over an editor session gets back to the editor, like the Win32 editor does
                m_player->SetCloseState(m_player->HasStackedTableSession() ? Player::CS_STOP_PLAY : g_isMobile ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : g_isStandalone ? Player::CS_CLOSE_APP : Player::CS_STOP_PLAY);
+#endif
             }
             else if (isPressed && m_player->m_liveUI->IsInGameUIOpened())
             {
@@ -958,6 +982,11 @@ void InputManager::CreateInputActions()
          { // Toggle stereo on/off
             m_player->m_renderer->m_stereo3Denabled = !m_player->m_renderer->m_stereo3Denabled;
          }
+#if defined(VPX_STEAM_FRAME_HEADSET)
+         else if (m_player->m_renderer->m_stereo3D == STEREO_VR)
+         { // The Steam Frame has no desktop display to switch (forced off, see Renderer::Renderer)
+         }
+#endif
          else if (m_player->m_renderer->m_stereo3D == STEREO_VR)
          { // Toggle desktop display mode
             m_player->m_renderer->m_vrDesktop = static_cast<VRDesktopMode>((static_cast<int>(m_player->m_renderer->m_vrDesktop) + 1) % (static_cast<int>(VRDesktopMode::Both) + 1));
@@ -1057,6 +1086,11 @@ void InputManager::Unregister(ButtonMapping* mapping)
 // Allow plugins to react to action event, eventually disabling local processing
 bool InputManager::OnInputActionStateChanged(InputAction* action)
 {
+#ifdef VPX_STEAM_FRAME
+   // Steam Frame Edition: while an update is installed, the menu only shows its progress, and no button may close it, quit or start a table
+   if (VPX::VRUI::UpdateCheck::IsInstalling())
+      return false;
+#endif
    VPXActionEvent event { static_cast<VPXAction>(action->GetActionId()), action->IsPressed(), 1 };
    m_player->m_pluginAPI.BroadcastVPXMsg(m_onActionEventMsgId, &event);
    return event.enableVPXProcessing != 0;

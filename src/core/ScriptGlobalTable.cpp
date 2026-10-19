@@ -6,6 +6,9 @@
 #include "audio/AudioPlayer.h"
 #include "core/ScriptInterpreter.h"
 #include "core/VPApp.h"
+#ifdef VPX_STEAM_FRAME
+#include "steamframe/ScoreTracker.h"
+#endif
 #include "core/vpversion.h"
 #include "core/VPXPluginAPIImpl.h"
 #include "parts/ball.h"
@@ -604,6 +607,11 @@ STDMETHODIMP ScriptGlobalTable::SaveValue(BSTR TableName, BSTR ValueName, VARIAN
    file.write(ini);
 
    PLOGD << "TableName=" << szTableName << ", ValueName=" << szValueName << ", Value=" << szValue;
+#ifdef VPX_STEAM_FRAME
+   // Many tables save their high scores at the end of the games: a hint for the leaderboards
+   if (g_pplayer && g_pplayer->m_scoreTracker)
+      g_pplayer->m_scoreTracker->OnSaveValue(szValueName, szValue);
+#endif
    return S_OK;
 }
 
