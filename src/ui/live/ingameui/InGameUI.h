@@ -43,6 +43,9 @@ public:
    InGameUIPage* GetActivePage() const { return m_activePages.empty() ? nullptr : m_activePages.back().get(); }
 
 private:
+#if defined(VPX_STEAM_FRAME)
+   friend class VRUINavigation; // Steam Frame Edition: the new VR menu goes to a screen with a fresh navigation history (src/steamframe/vrui/Shell.cpp)
+#endif
    void HandlePageInput();
    void HandleLegacyFlyOver();
 
