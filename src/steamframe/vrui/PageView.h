@@ -14,6 +14,11 @@ class InGameUIPageView final
 public:
    static const string& GetTitle(const InGameUIPage& page);
    static const string& GetInfo(const InGameUIPage& page);
+   static InGameUIPage::SaveMode GetSaveMode(const InGameUIPage& page);
+   static const vector<std::unique_ptr<InGameUIItem>>& GetItems(const InGameUIPage& page);
+   static int GetSelectedIndex(const InGameUIPage& page);
+   static void SetSelectedIndex(InGameUIPage& page, int index);
+   static bool NeedsRebuild(const InGameUIPage& page);
 
    // Header actions of upstream's view (Defaults, Undo, Save, Back) are items of the page, at the end of its list, so that button navigation
    // reaches them: they are added again each frame, in the same order and on the same conditions as InGameUIPage::Render
@@ -22,8 +27,9 @@ public:
    static bool IsCoreItemSelected(const InGameUIPage& page, InGameUIItem::Type type);
 
    // Items, in the current window (the content region of the shell). Returns the item under the pointer, if any. The item selected with
-   // button navigation is highlighted unless 'showSelection' is false (the rail of the menu has the focus).
-   static const InGameUIItem* RenderContent(InGameUIPage& page, bool showSelection);
+   // button navigation is highlighted unless 'showSelection' is false (the rail of the menu has the focus). 'filter' (index in the page)
+   // only shows some of the items (sections of a composed screen).
+   static const InGameUIItem* RenderContent(InGameUIPage& page, bool showSelection, const std::function<bool(int)>* filter = nullptr);
 
    // Defaults, Undo and Save buttons of the footer, right aligned to 'right' ('left' gets where they start). Returns the tooltip of the
    // hovered one, if any.

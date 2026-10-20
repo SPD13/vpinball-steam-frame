@@ -36,6 +36,7 @@ namespace
 {
    bool g_embedding = false; // The shell is drawing the content of a screen of the main menu
    bool g_showSelection = true;
+   const std::function<bool(int)>* g_sectionFilter = nullptr; // Section of a composed screen being drawn
    ImVec2 g_menuPos, g_menuSize;
    const InGameUIItem* g_embeddedHovered = nullptr;
    int g_lastShownFrame = -10;
@@ -52,6 +53,14 @@ namespace
 
 bool IsMainMenu(const InGameUIPage& page) { return dynamic_cast<const MainMenuPage*>(&page) != nullptr; }
 
+void RenderSection(InGameUIPage& page, const std::function<bool(int)>& filter, float elapsedS)
+{
+   assert(g_embedding && g_sectionFilter == nullptr);
+   g_sectionFilter = &filter;
+   page.Render(elapsedS);
+   g_sectionFilter = nullptr;
+}
+
 bool WasShownLastFrame() { return ImGui::GetCurrentContext() != nullptr && ImGui::GetFrameCount() - g_lastShownFrame <= 1; }
 
 void NavigateWithFreshHistory(VPX::InGameUI::InGameUI& ui, const string& path)
@@ -65,6 +74,14 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    // Content of a screen of the main menu: only its items, in the content region of the menu
    if (g_embedding)
    {
+      if (g_sectionFilter)
+      {
+         // Its actions are the ones of the composed screen
+         if (const InGameUIItem* hovered = InGameUIPageView::RenderContent(page, g_showSelection, g_sectionFilter); hovered)
+            g_embeddedHovered = hovered;
+         InGameUIPageView::SetWindowOutputs(page, g_menuPos, g_menuSize, ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
+         return true;
+      }
       InGameUIPageView::SyncCoreItems(page, false);
       g_embeddedHovered = InGameUIPageView::RenderContent(page, g_showSelection);
       // The pages which draw more windows (plots, previews) place them around the menu, as around their window in upstream's view
