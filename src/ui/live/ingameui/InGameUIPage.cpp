@@ -416,6 +416,11 @@ void InGameUIPage::Render(float elapsedS)
    }
    const float animPos = m_openAnimPos;
 
+#if defined(VPX_STEAM_FRAME)
+   if (RenderVRUI(elapsedS)) // Steam Frame Edition: the new VR UI draws the page (src/steamframe/vrui/PageAdapter.cpp)
+      return;
+#endif
+
    ImGui::SetNextWindowBgAlpha(m_player->m_renderer->m_vrApplyColorKey ? 1.f : 0.666f);
    // Size is selected to match pinball instruction cards format which have an aspect ratio of roughly 6" x 3.25" (WPC, other varies), except for mobile where we favor size
    constexpr float pinballCardAR = 6.f / 3.5f;
@@ -653,12 +658,14 @@ void InGameUIPage::Render(float elapsedS)
    const float labelMaxWidth = stackFields ? itemEndScreenX - rowStartScreenX : maxLabelWidth;
    const float closeButtonWidth = ImGui::CalcTextSize(ICON_FK_TIMES, nullptr, true).x + style.FramePadding.x * 2.0f;
    const float circleTextWidth = ImGui::CalcTextSize(ICON_FK_CIRCLE, nullptr, true).x + style.FramePadding.x * 2.0f;
-   // Consecutive tiles are laid out as a grid, which still is navigated as a list
+#if defined(VPX_STEAM_FRAME)
+   // Consecutive tiles are laid out as a grid, which still is navigated as a list (Steam Frame Edition, see src/steamframe/vrui/LegacyTiles.cpp)
    const int tileColumns = clamp(static_cast<int>((itemEndScreenX - rowStartScreenX) / (11.f * ImGui::GetFontSize())), 1, 6);
    const float tileWidth = (itemEndScreenX - rowStartScreenX) / static_cast<float>(tileColumns);
    const ImVec2 tileSize(tileWidth, (tileWidth - 2.f * itemPadding.x) * 0.625f + ImGui::GetTextLineHeight() + 3.f * itemPadding.y);
    int tileColumn = 0;
    float tileRowScreenY = 0.f;
+#endif
    for (int i = 0; i < (int)m_items.size(); i++)
    {
       // A value change handled while rendering a previous item may have requested a page rebuild (e.g.
@@ -675,6 +682,7 @@ void InGameUIPage::Render(float elapsedS)
       if (item->m_type == Back || item->m_type == SaveChanges || item->m_type == ResetToDefaults || item->m_type == ResetToStoredValues)
          continue;
 
+#if defined(VPX_STEAM_FRAME)
       if (item->m_tileImage && (item->m_type == Navigation || item->m_type == Runnable))
       {
          if (tileColumn == 0)
@@ -684,6 +692,7 @@ void InGameUIPage::Render(float elapsedS)
          continue;
       }
       tileColumn = 0;
+#endif
 
       const bool isStackedItem = stackFields && item->IsAdjustable() && !(item->m_type == Property && item->m_property->m_type == VPX::Properties::PropertyDef::Type::Bool);
       const float rowHeight = isStackedItem ? ImGui::GetTextLineHeight() + itemPadding.y + ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
@@ -1081,100 +1090,6 @@ void InGameUIPage::BrowseForPath(const InGameUIItem& item)
       const string location = PathToUTF8(PathFromString(item.GetStringValue())); // SDL expects UTF-8
       SDL_ShowOpenFolderDialog(callback, result, m_player->m_playfieldWnd->GetCore(), location.empty() ? nullptr : location.c_str(), false);
    }
-}
-
-void InGameUIPage::RenderTile(int index, const ImVec2& pos, const ImVec2& size, const InGameUIItem*& hoveredItem)
-{
-   const InGameUIItem* const item = m_items[index].get();
-   const ImVec2 padding = ImGui::GetStyle().ItemSpacing;
-   const bool isFlipperNav = m_player->m_liveUI->m_inGameUI.IsFlipperNav();
-
-   // Reserve the layout space (this also moves the cursor below the tile, ready for a new row or for the items following the grid)
-   ImGui::SetCursorScreenPos(pos);
-   ImGui::Dummy(size);
-   const ImVec2 nextRowPos = ImGui::GetCursorScreenPos();
-
-   const bool isMouseOver = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(pos, pos + size);
-   const bool hovered = isFlipperNav ? (index == m_selectedItem) : isMouseOver;
-   if (hovered || isMouseOver)
-      hoveredItem = item;
-   if (hovered && isFlipperNav)
-   {
-      const float localY = pos.y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
-      if (localY < ImGui::GetScrollY())
-         ImGui::SetScrollY(localY);
-      else if (localY + size.y > ImGui::GetScrollY() + ImGui::GetWindowHeight())
-         ImGui::SetScrollY(localY + size.y - ImGui::GetWindowHeight());
-   }
-
-   if (ImGui::IsRectVisible(pos, pos + size))
-   {
-      ImDrawList* const drawList = ImGui::GetWindowDrawList();
-      if (hovered)
-         drawList->AddRectFilled(pos, pos + size - ImVec2(padding.x * 0.5f, padding.y * 0.5f), IM_COL32(0, 255, 0, 50));
-
-      // Image, fitted in the tile while keeping its aspect ratio, or a placeholder
-      const ImVec2 imagePos = pos + padding;
-      const ImVec2 imageSize(size.x - 2.f * padding.x, size.y - ImGui::GetTextLineHeight() - 3.f * padding.y);
-      const ImTextureID image = item->m_tileImage();
-      if (image && image->GetWidth() > 0 && image->GetHeight() > 0)
-      {
-         const float scale = min(imageSize.x / static_cast<float>(image->GetWidth()), imageSize.y / static_cast<float>(image->GetHeight()));
-         const ImVec2 fitSize(scale * static_cast<float>(image->GetWidth()), scale * static_cast<float>(image->GetHeight()));
-         ImGui::SetCursorScreenPos(imagePos + (imageSize - fitSize) * 0.5f);
-         ImGui::Image(image, fitSize);
-      }
-      else
-      {
-         drawList->AddRectFilled(imagePos, imagePos + imageSize, IM_COL32(255, 255, 255, 24));
-         drawList->AddRect(imagePos, imagePos + imageSize, IM_COL32(255, 255, 255, 64));
-         if (item->m_tileLoading && item->m_tileLoading())
-         {
-            // Spinner: an arc of 3/4 of a turn, turning about once per second
-            const ImVec2 center = imagePos + imageSize * 0.5f;
-            const float radius = 0.12f * min(imageSize.x, imageSize.y);
-            const float start = static_cast<float>(ImGui::GetTime()) * 2.f * static_cast<float>(M_PI);
-            drawList->PathArcTo(center, radius, start, start + 1.5f * static_cast<float>(M_PI), 32);
-            drawList->PathStroke(IM_COL32(255, 255, 255, 160), ImDrawFlags_None, max(2.f, 0.2f * radius));
-         }
-      }
-
-      if (hovered)
-         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
-      ImGui::SetCursorScreenPos(ImVec2(imagePos.x, imagePos.y + imageSize.y + padding.y));
-      TextWithEllipsis(item->m_label, imageSize.x);
-      if (hovered)
-         ImGui::PopStyleColor();
-   }
-
-   // Toggle icon, in the top right corner of the image
-   bool isToggleHovered = false;
-   if (item->m_tileToggleState && item->m_tileToggleAction)
-   {
-      const bool isOn = item->m_tileToggleState();
-      const string& icon = isOn ? item->m_tileToggleIconOn : item->m_tileToggleIconOff;
-      const ImVec2 iconSize = ImGui::CalcTextSize(icon.c_str());
-      const ImVec2 toggleMax(pos.x + size.x - padding.x, pos.y + padding.y + iconSize.y + padding.y);
-      const ImVec2 toggleMin(toggleMax.x - iconSize.x - 2.f * padding.x, pos.y + padding.y);
-      isToggleHovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(toggleMin, toggleMax);
-      if (ImGui::IsRectVisible(toggleMin, toggleMax))
-      {
-         ImDrawList* const drawList = ImGui::GetWindowDrawList();
-         drawList->AddRectFilled(toggleMin, toggleMax, IM_COL32(0, 0, 0, isToggleHovered ? 200 : 120), 0.25f * iconSize.y);
-         drawList->AddText(ImVec2(toggleMin.x + padding.x, toggleMin.y + 0.5f * padding.y), isOn ? IM_COL32(255, 200, 0, 255) : IM_COL32(255, 255, 255, isToggleHovered ? 255 : 180), icon.c_str());
-      }
-   }
-
-   if (isMouseOver && !m_isDraggingScroll && ImGui::IsMouseReleased(ImGuiMouseButton_::ImGuiMouseButton_Left))
-   {
-      m_selectedItem = index;
-      if (isToggleHovered)
-         item->m_tileToggleAction();
-      else
-         AdjustItem(1.f, true);
-   }
-
-   ImGui::SetCursorScreenPos(nextRowPos);
 }
 
 void InGameUIPage::RenderInputActionPopup()

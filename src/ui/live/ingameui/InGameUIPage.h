@@ -101,7 +101,12 @@ private:
    bool m_resettingToDefaults = false;
    bool m_resettingToInitialValues = false;
 
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition (src/steamframe/vrui/): tiles of the classic UI, and the new VR UI which draws the page instead of Render when it is active
    void RenderTile(int index, const ImVec2& pos, const ImVec2& size, const InGameUIItem*& hoveredItem);
+   friend class InGameUIPageView;
+   bool RenderVRUI(float elapsedS);
+#endif
    void RenderInputActionPopup();
    bool m_defineActionPopup = false;
    InGameUIItem* m_defineActionItem = nullptr;

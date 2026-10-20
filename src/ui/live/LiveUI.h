@@ -136,7 +136,10 @@ private:
    int m_rotate = 0;
    float m_uiScale = 0.f;
 
-   // VR controller used as a pointer
+   // VR controller used as a pointer (Steam Frame Edition, src/steamframe/vrui/Pointer.cpp)
+   void UpdateVRPointer();
+   void RenderVRPointerDot();
+   void RenderVRPointerRay(bool onVRPanel, int depthSort);
    bool m_vrPointerVisible = false;
    bool m_vrPointerPressed = false;
    ImVec2 m_vrPointerPos;
