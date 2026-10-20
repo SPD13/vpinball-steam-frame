@@ -18,6 +18,7 @@
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
 #include "steamframe/vrui/Keyboard.h"
+#include "steamframe/vrui/VRUI.h"
 #include "steamframe/vrui/Theme.h"
 #include "steamframe/vrui/Widgets.h"
 
@@ -232,6 +233,21 @@ void TablePickerPage::StepTab(int direction)
    SetTab(static_cast<int>(NEW_VIEW_TABS[(index + direction + nTabs) % nTabs]));
 }
 
+// Previous/next initial, going through 'All'
+void TablePickerPage::StepFilter(int direction)
+{
+   string initials(1, '\0');
+   for (const LibraryTable& table : g_launcher->GetTableLibrary().GetTables())
+      if (initials.find(GetInitial(table)) == string::npos)
+         initials += GetInitial(table);
+   std::sort(initials.begin() + 1, initials.end());
+   const size_t pos = initials.find(s_filterInitial);
+   const size_t count = initials.size();
+   s_filterInitial = initials[pos == string::npos ? 0 : (pos + (direction < 0 ? count - 1 : 1)) % count];
+   s_page = 0;
+   RequestRebuild();
+}
+
 void TablePickerPage::SetPage(int page, const string& pagerItem)
 {
    s_page = clamp(page, 0, max(m_pageCount - 1, 0));
@@ -280,17 +296,7 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
       }
       if (item->m_label.starts_with(FILTER_LABEL))
       {
-         // Previous/next initial, going through 'All'
-         string initials(1, '\0');
-         for (const LibraryTable& table : g_launcher->GetTableLibrary().GetTables())
-            if (initials.find(GetInitial(table)) == string::npos)
-               initials += GetInitial(table);
-         std::sort(initials.begin() + 1, initials.end());
-         const size_t pos = initials.find(s_filterInitial);
-         const size_t count = initials.size();
-         s_filterInitial = initials[pos == string::npos ? 0 : (pos + (direction < 0.f ? count - 1 : 1)) % count];
-         s_page = 0;
-         RequestRebuild();
+         StepFilter(direction < 0.f ? -1 : 1);
          return;
       }
    }
@@ -547,8 +553,32 @@ void TablePickerPage::BuildPage()
                                     : std::format("{} table{}", tableCount, tableCount == 1 ? "" : "s")));
 
    if (hasLetterFilter)
-      AddItem(std::make_unique<InGameUIItem>(FILTER_LABEL + (s_filterInitial == 0 ? "All tables"s : s_filterInitial == '#' ? "0-9 and others"s : string(1, s_filterInitial)),
-         "Left/Right: only show the tables starting with the previous/next letter"s, []() { /* Handled by AdjustItem as it depends on the direction */ }));
+   {
+      const string filter = s_filterInitial == 0 ? "All tables"s : s_filterInitial == '#' ? "0-9 and others"s : string(1, s_filterInitial);
+      if (m_newView)
+      {
+         // A row with previous/next arrows: left/right change the letter (an action row would get back to the rail of the menu)
+         AddItem(std::make_unique<InGameUIItem>(FILTER_LABEL + filter, "Left/Right: only show the tables starting with the previous/next letter"s,
+            [this, filter](int, const InGameUIItem*)
+            {
+               namespace Theme = VPX::VRUI::Theme;
+               const float height = ImGui::GetFrameHeight();
+               const ImVec2 pos = ImGui::GetCursorScreenPos();
+               const float width = ImGui::GetContentRegionAvail().x;
+               const InGameUIItem* const selected = GetSelectedItem();
+               const bool hasFocus = m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selected != nullptr && selected->m_label.starts_with(FILTER_LABEL);
+               ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x, pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f), Theme::kText, "Starting with");
+               ImGui::SetCursorScreenPos(ImVec2(pos.x + width * 0.42f, pos.y));
+               if (const int direction = VPX::VRUI::Widgets::Stepper("##filter", filter.c_str(), ImVec2(width * 0.58f - Theme::Px(2.2f), height), hasFocus); direction != 0)
+                  StepFilter(direction);
+               ImGui::SetCursorScreenPos(pos);
+               ImGui::Dummy(ImVec2(width, height));
+            }));
+      }
+      else
+         AddItem(std::make_unique<InGameUIItem>(FILTER_LABEL + filter, "Left/Right: only show the tables starting with the previous/next letter"s,
+            []() { /* Handled by AdjustItem as it depends on the direction */ }));
+   }
 
    if (m_pageCount > 1)
       AddItem(std::make_unique<InGameUIItem>(PAGER_TOP_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { m_newView ? RenderPagerNewView(PAGER_TOP_ITEM) : RenderPager(PAGER_TOP_ITEM); }));
@@ -1001,6 +1031,31 @@ void TextEntryPage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>("##keyboard"s, "Pointer: click the keys"s,
       [this](int, const InGameUIItem*)
       {
+         // New VR menu: a field which opens its keyboard
+         if (VPX::VRUI::IsActive())
+         {
+            namespace Theme = VPX::VRUI::Theme;
+            namespace Keyboard = VPX::VRUI::Keyboard;
+            const string owner = std::format("textentry:{}", static_cast<const void*>(this));
+            Keyboard::KeepOpen(owner);
+            const float height = ImGui::GetFrameHeight();
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const ImVec2 size(ImGui::GetContentRegionAvail().x, height);
+            if (ImGui::InvisibleButton("##field", size))
+               Keyboard::Open(owner, ""s, m_text, m_maxLength,
+                  [this](const string& text)
+                  {
+                     m_text = text;
+                     RequestRebuild();
+                  });
+            ImDrawList* const drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(pos, pos + size, ImGui::IsItemHovered() ? Theme::kSurfaceHover : Theme::kSurface, Theme::Px(0.45f));
+            if (Keyboard::IsEditing(owner))
+               drawList->AddRect(pos, pos + size, Theme::kAccent, Theme::Px(0.45f), ImDrawFlags_None, Theme::Px(0.15f));
+            drawList->AddText(ImVec2(pos.x + Theme::Px(0.7f), pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f), Theme::kTextMuted,
+               ICON_FK_KEYBOARD_O "  Type with the keyboard");
+            return;
+         }
          string text = m_text;
          RenderVirtualKeyboard(text, m_maxLength, true, false);
          if (text != m_text)

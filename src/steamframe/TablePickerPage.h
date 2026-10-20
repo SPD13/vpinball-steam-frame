@@ -67,6 +67,7 @@ private:
 
    void SetTab(int tab);
    void StepTab(int direction);
+   void StepFilter(int direction);
    void SetPage(int page, const string& pagerItem);
    void SetSearch(const string& search);
    void RenderTabs();
