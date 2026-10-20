@@ -26,7 +26,7 @@ sparkle, which is shading aliasing rather than edge aliasing. Two changes follow
 
 | Item | Where | Finding |
 |---|---|---|
-| Settings on the headset | `~/.local/share/VPinballX/10.8/VPinballX.ini` | Every `[Player]` graphics entry empty (defaults): reflections *Dynamic*, bloom on, AO on, anisotropic filtering on, 16384 px texture limit, SSR off, `MSAASamples`/`FXAA`/`Sharpen` off, `AAFactor` 100 %. `[PlayerVR] ResFactor = 0.2637` (= 2160² of the 8192² maximum). |
+| Settings on the headset | `~/.local/share/VPinballX/10.8/VPinballX.ini` | Every `[Player]` graphics entry empty (defaults): reflections *Dynamic*, bloom on, AO on, anisotropic filtering on, 16384 px texture limit, SSR off, `MSAASamples`/`FXAA`/`Sharpen` off, `AAFactor` 100 %. `[PlayerVR] ResFactor = 0.2637` (= 2160² of the 8192² maximum; since the upstream sync of 2026-10-18 the factor is relative to the recommended size, and 2160² is `1.25`). |
 | Platform reductions | `make/CMakeLists_app.txt:686-716`, `src/core/def.h` | `__LIBVPINBALL__` (the "mobile" flag: 1536 px texture cap, single view) is only set for iOS and Android. The Linux ARM64 build is a full standalone build. |
 | Shader sources | `src/shaders/bgfx/` | One set of sources for all backends (`shaders.sh` compiles every target, SPIR-V included); nothing conditional on the platform. |
 | Anisotropic filtering | `src/renderer/XRVulkanBackend.h:223`, `RenderDevice.cpp:379`, bgfx `renderer_vk.cpp` | The Vulkan device created for OpenXR enables `samplerAnisotropy`; `BGFX_RESET_MAXANISOTROPY` is set, bgfx reads `maxSamplerAnisotropy` from the device properties even for an external device. |
@@ -42,7 +42,7 @@ does not know it is supersampled: it just renders at the recommended size. This 
 image does not.
 
 On the Frame, the recommended resolution is 0.8× the panel (the runtime's performance target; Valve's Verified bar is 72 fps at 1728²).
-The branch renders at the panel resolution instead, because the sharper image is worth the 56 % more pixels (`ResFactor = 0.2637`), but
+The branch renders at the panel resolution instead, because the sharper image is worth the 56 % more pixels (`ResFactor = 0.2637` then, `1.25` since 2026-10-18), but
 that is still exactly one sample per panel pixel. Two consequences:
 
 - **Diagonals**: plain geometry aliasing, one sample per pixel, no filter.
@@ -67,7 +67,7 @@ rows are upper bounds.
 | Quality FAAA | `FXAA = 7` | 12.8 ms (11.7–13.9) | +3.0 ms | marginal |
 | MSAA 4× | `MSAASamples = 1` | 21.1 ms (20.2–22.0) | +11.3 ms | no |
 | MSAA 4× + Standard FXAA | `MSAASamples = 1`, `FXAA = 2` | 22.4 ms (21.6–23.3) | +12.7 ms | no |
-| Supersampling 1.3× per axis, 2457² (PC-like) | `[PlayerVR] ResFactor = 0.3` | 15.1 ms (14.7–15.7) | +5.4 ms | no |
+| Supersampling 1.3× per axis, 2457² (PC-like) | `[PlayerVR] ResFactor = 0.3` (`1.42` since 2026-10-18) | 15.1 ms (14.7–15.7) | +5.4 ms | no |
 | Internal supersampling 1.3× | `AAFactor = 1.3` | 16.3 ms (15.3–20.1) | +6.5 ms | no |
 
 Reading:
@@ -181,11 +181,17 @@ swapchain 1.4–1.5 ms, bloom 0.2 ms.
 
 - Tables under ≈ 10 ms without AA: keep the defaults (FXAA + specular AA), ≈ 11 ms.
 - Tables at the budget (Addams class): the per-frame cost to cut is the scene pass, so lower the resolution for that table
-  (`[PlayerVR] ResFactor = 0.21` ≈ 1728², the runtime's recommended size, 0.64× the pixels) or drop the dynamic playfield
+  (`[PlayerVR] ResFactor = 1` = 1728², the runtime's recommended size, 0.64× the pixels) or drop the dynamic playfield
   reflection (`PFReflection = 3`, "Static & Balls", −1.6 ms); FXAA then fits again.
-- Tables with room to spare: `[PlayerVR] ResFactor = 0.3` (2457², +5.4 ms) gives the PC-like supersampled image; `0.33` (2703²)
+- Tables with room to spare: `[PlayerVR] ResFactor = 1.42` (2457², +5.4 ms) gives the PC-like supersampled image; `1.56` (2703²)
   is the next step if the budget allows.
 - Never `MSAASamples` at native resolution on the Frame.
+
+`ResFactor` is set in the headset since 2026-10-19: "Render resolution" in the VR settings page, 50 % to 200 % of the headset's
+recommended size in 5 % steps (125 % = 2160², the native panel), saved globally or for the table like the other items. The swapchains are
+created with the session, so the value is used by the next table played; the "Render resolution" status line under it shows the size of
+the current table and, when the setting changed, the size of the next one. With dynamic resolution on, it is the ceiling the scale
+climbs back to.
 
 A caution for measurements: VPX writes the ini back when a table closes, with the values it had loaded. An ini edited while a table
 is running is overwritten at that table's exit (this reverted an `FXAA = 0` edit once, and the next runs measured FXAA on).
