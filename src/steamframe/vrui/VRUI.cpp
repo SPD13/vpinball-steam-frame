@@ -3,6 +3,13 @@
 #include "core/stdafx.h"
 #include "VRUI.h"
 
+#include "MainMenuPage.h"
+#include "SelfTest.h"
+
+#include "steamframe/TablePickerPage.h"
+#include "ui/live/LiveUI.h"
+#include "ui/live/ingameui/HomePage.h"
+
 #include "imgui/imgui.h"
 
 namespace VPX::VRUI
@@ -64,6 +71,25 @@ bool IsActive()
 {
    LatchSwitch();
    return g_active;
+}
+
+void OnPlayerCreated(Player* player, bool isLobby)
+{
+   using namespace VPX::InGameUI;
+   VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
+   ui.AddPage("homepage"s, []() -> std::unique_ptr<InGameUIPage>
+      {
+         if (IsActive())
+            return std::make_unique<MainMenuPage>();
+         return std::make_unique<HomePage>();
+      });
+   ui.AddPage("tables/picker"s, []() -> std::unique_ptr<InGameUIPage>
+      {
+         if (IsActive())
+            return std::make_unique<MainMenuPage>(Screen::Tables);
+         return std::make_unique<TablePickerPage>();
+      });
+   SelfTest::OnPlayerCreated(player, isLobby);
 }
 
 }

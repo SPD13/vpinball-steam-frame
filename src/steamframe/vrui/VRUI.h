@@ -5,6 +5,8 @@
 // Steam Frame Edition: the new VR UI, drawing the in-game UI (upstream's pages and ours) with its own look, instead of the classic one.
 // It keeps upstream's model (pages and their items) and replaces the view: see docs/VR UI.md.
 
+class Player;
+
 namespace VPX::VRUI
 {
 
@@ -15,5 +17,9 @@ bool IsActive();
 
 // Called by the new view each frame before it draws (also safe to call more than once per frame)
 void LatchSwitch();
+
+// Called when a player starts (see Launcher::OnPlayerCreated): the routes of upstream's home page and of the table picker give the main menu
+// of the new view when it is active, and the classic pages otherwise
+void OnPlayerCreated(Player* player, bool isLobby);
 
 }
