@@ -166,6 +166,33 @@ void VRSettingsPage::BuildPage()
          ImGui::TextUnformatted(("Foveation status: " + m_player->m_vrDevice->GetFoveationStatus()).c_str());
       }));
 
+   // Rendering resolution (PlayerVR/ResFactor, a factor of the headset's recommended size, unset meaning 100 %). The swapchains are created
+   // with the session, so a change is used by the next table played; the status line shows the current size and the next one
+   AddItem(std::make_unique<InGameUIItem>(
+      VPX::Properties::FloatPropertyDef(""s, ""s, "Render resolution"s,
+         "Rendering resolution of each eye, relative to the size recommended by the headset. Higher is sharper and costs more GPU time; dynamic resolution, when on, lowers it as needed.\nOnce saved, used by the next table played"s,
+         false, 0.5f, 2.f, 0.05f, 1.f),
+      100.f, "%4.0f %%"s, //
+      [this]() { return m_player->m_vrDevice->GetResolutionFactor(); }, // Live
+      [](const Settings& settings)
+      {
+         const float resFactor = settings.GetPlayerVR_ResFactor();
+         return (resFactor <= 0.1f || resFactor > 10.f) ? 1.f : resFactor;
+      }, // Stored
+      [this](float, float v)
+      {
+         m_player->m_vrDevice->SetResolutionFactor(v);
+         m_notifId = m_player->m_liveUI->PushNotification("Save the settings: the render resolution is used by the next table played"s, 3000, m_notifId);
+      },
+      [](Settings& settings) { settings.ResetPlayerVR_ResFactor(); }, //
+      [](float v, Settings& settings, bool asTableOverride) { settings.SetPlayerVR_ResFactor(v, asTableOverride); }));
+   AddItem(std::make_unique<InGameUIItem>("Render resolution status"s, "Rendering size of the current table, and of the next one when the setting changed"s,
+      [this](int, const InGameUIItem*)
+      {
+         ImGui::AlignTextToFramePadding();
+         ImGui::TextUnformatted(("Render resolution: " + m_player->m_vrDevice->GetResolutionStatus()).c_str());
+      }));
+
    // Dynamic resolution, applied live; the status line shows the current size and the GPU time it follows
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayerVR_DynamicResolution, //
@@ -187,6 +214,7 @@ void VRSettingsPage::BuildPage()
       }));
 #endif
 
+#if !defined(VPX_STEAM_FRAME_HEADSET) // The Steam Frame has no desktop display to show (forced off, see Renderer::Renderer)
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Desktop Display"s));
 
    AddItem(std::make_unique<InGameUIItem>( //
@@ -204,6 +232,7 @@ void VRSettingsPage::BuildPage()
          Settings::m_propPlayerVR_ShrinkDesktopDisplay, //
          [this]() { return m_player->m_renderer->m_vrDesktopShrink; }, //
          [this](bool v) { m_player->m_renderer->m_vrDesktopShrink = v; }));
+#endif
 
 #ifdef ENABLE_XR
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Cabinet positioning using controllers"s));
