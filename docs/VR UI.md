@@ -43,6 +43,7 @@ check whether the new view needs the same change:
 - [ ] `InGameUIItem`: new fields or types (the tripwires catch new types).
 - [ ] `PropertyDef`: new property types or path types (tripwires).
 - [ ] Plugin pages (`PluginSettingsPage`, `VPXPluginPagedUI`): new kinds of items.
+- [ ] New options of the VR settings (`VRSettingsPage`): shown in 'More' of VR & Room until placed in a section (`VPX_VRUI_DUMP_UNPLACED=1`).
 - [ ] Both views in a table and in the lobby (Frame test checklist).
 
 ## The new menu
@@ -57,18 +58,37 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   left on an item which does not use it (link, action, text) gets back to the rail.
 - Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
+- Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): below the menu, it edits the clicked field (search of the Tables
+  screen, text settings, names) and updates it at each key.
+
+## Screens made of several pages
+
+Some screens group options of several pages (`ComposedPage`, layout in `GetSections` of `Screens.cpp`): VR & Room (position, cabinet and
+room options of the VR settings, menu distance, lobby room), Display & Performance (VR rendering options of the VR settings, then the
+graphics settings), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
+table (its actions, then its lighting and difficulty options).
+
+- The pages stay whole and alive: they build their items and keep their rules (rebuilds, Open/Close, ResetToDefaults). A section only
+  chooses which items it shows, by property (`Prop(Settings::m_prop...)`) or by label.
+- **Nothing is lost when upstream adds an option**: a 'rest' section shows the items of a page which no section lists, on any screen
+  (the VR settings: the 'More' section of VR & Room). `VPX_VRUI_DUMP_UNPLACED=1` logs them, to place them in a section.
+- Defaults/Undo/Save apply to the shown items. Defaults use the rules of the page (`Section::pageRules`), except where only some of its
+  items are shown elsewhere (VR rendering, spatial audio: the VR settings recenter the table when reset).
 
 ## Testing without a headset
 
 On macOS (or any desktop build), `VPX_VRUI=new` shows the new menu in the window (the mouse is the pointer, the keys of the in-game UI the
-d-pad). `VPX_VRUI_SHOTS=<folder>` captures every screen, a d-pad sequence and a sub-page, then quits (`SelfTest.cpp`):
+d-pad), `VPX_VRUI_KEYBOARD=1` types with the keyboard of the menu as in VR. `VPX_VRUI_SHOTS=<folder>` captures every screen, a d-pad
+sequence, a search typed with the keyboard, a value changed then undone on a composed screen, the page of a table and a sub-page, then
+quits (`SelfTest.cpp`):
 
 ```
-VPX_VRUI=new VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -Launcher
+VPX_VRUI=new VPX_VRUI_KEYBOARD=1 VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -Launcher
 VPX_VRUI=new VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -play <table.vpx>
 ```
 
-What only the headset shows: the panel placement, the controller ray, legibility at distance, the cost on the GPU.
+What only the headset shows: the panel placement, the controller ray, legibility at distance, the cost on the GPU, and the sections of
+the VR settings (the VR settings page needs a VR device).
 
 ## Files
 
@@ -81,7 +101,9 @@ What only the headset shows: the panel placement, the controller ray, legibility
 | `src/steamframe/vrui/PageView.h` | What the shell asks a page (title, content, actions), implemented in `PageAdapter.cpp` |
 | `src/steamframe/vrui/Shell.*` | The frame of the menu: rail, header, content region, footer |
 | `src/steamframe/vrui/MainMenuPage.*` | The main menu: screens, focus of the buttons between the rail and the content |
-| `src/steamframe/vrui/Screens.*` | The screens of the rail and the pages of the fork they show (This table, Scores, System, Wi-Fi upload) |
+| `src/steamframe/vrui/Screens.*` | The screens of the rail, their layout (sections), and the pages of the fork they show |
+| `src/steamframe/vrui/ComposedPage.*` | Screens made of sections of several pages |
+| `src/steamframe/vrui/Keyboard.*` | Keyboard of the menu |
 | `src/steamframe/vrui/Theme.*` | Sizes (angles), colors, fonts |
 | `src/steamframe/vrui/Widgets.*` | Rail buttons, pills, sliders, toggles, steppers (the only file using `imgui_internal.h`) |
 | `src/steamframe/vrui/SelfTest.*` | Screenshots of the menu (`VPX_VRUI_SHOTS`) |

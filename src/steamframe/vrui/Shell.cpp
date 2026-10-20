@@ -278,8 +278,13 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    }
    Keyboard::EndFrame();
 
+   // Popups of the page (input mapping), with the padding of a window (the menu has none)
    if (content)
+   {
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Theme::Px(1.2f), Theme::Px(1.f)));
       InGameUIPageView::RenderPopups(*content);
+      ImGui::PopStyleVar();
+   }
    Theme::PopStyle();
    ImGui::PopFont();
 
