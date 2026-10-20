@@ -4,8 +4,21 @@
 set(VRUI_SOURCES
    src/steamframe/vrui/VRUI.h
    src/steamframe/vrui/VRUI.cpp
+   src/steamframe/vrui/MainMenuPage.h
+   src/steamframe/vrui/MainMenuPage.cpp
    src/steamframe/vrui/PageAdapter.cpp
+   src/steamframe/vrui/PageView.h
+   src/steamframe/vrui/Screens.h
+   src/steamframe/vrui/Screens.cpp
+   src/steamframe/vrui/SelfTest.h
+   src/steamframe/vrui/SelfTest.cpp
+   src/steamframe/vrui/Shell.h
+   src/steamframe/vrui/Shell.cpp
+   src/steamframe/vrui/Theme.h
+   src/steamframe/vrui/Theme.cpp
    src/steamframe/vrui/Tripwires.cpp
+   src/steamframe/vrui/Widgets.h
+   src/steamframe/vrui/Widgets.cpp
 
    # Moved out of upstream files, used by the classic UI too
    src/steamframe/vrui/LegacyTiles.cpp

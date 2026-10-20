@@ -45,6 +45,31 @@ check whether the new view needs the same change:
 - [ ] Plugin pages (`PluginSettingsPage`, `VPXPluginPagedUI`): new kinds of items.
 - [ ] Both views in a table and in the lobby (Frame test checklist).
 
+## The new menu
+
+One window with a rail of icon buttons on the left (`MainMenuPage`), each choosing a screen (`Screens.cpp`): Tables, This table (not in the
+lobby), Scores, VR & Room, Display & Performance, Sound, Controls, Plugins, System, Wi-Fi upload. A screen shows a page (upstream's, like
+`GraphicSettingsPage`, or one of the fork) inside the menu; the pages it opens (sub-pages) are shown in the same frame, with a Back button.
+The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
+
+- Pointer (VR controller, mouse): click the rail, the items, the Back/Close and Defaults/Undo/Save buttons.
+- Buttons (d-pad): on the rail, up/down change the screen and right enters it; in a screen, up/down select an item and left/right adjust it,
+  left on an item which does not use it (link, action, text) gets back to the rail.
+- Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
+  the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
+
+## Testing without a headset
+
+On macOS (or any desktop build), `VPX_VRUI=new` shows the new menu in the window (the mouse is the pointer, the keys of the in-game UI the
+d-pad). `VPX_VRUI_SHOTS=<folder>` captures every screen, a d-pad sequence and a sub-page, then quits (`SelfTest.cpp`):
+
+```
+VPX_VRUI=new VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -Launcher
+VPX_VRUI=new VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -play <table.vpx>
+```
+
+What only the headset shows: the panel placement, the controller ray, legibility at distance, the cost on the GPU.
+
 ## Files
 
 | File | Contents |
@@ -53,6 +78,13 @@ check whether the new view needs the same change:
 | `src/steamframe/vrui/VRUI.*` | The switch |
 | `src/steamframe/vrui/PageAdapter.cpp` | Bridge between the pages and the new view |
 | `src/steamframe/vrui/Tripwires.cpp` | Build checks against upstream changes to the item model |
+| `src/steamframe/vrui/PageView.h` | What the shell asks a page (title, content, actions), implemented in `PageAdapter.cpp` |
+| `src/steamframe/vrui/Shell.*` | The frame of the menu: rail, header, content region, footer |
+| `src/steamframe/vrui/MainMenuPage.*` | The main menu: screens, focus of the buttons between the rail and the content |
+| `src/steamframe/vrui/Screens.*` | The screens of the rail and the pages of the fork they show (This table, Scores, System, Wi-Fi upload) |
+| `src/steamframe/vrui/Theme.*` | Sizes (angles), colors, fonts |
+| `src/steamframe/vrui/Widgets.*` | Rail buttons, pills, sliders, toggles, steppers (the only file using `imgui_internal.h`) |
+| `src/steamframe/vrui/SelfTest.*` | Screenshots of the menu (`VPX_VRUI_SHOTS`) |
 | `src/steamframe/vrui/LegacyTiles.cpp` | Tiles of the classic view (`InGameUIPage::RenderTile`) |
 | `src/steamframe/vrui/Panel.cpp` | VR panel standing in the room, and controller pointing (`VRDevice` members) |
 | `src/steamframe/vrui/Pointer.cpp` | The controller as a mouse for ImGui, its dot and ray (`LiveUI` members) |
