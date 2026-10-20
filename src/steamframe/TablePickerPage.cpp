@@ -185,7 +185,7 @@ void TablePickerPage::Render(float elapsedS)
       RequestRebuild();
 #ifdef VPX_TABLE_WEBSERVER
    // The pairing code is renewed after failed attempts
-   if (m_webServerUrl != g_launcher->GetWebServer().GetUrl() || m_pairingCode != g_launcher->GetWebServer().GetPairingCode())
+   if (s_tab == PickerTab::Menu && HaveWebServerItemsChanged())
       RequestRebuild();
 #endif
    InGameUIPage::Render(elapsedS);
@@ -242,11 +242,8 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
          return;
       }
 #ifdef VPX_TABLE_WEBSERVER
-      if (item->m_label == PAIRING_ITEM)
-      {
-         SetWebServerPairing(!g_launcher->GetWebServer().IsPairingRequired());
+      if (AdjustWebServerItem(*item))
          return;
-      }
 #endif
       if (item->m_label == SEARCH_ITEM)
       {
@@ -318,37 +315,6 @@ void TablePickerPage::RenderTabs()
    ImGui::PopID();
 }
 
-#ifdef VPX_TABLE_WEBSERVER
-// The pairing code, with a switch on its right to stop asking for it. With buttons, left/right flip the switch.
-void TablePickerPage::RenderPairing()
-{
-   const bool required = g_launcher->GetWebServer().IsPairingRequired();
-   const InGameUIItem* const selectedItem = GetSelectedItem();
-   const bool hasFocus = m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selectedItem != nullptr && selectedItem->m_label == PAIRING_ITEM;
-   ImGui::AlignTextToFramePadding();
-   ImGui::Text("Pairing code: %s", required ? m_pairingCode.c_str() : "disabled");
-   ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
-
-   // The switch and its state form a single button, large enough to be hit easily with a VR pointer
-   const char* const stateLabel = required ? "Required" : "Off";
-   const float height = ImGui::GetFrameHeight();
-   const ImVec2 trackSize(height * 1.8f, height);
-   const float labelSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
-   const ImVec2 pos = ImGui::GetCursorScreenPos();
-   ImGui::PushID(PAIRING_ITEM);
-   if (ImGui::InvisibleButton("switch", ImVec2(trackSize.x + labelSpacing + ImGui::CalcTextSize(stateLabel).x, height)))
-      SetWebServerPairing(!required);
-   ImGui::PopID();
-   const bool isHovered = ImGui::IsItemHovered() || hasFocus;
-   ImDrawList* const drawList = ImGui::GetWindowDrawList();
-   const float radius = height * 0.5f;
-   drawList->AddRectFilled(pos, pos + trackSize, required ? IM_COL32(0, 160, 0, 255) : IM_COL32(110, 110, 110, 255), radius);
-   if (isHovered)
-      drawList->AddRect(pos, pos + trackSize, IM_COL32(0, 255, 0, 255), radius, ImDrawFlags_None, 2.f);
-   drawList->AddCircleFilled(pos + ImVec2(required ? trackSize.x - radius : radius, radius), radius - 3.f, IM_COL32_WHITE);
-   drawList->AddText(pos + ImVec2(trackSize.x + labelSpacing, (height - ImGui::GetTextLineHeight()) * 0.5f), isHovered ? IM_COL32(0, 255, 0, 255) : IM_COL32_WHITE, stateLabel);
-}
-#endif
 
 void TablePickerPage::RenderSearch()
 {
@@ -612,114 +578,190 @@ void TablePickerPage::KeepThumbnails(const ankerl::unordered_dense::set<string>&
 // The MENU tab: the options of the library and of the application, which are not needed while choosing a table
 void TablePickerPage::BuildMenuTab()
 {
-   TableLibrary& library = g_launcher->GetTableLibrary();
-   const bool gridView = g_settingsService.GetAppSettings().GetStandalone_TablePickerGridView();
-   const bool sortAscending = g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending();
-
-   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Library"s));
-
-   AddItem(std::make_unique<InGameUIItem>(gridView ? "View: Grid"s : "View: List"s, "Switch between a grid of table images and a list of names"s,
-      [this, gridView]()
-      {
-         g_settingsService.GetAppSettings().SetStandalone_TablePickerGridView(!gridView, false);
-         RequestRebuild();
-      }));
-
-   AddItem(std::make_unique<InGameUIItem>(Launcher::GetTableImageFocusLabel(), "What the images of the tables captured in VR show: their backglass, their playfield seen from above, or their whole cabinet"s,
-      [this]()
-      {
-         Launcher::NextTableImageFocus();
-         RequestRebuild();
-      }));
-
-   // Distance of the menu window in VR, changed by steps of 10cm, the window being placed again at once
-   if (m_player->m_vrDevice)
-      AddItem(std::make_unique<InGameUIItem>("Menu distance"s, "How far from the player the menu window is placed in VR"s,
-         [this](int index, const InGameUIItem*)
-         {
-            const float distance = g_settingsService.GetAppSettings().GetStandalone_VRMenuDistance();
-            const auto setDistance = [this](float value)
-            {
-               g_settingsService.GetAppSettings().SetStandalone_VRMenuDistance(clamp(roundf(value * 10.f) / 10.f, 0.3f, 3.f), false);
-               #ifdef ENABLE_XR
-               m_player->m_vrDevice->RecenterUIPanel();
-               #endif
-            };
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Menu distance: %.1f m", distance);
-            const float buttonWidth = ImGui::GetFrameHeight() * 1.6f;
-            ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 3.f);
-            ImGui::BeginDisabled(distance <= 0.3f + 1e-3f);
-            if (ImGui::Button(std::format("{}##MenuCloser{}", ICON_FK_MINUS, index).c_str(), ImVec2(buttonWidth, 0.f)))
-               setDistance(distance - 0.1f);
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::BeginDisabled(distance >= 3.f - 1e-3f);
-            if (ImGui::Button(std::format("{}##MenuFarther{}", ICON_FK_PLUS, index).c_str(), ImVec2(buttonWidth, 0.f)))
-               setDistance(distance + 0.1f);
-            ImGui::EndDisabled();
-         }));
-
-   AddItem(std::make_unique<InGameUIItem>(sortAscending ? "Sort: A to Z"s : "Sort: Z to A"s, "Change the sort order of the 'All' list"s,
-      [this, sortAscending]()
-      {
-         g_settingsService.GetAppSettings().SetStandalone_TablePickerSortAscending(!sortAscending, false);
-         RequestRebuild();
-      }));
-
-   AddItem(std::make_unique<InGameUIItem>("Rescan tables folder"s, "Look for tables added to, or removed from, the tables folder"s, []() { g_launcher->GetTableLibrary().RescanAsync(); }));
-
-   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Tables folder: " + library.GetTablesPath().string()));
-   if (g_launcher->IsSharedPinMAMEFolderUsed())
-      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "ROMs (zipped): 'pinmame/roms' in the tables folder, or in a table's folder"s));
-
-   // The lobby may use the room of a table, chosen from the menu of that table while it is played
-   if (g_launcher->m_launcherMode)
-   {
-      if (const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom(); room)
-      {
-         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: the room of " + room->tableName));
-         AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the default room again"s,
-            [this]()
-            {
-               g_launcher->ResetLobbyRoom();
-               if (m_player->m_isLobby)
-               {
-                  // Load the lobby again, with the default room
-                  g_launcher->m_reloadLobby = true;
-                  m_player->SetCloseState(Player::CS_CLOSE_APP);
-               }
-               else
-                  RequestRebuild();
-            }));
-      }
-      else
-         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: default (the room of a table can be used, from the menu of that table)"s));
-   }
+   AddLibraryItems(*this);
+   AddLobbyRoomItems(*this);
 
    // In launcher mode, this page is the front door of the application: give access to the rest of the menu from it
    if (g_launcher->m_launcherMode)
       AddItem(std::make_unique<InGameUIItem>("Settings"s, "Controls, VR, graphics, sound and the other settings"s, "homepage"s));
 
-   if (g_launcher->m_launcherMode)
-      AddItem(std::make_unique<InGameUIItem>("Quit Visual Pinball"s, ""s,
-         [this]()
+   // The new VR menu (src/steamframe/vrui/), which can be switched back to this one from its System screen
+   if (m_player->m_vrDevice)
+      AddItem(std::make_unique<InGameUIItem>("Try the new VR menu"s, "One menu with big icon buttons on the left. It can be switched back to this one from its System screen."s,
+         []()
          {
-            g_launcher->m_launcherMode = false;
-            m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+            g_settingsService.GetAppSettings().SetStandalone_NewVRUI(true, false);
+            g_settingsService.GetAppSettings().Save();
          }));
 
+   if (g_launcher->m_launcherMode)
+      AddQuitItem(*this);
+
 #ifdef VPX_TABLE_WEBSERVER
-   // The web server gives access to the tables folder to the local network, so it only runs on request and asks for a pairing code
-   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Add tables from a browser"s));
+   AddWebServerItems(*this);
+#endif
+}
+
+void AddLibraryItems(InGameUIPage& page)
+{
+   TableLibrary& library = g_launcher->GetTableLibrary();
+   const bool gridView = g_settingsService.GetAppSettings().GetStandalone_TablePickerGridView();
+   const bool sortAscending = g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending();
+
+   page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Library"s));
+
+   page.AddItem(std::make_unique<InGameUIItem>(gridView ? "View: Grid"s : "View: List"s, "Switch between a grid of table images and a list of names"s,
+      [&page, gridView]()
+      {
+         g_settingsService.GetAppSettings().SetStandalone_TablePickerGridView(!gridView, false);
+         page.RequestRebuild();
+      }));
+
+   page.AddItem(std::make_unique<InGameUIItem>(Launcher::GetTableImageFocusLabel(), "What the images of the tables captured in VR show: their backglass, their playfield seen from above, or their whole cabinet"s,
+      [&page]()
+      {
+         Launcher::NextTableImageFocus();
+         page.RequestRebuild();
+      }));
+
+   AddMenuDistanceItem(page);
+
+   page.AddItem(std::make_unique<InGameUIItem>(sortAscending ? "Sort: A to Z"s : "Sort: Z to A"s, "Change the sort order of the 'All' list"s,
+      [&page, sortAscending]()
+      {
+         g_settingsService.GetAppSettings().SetStandalone_TablePickerSortAscending(!sortAscending, false);
+         page.RequestRebuild();
+      }));
+
+   page.AddItem(std::make_unique<InGameUIItem>("Rescan tables folder"s, "Look for tables added to, or removed from, the tables folder"s, []() { g_launcher->GetTableLibrary().RescanAsync(); }));
+
+   page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Tables folder: " + library.GetTablesPath().string()));
+   if (g_launcher->IsSharedPinMAMEFolderUsed())
+      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "ROMs (zipped): 'pinmame/roms' in the tables folder, or in a table's folder"s));
+}
+
+// Distance of the menu window in VR, changed by steps of 10cm, the window being placed again at once
+void AddMenuDistanceItem(InGameUIPage& page)
+{
+   if (page.m_player->m_vrDevice == nullptr)
+      return;
+   page.AddItem(std::make_unique<InGameUIItem>("Menu distance"s, "How far from the player the menu window is placed in VR"s,
+      [&page](int index, const InGameUIItem*)
+      {
+         const float distance = g_settingsService.GetAppSettings().GetStandalone_VRMenuDistance();
+         const auto setDistance = [&page](float value)
+         {
+            g_settingsService.GetAppSettings().SetStandalone_VRMenuDistance(clamp(roundf(value * 10.f) / 10.f, 0.3f, 3.f), false);
+            #ifdef ENABLE_XR
+            page.m_player->m_vrDevice->RecenterUIPanel();
+            #endif
+         };
+         ImGui::AlignTextToFramePadding();
+         ImGui::Text("Menu distance: %.1f m", distance);
+         const float buttonWidth = ImGui::GetFrameHeight() * 1.6f;
+         ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 3.f);
+         ImGui::BeginDisabled(distance <= 0.3f + 1e-3f);
+         if (ImGui::Button(std::format("{}##MenuCloser{}", ICON_FK_MINUS, index).c_str(), ImVec2(buttonWidth, 0.f)))
+            setDistance(distance - 0.1f);
+         ImGui::EndDisabled();
+         ImGui::SameLine();
+         ImGui::BeginDisabled(distance >= 3.f - 1e-3f);
+         if (ImGui::Button(std::format("{}##MenuFarther{}", ICON_FK_PLUS, index).c_str(), ImVec2(buttonWidth, 0.f)))
+            setDistance(distance + 0.1f);
+         ImGui::EndDisabled();
+      }));
+}
+
+// The lobby may use the room of a table, chosen from the menu of that table while it is played
+void AddLobbyRoomItems(InGameUIPage& page)
+{
+   if (!g_launcher->m_launcherMode)
+      return;
+   if (const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom(); room)
+   {
+      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: the room of " + room->tableName));
+      page.AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the default room again"s,
+         [&page]()
+         {
+            g_launcher->ResetLobbyRoom();
+            if (page.m_player->m_isLobby)
+            {
+               // Load the lobby again, with the default room
+               g_launcher->m_reloadLobby = true;
+               page.m_player->SetCloseState(Player::CS_CLOSE_APP);
+            }
+            else
+               page.RequestRebuild();
+         }));
+   }
+   else
+      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: default (the room of a table can be used, from the menu of that table)"s));
+}
+
+void AddQuitItem(InGameUIPage& page)
+{
+   page.AddItem(std::make_unique<InGameUIItem>("Quit Visual Pinball"s, ""s,
+      [&page]()
+      {
+         g_launcher->m_launcherMode = false;
+         page.m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+      }));
+}
+
+#ifdef VPX_TABLE_WEBSERVER
+// Address and pairing code displayed by the items, to rebuild them when they change (the pairing code is renewed after failed attempts)
+static string s_webServerUrl;
+static string s_pairingCode;
+
+bool HaveWebServerItemsChanged()
+{
+   return s_webServerUrl != g_launcher->GetWebServer().GetUrl() || s_pairingCode != g_launcher->GetWebServer().GetPairingCode();
+}
+
+#ifdef VPX_TABLE_WEBSERVER
+// The pairing code, with a switch on its right to stop asking for it. With buttons, left/right flip the switch.
+static void RenderPairing(InGameUIPage& page, const string& pairingCode)
+{
+   const bool required = g_launcher->GetWebServer().IsPairingRequired();
+   const InGameUIItem* const selectedItem = page.GetSelectedItem();
+   const bool hasFocus = page.m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selectedItem != nullptr && selectedItem->m_label == PAIRING_ITEM;
+   ImGui::AlignTextToFramePadding();
+   ImGui::Text("Pairing code: %s", required ? pairingCode.c_str() : "disabled");
+   ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
+
+   // The switch and its state form a single button, large enough to be hit easily with a VR pointer
+   const char* const stateLabel = required ? "Required" : "Off";
+   const float height = ImGui::GetFrameHeight();
+   const ImVec2 trackSize(height * 1.8f, height);
+   const float labelSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+   const ImVec2 pos = ImGui::GetCursorScreenPos();
+   ImGui::PushID(PAIRING_ITEM);
+   if (ImGui::InvisibleButton("switch", ImVec2(trackSize.x + labelSpacing + ImGui::CalcTextSize(stateLabel).x, height)))
+      SetWebServerPairing(!required);
+   ImGui::PopID();
+   const bool isHovered = ImGui::IsItemHovered() || hasFocus;
+   ImDrawList* const drawList = ImGui::GetWindowDrawList();
+   const float radius = height * 0.5f;
+   drawList->AddRectFilled(pos, pos + trackSize, required ? IM_COL32(0, 160, 0, 255) : IM_COL32(110, 110, 110, 255), radius);
+   if (isHovered)
+      drawList->AddRect(pos, pos + trackSize, IM_COL32(0, 255, 0, 255), radius, ImDrawFlags_None, 2.f);
+   drawList->AddCircleFilled(pos + ImVec2(required ? trackSize.x - radius : radius, radius), radius - 3.f, IM_COL32_WHITE);
+   drawList->AddText(pos + ImVec2(trackSize.x + labelSpacing, (height - ImGui::GetTextLineHeight()) * 0.5f), isHovered ? IM_COL32(0, 255, 0, 255) : IM_COL32_WHITE, stateLabel);
+}
+#endif
+
+// The web server gives access to the tables folder to the local network, so it only runs on request and asks for a pairing code
+void AddWebServerItems(InGameUIPage& page)
+{
+   page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Add tables from a browser"s));
    WebServer& webServer = g_launcher->GetWebServer();
-   m_webServerUrl = webServer.GetUrl();
-   m_pairingCode = webServer.GetPairingCode();
+   s_webServerUrl = webServer.GetUrl();
+   s_pairingCode = webServer.GetPairingCode();
    // 3 modes: off, on until the application is closed (to be turned on again at the next launch), or always on (started with the application)
    const bool alwaysOn = g_settingsService.GetAppSettings().GetStandalone_WebServerAlwaysOn();
-   AddItem(std::make_unique<InGameUIItem>(!webServer.IsRunning() ? "Wi-Fi upload: Off"s : alwaysOn ? "Wi-Fi upload: On (always on)"s : "Wi-Fi upload: On (ask every time)"s,
+   page.AddItem(std::make_unique<InGameUIItem>(!webServer.IsRunning() ? "Wi-Fi upload: Off"s : alwaysOn ? "Wi-Fi upload: On (always on)"s : "Wi-Fi upload: On (ask every time)"s,
       "Manage tables from the browser of a phone or computer connected to the same network. Once on, it stays on while tables are played. 'Ask every time' turns it on until the application is closed, 'always on' also when the application starts."s,
-      [this, alwaysOn]()
+      [&page, alwaysOn]()
       {
          WebServer& webServer = g_launcher->GetWebServer();
          // Off -> On (ask every time) -> On (always on) -> Off
@@ -730,18 +772,26 @@ void TablePickerPage::BuildMenuTab()
             webServer.Start();
          g_settingsService.GetAppSettings().SetStandalone_WebServerAlwaysOn(startWithApp, false);
          g_settingsService.GetAppSettings().Save();
-         RequestRebuild();
+         page.RequestRebuild();
       }));
    if (webServer.IsRunning())
    {
-      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, m_webServerUrl.empty() ? "No network address found"s : "Open " + m_webServerUrl));
-      AddItem(std::make_unique<InGameUIItem>(PAIRING_ITEM,
+      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, s_webServerUrl.empty() ? "No network address found"s : "Open " + s_webServerUrl));
+      page.AddItem(std::make_unique<InGameUIItem>(PAIRING_ITEM,
          "Left/Right: ask, or not, for the pairing code before giving a browser access to the tables folder. Without it, any device on the local network can add, change or delete tables."s,
-         [this](int, const InGameUIItem*) { RenderPairing(); })).m_customHighlight = true;
+         [&page](int, const InGameUIItem*) { RenderPairing(page, s_pairingCode); })).m_customHighlight = true;
    }
-#endif
 }
 
+// Left/Right on the pairing item flip it (see AddWebServerItems)
+bool AdjustWebServerItem(const InGameUIItem& item)
+{
+   if (item.m_label != PAIRING_ITEM)
+      return false;
+   SetWebServerPairing(!g_launcher->GetWebServer().IsPairingRequired());
+   return true;
+}
+#endif
 
 static constexpr const char* CHARACTER_LABEL = "Character: ";
 static constexpr std::string_view TEXT_ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz0123456789-'&!().,";

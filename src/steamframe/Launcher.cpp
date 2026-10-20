@@ -7,6 +7,7 @@
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
+#include "steamframe/vrui/VRUI.h"
 #include "parts/Collection.h"
 #include "parts/Material.h"
 #include "parts/PartGroup.h"
@@ -521,6 +522,7 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
 
 void Launcher::OnPlayerCreated(Player* player, bool isLobby)
 {
+   VPX::VRUI::OnPlayerCreated(player, isLobby);
    if (!isLobby)
       return;
    player->m_liveUI->OpenInGameUI("tables/picker"s);
