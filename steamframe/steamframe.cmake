@@ -38,6 +38,12 @@ target_compile_definitions(vpinball PRIVATE
    VPX_TABLE_WEBSERVER
 )
 
+# VPX_STEAM_FRAME_HEADSET: the build that runs on the Steam Frame itself (Linux ARM64 with OpenXR), a standalone headset without a screen
+# for a desktop window (the desktop mirror is forced off, see docs/Performance on the Steam Frame.md)
+if(PLATFORM STREQUAL "linux" AND ARCH STREQUAL "aarch64" AND ENABLE_XR)
+   target_compile_definitions(vpinball PRIVATE VPX_STEAM_FRAME_HEADSET)
+endif()
+
 # RAR and 7z archives, when steamframe/deps/libarchive.sh built libarchive (static, 7z needs liblzma), linked by full path so that
 # a system one (or MSYS2's) is never used
 if(PLATFORM STREQUAL "windows-mingw")
