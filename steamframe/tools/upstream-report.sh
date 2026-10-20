@@ -33,6 +33,8 @@ AREAS=(
    "vr src/renderer/VRDevice.* src/renderer/XR* src/input/XR* src/ui/live/ingameui/VRSettingsPage.* src/shaders/bgfx/vs_vr_mask.sc apps/android/app/src/quest"
    "renderer src/renderer src/shaders/bgfx"
    "ui src/ui/live"
+   # The new VR UI draws upstream's pages from their items: changes there may need the same change in its view (see docs/VR UI.md)
+   "vrui-parity src/ui/live/ingameui/InGameUIPage.* src/ui/live/ingameui/InGameUIItem.* src/ui/live/ingameui/InGameUI.* src/ui/live/ingameui/PluginSettingsPage.* src/core/VPXPluginPagedUI.* plugins/plugins/PagedUIPlugin.h src/core/PropertyDef.h"
    "player src/core/player.* src/core/AppCommands.* src/core/VPApp.* src/input"
    "settings src/core/Settings*"
    "web lib/src/WebServer* src/assets/web"
