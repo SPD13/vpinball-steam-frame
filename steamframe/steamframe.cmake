@@ -38,6 +38,9 @@ target_compile_definitions(vpinball PRIVATE
    VPX_TABLE_WEBSERVER
 )
 
+# VR UI: the new VR menu, and the VR panel, pointer and other parts of the classic one
+include(${CMAKE_CURRENT_LIST_DIR}/vrui.cmake)
+
 # VPX_STEAM_FRAME_HEADSET: the build that runs on the Steam Frame itself (Linux ARM64 with OpenXR), a standalone headset without a screen
 # for a desktop window (the desktop mirror is forced off, see docs/Performance on the Steam Frame.md)
 if(PLATFORM STREQUAL "linux" AND ARCH STREQUAL "aarch64" AND ENABLE_XR)
