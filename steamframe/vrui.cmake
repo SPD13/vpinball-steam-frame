@@ -4,6 +4,8 @@
 set(VRUI_SOURCES
    src/steamframe/vrui/VRUI.h
    src/steamframe/vrui/VRUI.cpp
+   src/steamframe/vrui/ComposedPage.h
+   src/steamframe/vrui/ComposedPage.cpp
    src/steamframe/vrui/Keyboard.h
    src/steamframe/vrui/Keyboard.cpp
    src/steamframe/vrui/MainMenuPage.h

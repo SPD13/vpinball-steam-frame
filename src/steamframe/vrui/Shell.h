@@ -14,6 +14,9 @@ bool RenderPage(InGameUI::InGameUIPage& page, float elapsedS);
 
 bool IsMainMenu(const InGameUI::InGameUIPage& page);
 
+// Draws some of the items of a page, as a section of a composed screen (see ComposedPage), in the content region of the menu
+void RenderSection(InGameUI::InGameUIPage& page, const std::function<bool(int)>& filter, float elapsedS);
+
 // Whether the menu was drawn on the previous frame: it is opened, and moving between its pages
 bool WasShownLastFrame();
 

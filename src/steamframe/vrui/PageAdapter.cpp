@@ -12,6 +12,7 @@
 #include "core/stdafx.h"
 #include "PageView.h"
 
+#include "ComposedPage.h"
 #include "Keyboard.h"
 #include "Shell.h"
 #include "Theme.h"
@@ -55,6 +56,16 @@ const string& InGameUIPageView::GetTitle(const InGameUIPage& page) { return page
 
 const string& InGameUIPageView::GetInfo(const InGameUIPage& page) { return page.m_info; }
 
+InGameUIPage::SaveMode InGameUIPageView::GetSaveMode(const InGameUIPage& page) { return page.m_saveMode; }
+
+const vector<std::unique_ptr<InGameUIItem>>& InGameUIPageView::GetItems(const InGameUIPage& page) { return page.m_items; }
+
+int InGameUIPageView::GetSelectedIndex(const InGameUIPage& page) { return page.m_selectedItem; }
+
+void InGameUIPageView::SetSelectedIndex(InGameUIPage& page, int index) { page.m_selectedItem = index; }
+
+bool InGameUIPageView::NeedsRebuild(const InGameUIPage& page) { return page.m_needsRebuild; }
+
 void InGameUIPageView::SyncCoreItems(InGameUIPage& page, bool withBack)
 {
    using enum InGameUIItem::Type;
@@ -89,6 +100,8 @@ bool InGameUIPageView::HasCoreItem(const InGameUIPage& page, InGameUIItem::Type 
 
 bool InGameUIPageView::IsCoreItemSelected(const InGameUIPage& page, InGameUIItem::Type type)
 {
+   if (const auto* composed = dynamic_cast<const VRUI::ComposedPage*>(&page); composed)
+      return composed->IsActionSelected(type) && page.m_player->m_liveUI->m_inGameUI.IsFlipperNav();
    const InGameUIItem* const item = page.GetSelectedItem();
    return item && item->m_type == type && page.m_player->m_liveUI->m_inGameUI.IsFlipperNav();
 }
@@ -132,7 +145,8 @@ static void RenderPropertyMarker(const InGameUIItem& item, const ImVec2& pos, fl
 const char* InGameUIPageView::RenderActions(InGameUIPage& page, float right, float height, float& left)
 {
    left = right;
-   if (!page.IsAdjustable())
+   const auto* composed = dynamic_cast<const VRUI::ComposedPage*>(&page);
+   if (composed ? !composed->HasAdjustableItems() : !page.IsAdjustable())
       return nullptr;
    using enum InGameUIItem::Type;
    struct Action { InGameUIItem::Type type; const char* icon; const char* label; const char* tooltip; bool enabled; };
@@ -173,7 +187,7 @@ const char* InGameUIPageView::RenderActions(InGameUIPage& page, float right, flo
    return tooltip;
 }
 
-const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool showSelection)
+const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool showSelection, const std::function<bool(int)>* filter)
 {
    using enum InGameUIItem::Type;
    const bool flipperNav = page.m_player->m_liveUI->m_inGameUI.IsFlipperNav() && showSelection;
@@ -207,7 +221,7 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          break;
 
       InGameUIItem* const item = page.m_items[i].get();
-      if (IsCoreType(item->m_type))
+      if (IsCoreType(item->m_type) || (filter && !(*filter)(i)))
          continue;
       const bool selected = flipperNav && i == page.m_selectedItem;
       ImGui::PushID(i);

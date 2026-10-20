@@ -166,6 +166,13 @@ void Update(InGameUIPage& page)
          break;
       case 10: Capture(player, "keyboard-search"s, Step::DPad); break;
       case 11: Keyboard::Close(); break;
+      // A value of a composed screen changed with the buttons, then undone (the footer follows)
+      case 12: menu->SetScreen(Screen::Sound); break;
+      case 13: ui.OnUIDownAction(); break;
+      case 14: ui.OnUILeftAction(); ui.OnUILeftAction(); break;
+      case 15: Capture(player, "composed-modified"s, Step::DPad); break;
+      case 16: ui.OnUICancelChanges(); break;
+      case 17: Capture(player, "composed-undone"s, Step::DPad); break;
       default: g_step = Step::SubPage; break;
       }
       break;

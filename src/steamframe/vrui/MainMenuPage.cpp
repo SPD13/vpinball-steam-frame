@@ -3,6 +3,7 @@
 #include "core/stdafx.h"
 #include "MainMenuPage.h"
 
+#include "ComposedPage.h"
 #include "Shell.h"
 #include "VRUI.h"
 
@@ -117,7 +118,8 @@ void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
    // Left gets back to the rail, except on the items which use it (values, input mappings, and the custom items of the pages, like tabs)
    if (direction < 0.f && isInitialPress)
    {
-      const InGameUIItem* const item = content->GetSelectedItem();
+      const auto* composed = dynamic_cast<const ComposedPage*>(content);
+      const InGameUIItem* const item = composed ? composed->GetSelectedSectionItem() : content->GetSelectedItem();
       if (item == nullptr || item->m_type == InGameUIItem::Type::Navigation || item->m_type == InGameUIItem::Type::Runnable || item->m_type == InGameUIItem::Type::Label)
       {
          m_railFocus = true;
