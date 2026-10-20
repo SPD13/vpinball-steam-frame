@@ -34,12 +34,17 @@ bool AdjustWebServerItem(const InGameUIItem& item); // Left/Right on an item of 
 class TablePickerPage final : public InGameUIPage
 {
 public:
-   TablePickerPage();
+   // 'newView': the Tables screen of the new VR menu (src/steamframe/vrui/), which shows the scores and the options of the MENU tab on
+   // screens of their own, and draws the tabs, the search field and the pager with its widgets
+   explicit TablePickerPage(bool newView = false);
    ~TablePickerPage() override;
 
    void Open(bool isBackwardAnimation) override;
    void Render(float elapsedS) override;
    void AdjustItem(float direction, bool isInitialPress) override;
+
+   // New VR menu: opens its keyboard on the search field (as clicking it does)
+   void OpenSearchKeyboard();
 
 private:
    void BuildPage() override;
@@ -61,14 +66,19 @@ private:
    bool m_thumbnailLoadedThisFrame = false;
 
    void SetTab(int tab);
+   void StepTab(int direction);
    void SetPage(int page, const string& pagerItem);
    void SetSearch(const string& search);
    void RenderTabs();
+   void RenderTabsNewView();
+   void RenderSearchNewView();
+   void RenderPagerNewView(const char* item);
    void BuildMenuTab();
    void KeepThumbnails(const ankerl::unordered_dense::set<string>& displayedTables);
    void RenderSearch();
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    void RenderPager(const char* item);
+   const bool m_newView;
    int m_pageCount = 1;
    string m_reselectItem;
    int m_reselectDelay = 0;
