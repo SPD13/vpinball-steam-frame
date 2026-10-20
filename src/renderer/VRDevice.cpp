@@ -691,28 +691,42 @@ void VRDevice::UpdateEyeResolution(const Settings& settings)
 
    // Let the user choose the down/super sampling
    const float resFactor = settings.GetPlayerVR_ResFactor();
-   if (resFactor <= 0.1f || resFactor > 10.f)
-   {
-      m_eyeWidth = m_viewConfigurationViews[0].recommendedImageRectWidth;
-      m_eyeHeight = m_viewConfigurationViews[0].recommendedImageRectHeight;
-   }
-   else
-   {
-      m_eyeWidth = static_cast<unsigned int>((float)m_viewConfigurationViews[0].recommendedImageRectWidth * resFactor);
-      m_eyeHeight = static_cast<unsigned int>((float)m_viewConfigurationViews[0].recommendedImageRectHeight * resFactor);
-   }
+   m_resolutionFactor = (resFactor <= 0.1f || resFactor > 10.f) ? 1.f : resFactor;
+   if (!ComputeEyeResolution(m_resolutionFactor, m_eyeWidth, m_eyeHeight))
+      PLOGI << "Requested resolution exceeds OpenXR swapchain limits, defaulting to headset recommended resolution";
+
+   PLOGI << "Selected resolution: " << m_eyeWidth << 'x' << m_eyeHeight;
+}
+
+bool VRDevice::ComputeEyeResolution(float factor, unsigned int& width, unsigned int& height) const
+{
+   width = static_cast<unsigned int>((float)m_viewConfigurationViews[0].recommendedImageRectWidth * factor);
+   height = static_cast<unsigned int>((float)m_viewConfigurationViews[0].recommendedImageRectHeight * factor);
 
    // Limit to OpenXR declared limits
    const uint32_t maxWidth = std::min(m_viewConfigurationViews[0].maxImageRectWidth, m_systemProperties.graphicsProperties.maxSwapchainImageWidth);
    const uint32_t maxHeight = std::min(m_viewConfigurationViews[0].maxImageRectHeight, m_systemProperties.graphicsProperties.maxSwapchainImageHeight);
-   if (m_eyeWidth == 0 || m_eyeHeight == 0 || m_eyeWidth > maxWidth || m_eyeHeight > maxHeight)
+   if (width == 0 || height == 0 || width > maxWidth || height > maxHeight)
    {
-      PLOGI << "Requested resolution exceeds OpenXR swapchain limits, defaulting to headset recommended resolution";
-      m_eyeWidth = m_viewConfigurationViews[0].recommendedImageRectWidth;
-      m_eyeHeight = m_viewConfigurationViews[0].recommendedImageRectHeight;
+      width = m_viewConfigurationViews[0].recommendedImageRectWidth;
+      height = m_viewConfigurationViews[0].recommendedImageRectHeight;
+      return false;
    }
+   return true;
+}
 
-   PLOGI << "Selected resolution: " << m_eyeWidth << 'x' << m_eyeHeight;
+string VRDevice::GetResolutionStatus() const
+{
+   if (!IsOpenXRHMDReady() || m_viewConfigurationViews.empty())
+      return "no headset"s;
+   string status = std::format("{}x{} per eye (headset recommended {}x{})", m_eyeWidth, m_eyeHeight, m_viewConfigurationViews[0].recommendedImageRectWidth,
+      m_viewConfigurationViews[0].recommendedImageRectHeight);
+   unsigned int width, height;
+   if (!ComputeEyeResolution(m_resolutionFactor, width, height))
+      status += ", over the headset's limits: the next table will use the recommended size"s;
+   else if (width != m_eyeWidth || height != m_eyeHeight)
+      status += std::format(", next table {}x{}", width, height);
+   return status;
 }
 
 void VRDevice::SetDisplayRefreshRateMode(int mode)
