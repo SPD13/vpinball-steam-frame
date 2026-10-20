@@ -338,7 +338,7 @@ In the order they came, with the dead ends, since each one cost a build-and-run 
 
 ## 12. How to reproduce the measurements
 
-On the device, from ssh (`cd ~/devkit-game/vpx_frame`), with the table's path in `TABLE` and `ResFactor = 0.2637` in `~/.local/share/VPinballX/10.8/VPinballX.ini`:
+On the device, from ssh (`cd ~/devkit-game/vpx_frame`), with the table's path in `TABLE` and `ResFactor = 0.2637` (`1.25` since the upstream sync of 2026-10-18, which made it relative to the recommended size) in `~/.local/share/VPinballX/10.8/VPinballX.ini`:
 
 ```
 # frame time only (no profiler), the status line every 5 s in the output (VPX_XR_METRICS enables the runtime's counter)
