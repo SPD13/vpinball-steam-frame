@@ -973,6 +973,11 @@ void InputManager::CreateInputActions()
          { // Toggle stereo on/off
             m_player->m_renderer->m_stereo3Denabled = !m_player->m_renderer->m_stereo3Denabled;
          }
+#if defined(VPX_STEAM_FRAME_HEADSET)
+         else if (m_player->m_renderer->m_stereo3D == STEREO_VR)
+         { // The Steam Frame has no desktop display to switch (forced off, see Renderer::Renderer)
+         }
+#endif
          else if (m_player->m_renderer->m_stereo3D == STEREO_VR)
          { // Toggle desktop display mode
             m_player->m_renderer->m_vrDesktop = static_cast<VRDesktopMode>((static_cast<int>(m_player->m_renderer->m_vrDesktop) + 1) % (static_cast<int>(VRDesktopMode::Both) + 1));
