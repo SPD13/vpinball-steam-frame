@@ -1412,6 +1412,7 @@ PropBool(Standalone, TablePickerSortAscending, "Table picker sort order"s, "Sort
 PropEnum(Standalone, TableImageFocus, "Table image focus"s, "What the images of the tables captured in VR show: the backglass, the playfield seen from above, or the whole cabinet"s, int, 0, "Backglass"s, "Table"s, "Cabinet"s);
 PropBool(Standalone, WebServerAlwaysOn, "Wi-Fi upload always on"s, "Start the web server of the table picker with the application, instead of only when it is turned on from the menu"s, false);
 PropBool(Standalone, WebServerPairing, "Wi-Fi upload pairing code"s, "Ask the browsers for the code displayed by the application before giving them access to the tables folder. When disabled, any device on the local network can add, change or delete tables."s, true);
+PropBool(Standalone, NewVRUI, "New VR menu"s, "Use the new VR menu (one menu with icons on the left) instead of the classic one. The VPX_VRUI environment variable (new or classic) overrides it."s, false);
 #endif
 PropFloat(Standalone, VRMenuDistance, "VR menu distance"s, "Distance in meters between the player and the menu window in VR"s, 0.3f, 3.f, 0.8f);
 
