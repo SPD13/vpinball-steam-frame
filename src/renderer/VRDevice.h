@@ -259,6 +259,12 @@ public:
    float GetDynamicRenderScale() const { return m_tableCaptureView != TableCaptureView::None ? 1.f : m_dynamicRenderScale.load(); }
    // One line for the settings page: "not supported", "off", or the current size, scale, GPU time and budget
    string GetDynamicResolutionStatus() const;
+   // Rendering resolution, as a factor of the runtime's recommended size (Settings PlayerVR/ResFactor, 1 when not set). The swapchains are
+   // created with the session, so a change is used by the next table played
+   float GetResolutionFactor() const { return m_resolutionFactor; }
+   void SetResolutionFactor(float factor) { m_resolutionFactor = factor; }
+   // One line for the settings page: the size of the current table and, when it differs, the size the next table will use
+   string GetResolutionStatus() const;
    bool IsOpenXRReady() const { return m_xrInstance != XR_NULL_HANDLE; }
    void SetupHMD();
    bool IsOpenXRHMDReady() const { return m_systemID != XR_NULL_SYSTEM_ID; }
@@ -361,6 +367,8 @@ private:
    void EndSession();
    void DrainEvents();
    void UpdateEyeResolution(const Settings& settings);
+   bool ComputeEyeResolution(float factor, unsigned int& width, unsigned int& height) const; // False when over the runtime's limits (then the recommended size)
+   float m_resolutionFactor = 1.f;
 
    std::vector<XrViewConfigurationType> m_applicationViewConfigurations = { XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_MONO };
    std::vector<XrViewConfigurationType> m_viewConfigurations;
