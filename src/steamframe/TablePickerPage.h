@@ -19,6 +19,17 @@ namespace VPX::InGameUI
 // ('withDone' adds this key).
 bool RenderVirtualKeyboard(string& text, size_t maxLength, bool capitalizeWords, bool withDone);
 
+// Items of the MENU tab of the table picker, also shown by the screens of the new VR menu (src/steamframe/vrui/)
+void AddLibraryItems(InGameUIPage& page); // View, image focus, menu distance, sort, rescan, tables folder
+void AddMenuDistanceItem(InGameUIPage& page); // VR only
+void AddLobbyRoomItems(InGameUIPage& page); // Launcher mode only
+void AddQuitItem(InGameUIPage& page);
+#ifdef VPX_TABLE_WEBSERVER
+void AddWebServerItems(InGameUIPage& page); // Wi-Fi upload
+bool HaveWebServerItemsChanged(); // Address or pairing code changed since the items were added: they must be rebuilt
+bool AdjustWebServerItem(const InGameUIItem& item); // Left/Right on an item of AddWebServerItems: true if handled
+#endif
+
 // Lists the tables of the application's table library, to switch table without leaving the player
 class TablePickerPage final : public InGameUIPage
 {
@@ -58,7 +69,6 @@ private:
    void RenderSearch();
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    void RenderPager(const char* item);
-   void RenderPairing();
    int m_pageCount = 1;
    string m_reselectItem;
    int m_reselectDelay = 0;
@@ -66,8 +76,6 @@ private:
    uint64_t m_revision = 0;
    uint64_t m_scoresRevision = 0; // Of the profiles and scores, shown by the player item and the Scores tab
    bool m_scanning = false;
-   string m_webServerUrl;
-   string m_pairingCode;
 };
 
 // Text entry with the 4 navigation buttons, like the initials of an arcade high score: left/right select a character, which is then added.
