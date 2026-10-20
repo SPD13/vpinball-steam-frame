@@ -3,12 +3,14 @@
 #include "core/stdafx.h"
 #include "SelfTest.h"
 
+#include "Keyboard.h"
 #include "MainMenuPage.h"
 #include "Shell.h"
 
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/TableLibrary.h"
+#include "steamframe/TablePickerPage.h"
 #include "ui/live/LiveUI.h"
 
 namespace VPX::VRUI::SelfTest
@@ -153,6 +155,17 @@ void Update(InGameUIPage& page)
       case 5: ui.OnUIDownAction(); break;
       case 6: Capture(player, "dpad-rail-down"s, Step::DPad); break;
       case 7: ui.OnUIRightAction(); break;
+      // Search of the Tables screen, typed with the keyboard of the menu
+      case 8: menu->SetScreen(Screen::Tables); break;
+      case 9:
+         if (auto* picker = dynamic_cast<TablePickerPage*>(menu->GetContent()); picker && Keyboard::IsUsed())
+         {
+            picker->OpenSearchKeyboard();
+            Keyboard::TypeForTest("po"s);
+         }
+         break;
+      case 10: Capture(player, "keyboard-search"s, Step::DPad); break;
+      case 11: Keyboard::Close(); break;
       default: g_step = Step::SubPage; break;
       }
       break;

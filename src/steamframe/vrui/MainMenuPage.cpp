@@ -46,11 +46,21 @@ void MainMenuPage::SetScreen(Screen screen)
 {
    if (!IsScreenAvailable(screen) || screen == m_screen)
       return;
+   // Pages are opened while shown, and closed when hidden, as when navigating between them: some change the renderer while they are opened
+   // (and restore it when closed), and they get the current values when opened again
+   if (auto& content = m_contents[static_cast<int>(m_screen)]; content)
+      content->Close(false);
    m_screen = screen;
    s_lastScreen = screen;
-   // A page kept from a previous visit of the screen shows the current values
    if (auto& content = m_contents[static_cast<int>(screen)]; content)
-      content->RequestRebuild();
+      content->Open(false);
+}
+
+void MainMenuPage::Close(bool isBackwardAnimation)
+{
+   InGameUIPage::Close(isBackwardAnimation);
+   if (auto& content = m_contents[static_cast<int>(m_screen)]; content && content->IsActive())
+      content->Close(isBackwardAnimation);
 }
 
 void MainMenuPage::StepScreen(int direction)
