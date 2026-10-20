@@ -1,0 +1,466 @@
+// license:GPLv3+
+
+#include "core/stdafx.h"
+#include "Shell.h"
+
+#include "Keyboard.h"
+#include "MainMenuPage.h"
+#include "PageView.h"
+#include "SelfTest.h"
+#include "Theme.h"
+#include "UpdateCheck.h"
+#include "Widgets.h"
+
+#include "fonts/IconsForkAwesome.h"
+#include "imgui/imgui_internal.h"
+#include "renderer/Renderer.h"
+#include "steamframe/Launcher.h"
+#include "ui/live/LiveUI.h"
+#include "ui/live/ingameui/LoadingPage.h"
+#ifdef VPX_TABLE_WEBSERVER
+#include "lib/src/WebServer.h"
+#endif
+
+namespace VPX::InGameUI
+{
+
+// Friend of InGameUI (see InGameUI.h): the menu goes to a screen with a fresh navigation history
+class VRUINavigation final
+{
+public:
+   static void ResetHistory(InGameUI& ui, const string& path) { ui.m_navigationHistory.assign(1, path); }
+};
+
+}
+
+namespace VPX::VRUI::Shell
+{
+
+using namespace VPX::InGameUI;
+
+namespace
+{
+   bool g_embedding = false; // The shell is drawing the content of a screen of the main menu
+   bool g_showSelection = true;
+   const std::function<bool(int)>* g_sectionFilter = nullptr; // Section of a composed screen being drawn
+   ImVec2 g_menuPos, g_menuSize;
+   const InGameUIItem* g_embeddedHovered = nullptr;
+   int g_lastShownFrame = -10;
+   // The content region is the same ImGui window for every page and screen, so its scroll must not carry over from one to the next (from
+   // the table list to the page of a table, whose leaderboard can make it scroll that far): each one opens at its top
+   string g_contentKey;
+
+   // Draws the title, cut to fit
+   void Title(const char* text, const ImVec2& pos, float maxWidth, float height)
+   {
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kTitleSize));
+      ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f));
+      Widgets::TextEllipsis(text, maxWidth, Theme::kText);
+      ImGui::PopFont();
+   }
+
+   // Where the menu was, while an update is installed: its progress, then the message that ends it, whose OK quits the application (the
+   // new version runs from the next start). Returns whether the pointer is over it.
+   bool RenderUpdateModal(Player& player, const ImVec2& menuPos, const ImVec2& menuSize, const UpdateCheck::InstallStatus& update)
+   {
+      const bool done = update.phase == UpdateCheck::InstallPhase::Done;
+      const string version = UpdateCheck::GetLatestVersion();
+      const char* const title = done ? "Update installed" : "Update in progress...";
+      const string text = done ? "Visual Pinball was updated to version " + version + ". It will now exit: start it again from the Steam library."
+         : update.phase == UpdateCheck::InstallPhase::Downloading ? std::format("Downloading version {}: {}%", version, static_cast<int>(update.progress * 100.f))
+         : "Installing version " + version + "...";
+      const float pad = Theme::Px(Theme::kPadding);
+      const float boxPad = Theme::Px(1.6f);
+      const float pillHeight = Theme::Px(Theme::kPillHeight);
+      const float barHeight = Theme::Px(0.6f);
+      const float rounding = Theme::Px(Theme::kRounding) * 1.6f;
+      const float boxWidth = floorf(menuSize.x * 0.5f);
+      const float textWidth = boxWidth - 2.f * boxPad;
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kTitleSize));
+      const float titleHeight = ImGui::GetTextLineHeight();
+      ImGui::PopFont();
+      const float textHeight = ImGui::CalcTextSize(text.c_str(), nullptr, false, textWidth).y;
+      const ImVec2 boxSize(boxWidth, floorf(2.f * boxPad + titleHeight + pad + textHeight + pad + (done ? pillHeight : barHeight)));
+      const ImVec2 boxPos(floorf(menuPos.x + (menuSize.x - boxSize.x) * 0.5f), floorf(menuPos.y + (menuSize.y - boxSize.y) * 0.5f));
+      ImGui::SetNextWindowPos(boxPos);
+      ImGui::SetNextWindowSize(boxSize);
+      ImGui::Begin("##VRUIUpdate", nullptr,
+         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+      Theme::ApplyPixelDensity();
+      ImDrawList* const drawList = ImGui::GetWindowDrawList();
+      drawList->AddRectFilled(boxPos, boxPos + boxSize, Theme::kPanelBg | IM_COL32_A_MASK, rounding);
+      drawList->AddRect(boxPos, boxPos + boxSize, Theme::kDivider, rounding, ImDrawFlags_None, Theme::Px(0.1f));
+      const float x = boxPos.x + boxPad;
+      float y = boxPos.y + boxPad;
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kTitleSize));
+      drawList->AddText(ImVec2(x, y), Theme::kText, title);
+      ImGui::PopFont();
+      y += titleHeight + pad;
+      ImGui::SetCursorScreenPos(ImVec2(x, y));
+      Widgets::WrappedText(text.c_str(), Theme::kText, textWidth);
+      y += textHeight + pad;
+      if (done)
+      {
+         const float okWidth = Widgets::PillWidth(ICON_FK_CHECK, "OK", pillHeight);
+         ImGui::SetCursorScreenPos(ImVec2(x + textWidth - okWidth, y));
+         if (Widgets::Pill("##updateok", ICON_FK_CHECK, "OK", pillHeight, true, false, true))
+         {
+            g_launcher->m_launcherMode = false;
+            player.SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+         }
+      }
+      else
+      {
+         const float fraction = update.phase == UpdateCheck::InstallPhase::Downloading ? update.progress : 1.f;
+         drawList->AddRectFilled(ImVec2(x, y), ImVec2(x + textWidth, y + barHeight), Theme::kTrack, barHeight * 0.5f);
+         if (fraction > 0.f)
+            drawList->AddRectFilled(ImVec2(x, y), ImVec2(x + max(barHeight, textWidth * fraction), y + barHeight), Theme::kAccent, barHeight * 0.5f);
+      }
+      const bool hovered = ImGui::IsWindowHovered();
+      ImGui::End();
+      return hovered;
+   }
+}
+
+bool IsMainMenu(const InGameUIPage& page) { return dynamic_cast<const MainMenuPage*>(&page) != nullptr; }
+
+void RenderSection(InGameUIPage& page, const std::function<bool(int)>& filter, float elapsedS)
+{
+   assert(g_embedding && g_sectionFilter == nullptr);
+   g_sectionFilter = &filter;
+   page.Render(elapsedS);
+   g_sectionFilter = nullptr;
+}
+
+bool WasShownLastFrame() { return ImGui::GetCurrentContext() != nullptr && ImGui::GetFrameCount() - g_lastShownFrame <= 1; }
+
+void NavigateWithFreshHistory(VPX::InGameUI::InGameUI& ui, const string& path)
+{
+   ui.Navigate(path);
+   VRUINavigation::ResetHistory(ui, path);
+}
+
+bool RenderPage(InGameUIPage& page, float elapsedS)
+{
+   // Content of a screen of the main menu: only its items, in the content region of the menu
+   if (g_embedding)
+   {
+      if (g_sectionFilter)
+      {
+         // Its actions are the ones of the composed screen
+         if (const InGameUIItem* hovered = InGameUIPageView::RenderContent(page, g_showSelection, g_sectionFilter); hovered)
+            g_embeddedHovered = hovered;
+         InGameUIPageView::SetWindowOutputs(page, g_menuPos, g_menuSize, ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
+         return true;
+      }
+      InGameUIPageView::SyncCoreItems(page, false);
+      g_embeddedHovered = InGameUIPageView::RenderContent(page, g_showSelection);
+      // The pages which draw more windows (plots, previews) place them around the menu, as around their window in upstream's view
+      InGameUIPageView::SetWindowOutputs(page, g_menuPos, g_menuSize, ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
+      return true;
+   }
+
+   // The loading page is the root of the navigation while a table loads: it keeps upstream's view (no menu to navigate)
+   if (dynamic_cast<const LoadingPage*>(&page) != nullptr)
+      return false;
+
+   // Pages being closed (sliding out in upstream's view) are not drawn
+   Player* const player = page.m_player;
+   VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
+   if (ui.GetActivePage() != &page || !page.IsActive())
+      return true;
+   const auto renderStart = std::chrono::steady_clock::now();
+   UpdateCheck::Start();
+
+   // A keyboard left opened by a previous menu
+   if (!WasShownLastFrame())
+      Keyboard::Close();
+
+   MainMenuPage* const menu = dynamic_cast<MainMenuPage*>(&page);
+   InGameUIPage* const content = menu ? menu->GetContent() : &page;
+   const bool flipperNav = ui.IsFlipperNav();
+
+   Theme::BeginFrame();
+   ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kTextSize));
+   Theme::PushStyle();
+
+   const ImGuiIO& io = ImGui::GetIO();
+   const ImVec2 size(Theme::Px(Theme::kMenuWidth), Theme::Px(Theme::kMenuHeight));
+   const ImVec2 pos(floorf((io.DisplaySize.x - size.x) * 0.5f), floorf((io.DisplaySize.y - size.y) * 0.5f));
+   const float pad = Theme::Px(Theme::kPadding);
+   const float rounding = Theme::Px(Theme::kRounding) * 1.6f;
+   const float railWidth = Theme::Px(Theme::kRailWidth);
+   g_menuPos = pos;
+   g_menuSize = size;
+
+   // While an update is installed, nothing else than its progress is shown, and the buttons are blocked (see UpdateCheck::IsInstalling)
+   if (const UpdateCheck::InstallStatus update = UpdateCheck::GetInstallStatus(); UpdateCheck::IsInstalling())
+   {
+      if (Keyboard::IsOpen())
+         Keyboard::Close();
+      InGameUIPageView::SetWindowOutputs(page, pos, size, RenderUpdateModal(*player, pos, size, update));
+      Theme::PopStyle();
+      ImGui::PopFont();
+      g_lastShownFrame = ImGui::GetFrameCount();
+      return true;
+   }
+
+   ImGui::SetNextWindowPos(pos);
+   ImGui::SetNextWindowSize(size);
+   ImGui::Begin("##VRUIMenu", nullptr,
+      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+   Theme::ApplyPixelDensity();
+   ImDrawList* const drawList = ImGui::GetWindowDrawList();
+   // Opaque when the passthrough color key is used, as it keys the colors of the UI too
+   const ImU32 panelBg = player->m_renderer->m_vrApplyColorKey ? (Theme::kPanelBg | IM_COL32_A_MASK) : Theme::kPanelBg;
+   drawList->AddRectFilled(pos, pos + size, panelBg, rounding);
+   drawList->AddRectFilled(pos, ImVec2(pos.x + railWidth, pos.y + size.y), Theme::kRailBg, rounding, ImDrawFlags_RoundCornersLeft);
+
+   // Rail: one icon button per screen, centered vertically, the name of the screen in a bubble when hovered or focused
+   {
+      const Screen current = menu ? menu->GetScreen() : MainMenuPage::GetLastScreen();
+      const float gap = Theme::Px(Theme::kRailGap);
+      int count = 0;
+      for (int i = 0; i < kScreenCount; i++)
+         count += IsScreenAvailable(static_cast<Screen>(i)) ? 1 : 0;
+      const float button = min(Theme::Px(Theme::kRailButton),
+         floorf((size.y - 2.f * Theme::Px(Theme::kRailMargin) - static_cast<float>(count - 1) * gap) / static_cast<float>(count)));
+      float y = pos.y + (size.y - static_cast<float>(count) * (button + gap) + gap) * 0.5f;
+      const float x = pos.x + (railWidth - button) * 0.5f;
+      for (int i = 0; i < kScreenCount; i++)
+      {
+         const Screen screen = static_cast<Screen>(i);
+         if (!IsScreenAvailable(screen))
+            continue;
+         ImGui::SetCursorScreenPos(ImVec2(x, y));
+         bool hovered = false;
+         const bool focused = menu && menu->IsRailFocused() && flipperNav && screen == current;
+         ImGui::PushID(i);
+         if (Widgets::RailButton("##rail", GetScreenIcon(screen), ImVec2(button, button), screen == current, focused, hovered))
+         {
+            if (menu)
+               menu->SetScreen(screen);
+            else
+            {
+               // From a sub-page, the menu opens on the screen as the root of the navigation
+               MainMenuPage::SetLastScreen(screen);
+               NavigateWithFreshHistory(ui, "homepage"s);
+            }
+         }
+         ImGui::PopID();
+         if (hovered || focused)
+         {
+            ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kSmallTextSize));
+            Widgets::Bubble(ImVec2(x + button + gap * 2.f, y + button * 0.5f), GetScreenName(screen));
+            ImGui::PopFont();
+         }
+         y += button + gap;
+      }
+   }
+
+   // Header: Back (sub-pages), title, Close
+   const float contentX = pos.x + railWidth + pad;
+   const float contentWidth = size.x - railWidth - 2.f * pad;
+   const float headerHeight = Theme::Px(Theme::kHeaderHeight);
+   const float pillHeight = Theme::Px(Theme::kPillHeight);
+   {
+      const float y = pos.y + Theme::Px(0.5f);
+      const float pillY = y + (headerHeight - pillHeight) * 0.5f;
+      float titleX = contentX;
+      if (!menu && !player->m_isLoading)
+      {
+         ImGui::SetCursorScreenPos(ImVec2(contentX, pillY));
+         if (Widgets::Pill("##back", ICON_FK_ARROW_LEFT, "Back", pillHeight, true, InGameUIPageView::IsCoreItemSelected(page, InGameUIItem::Type::Back)))
+            InGameUIPageView::Back(page);
+         titleX += Widgets::PillWidth(ICON_FK_ARROW_LEFT, "Back", pillHeight) + pad;
+      }
+      const bool inTable = !player->m_isLobby && !player->m_isLoading;
+      const char* closeIcon = inTable ? ICON_FK_PLAY : ICON_FK_TIMES;
+      const char* closeLabel = inTable ? "Resume" : "Close";
+      const float closeWidth = Widgets::PillWidth(closeIcon, closeLabel, pillHeight);
+      const string title = menu ? string(GetScreenName(menu->GetScreen())) : InGameUIPageView::GetTitle(page);
+      Title(title.c_str(), ImVec2(titleX, y), contentX + contentWidth - closeWidth - pad - titleX, headerHeight);
+      if (!player->m_isLoading)
+      {
+         ImGui::SetCursorScreenPos(ImVec2(contentX + contentWidth - closeWidth, pillY));
+         if (Widgets::Pill("##close", closeIcon, closeLabel, pillHeight, true, false))
+            ui.Close();
+      }
+   }
+
+   // Content: the items of the page, or of the screen of the menu
+   const float footerHeight = Theme::Px(Theme::kFooterHeight);
+   const ImVec2 contentPos(contentX, pos.y + headerHeight + Theme::Px(0.5f));
+   const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f));
+   const InGameUIItem* hoveredItem = nullptr;
+   ImGui::SetCursorScreenPos(contentPos);
+   const string contentKey = menu ? "screen/" + std::to_string(static_cast<int>(menu->GetScreen())) : std::format("page/{}", static_cast<const void*>(&page));
+   if (contentKey != g_contentKey)
+   {
+      ImGui::SetNextWindowScroll(ImVec2(-1.f, 0.f));
+      g_contentKey = contentKey;
+   }
+   Widgets::BeginRegion("##content", contentSize, true);
+   if (content)
+   {
+      if (menu)
+      {
+         g_embedding = true;
+         g_showSelection = !menu->IsRailFocused();
+         g_embeddedHovered = nullptr;
+         content->Render(elapsedS);
+         g_embedding = false;
+         hoveredItem = g_embeddedHovered;
+      }
+      else
+      {
+         InGameUIPageView::SyncCoreItems(page, true);
+         hoveredItem = InGameUIPageView::RenderContent(page, true);
+      }
+   }
+   const bool contentHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+   Widgets::EndRegion();
+
+   // Footer: description of the hovered item (or of the page), and the Defaults/Undo/Save buttons of the page
+   {
+      const float y = pos.y + size.y - footerHeight;
+      drawList->AddLine(ImVec2(contentX, y), ImVec2(contentX + contentWidth, y), Theme::kDivider, Theme::Px(0.08f));
+      const char* actionTooltip = nullptr;
+      float actionsLeft = contentX + contentWidth;
+      if (content)
+      {
+         ImGui::SetCursorScreenPos(ImVec2(contentX, y + (footerHeight - pillHeight) * 0.5f));
+         actionTooltip = InGameUIPageView::RenderActions(*content, contentX + contentWidth, pillHeight, actionsLeft);
+      }
+      const char* text = actionTooltip ? actionTooltip
+         : (hoveredItem && !hoveredItem->m_tooltip.empty()) ? hoveredItem->m_tooltip.c_str()
+         : content ? InGameUIPageView::GetInfo(*content).c_str() : "";
+      ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kSmallTextSize));
+      const float textWidth = actionsLeft - contentX - pad;
+      ImGui::PushClipRect(ImVec2(contentX, y), ImVec2(contentX + textWidth, y + footerHeight), true);
+      ImGui::SetCursorScreenPos(ImVec2(contentX, y + Theme::Px(0.5f)));
+      Widgets::WrappedText(text, Theme::kTextMuted, textWidth);
+      ImGui::PopClipRect();
+      ImGui::PopFont();
+   }
+
+   InGameUIPageView::SetWindowOutputs(page, pos, size, contentHovered || ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
+   ImGui::End();
+
+   // Keyboard, just below the edited field, over the rest of the menu (it stays on top, opaque), until Done closes it. It stays on the
+   // display when the field is near its bottom, or scrolled out of the content.
+   float belowMenuY = pos.y + size.y;
+   if (Keyboard::IsOpen())
+   {
+      const float gap = Theme::Px(0.4f);
+      const float keyboardPad = Theme::Px(0.8f);
+      const ImVec2 keyboardSize(contentWidth + 2.f * keyboardPad, Keyboard::GetHeight(contentWidth) + 2.f * keyboardPad);
+      const float keyboardY = max(contentPos.y, min(Keyboard::GetFieldBottom() + gap, io.DisplaySize.y - keyboardSize.y));
+      const ImVec2 keyboardPos(contentX - keyboardPad, keyboardY);
+      ImGui::SetNextWindowPos(keyboardPos);
+      ImGui::SetNextWindowSize(keyboardSize);
+      ImGui::Begin("##VRUIKeyboard", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+      ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // Over the menu, even after the menu was clicked
+      Theme::ApplyPixelDensity();
+      ImDrawList* const keyboardDrawList = ImGui::GetWindowDrawList();
+      keyboardDrawList->AddRectFilled(keyboardPos, keyboardPos + keyboardSize, Theme::kPanelBg | IM_COL32_A_MASK, rounding);
+      keyboardDrawList->AddRect(keyboardPos, keyboardPos + keyboardSize, Theme::kDivider, rounding, ImDrawFlags_None, Theme::Px(0.1f));
+      Keyboard::Render(keyboardPos + ImVec2(keyboardPad, keyboardPad), contentWidth);
+      ImGui::End();
+      belowMenuY = max(belowMenuY, keyboardPos.y + keyboardSize.y);
+   }
+   Keyboard::EndFrame();
+
+   // Yellow badge above the menu when a newer release is published. On the Frame, a click on it downloads and installs the release, the
+   // menu being replaced by the progress (see above and UpdateCheck.h); after a failure, the badge gives its reason and installs again.
+   // Elsewhere, the release is installed with the installer app, from a computer.
+   if (UpdateCheck::IsUpdateAvailable())
+   {
+      const UpdateCheck::InstallStatus update = UpdateCheck::GetInstallStatus();
+      const bool clickable = UpdateCheck::CanInstall();
+      const string label = !clickable ? "Update Available - Use the installer"s
+         : update.phase == UpdateCheck::InstallPhase::Failed ? "Update failed: " + update.message + " - Click to retry"
+         : "New version available, Click here to install"s;
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kSmallTextSize));
+      const float badgeHeight = Theme::Px(Theme::kBadgeHeight);
+      const float badgePad = badgeHeight * 0.45f;
+      // The icons are only merged in the regular font
+      ImFont* const iconFont = Theme::Font();
+      const float fontSize = ImGui::GetFontSize();
+      const float iconWidth = iconFont->CalcTextSizeA(fontSize, FLT_MAX, 0.f, ICON_FK_ARROW_CIRCLE_UP).x + badgeHeight * 0.25f;
+      const ImVec2 badgeSize(floorf(2.f * badgePad + iconWidth + ImGui::CalcTextSize(label.c_str()).x), badgeHeight);
+      const ImVec2 badgePos(floorf(pos.x + (size.x - badgeSize.x) * 0.5f), pos.y - Theme::Px(Theme::kBadgeGap) - badgeHeight);
+      ImGui::SetNextWindowPos(badgePos);
+      ImGui::SetNextWindowSize(badgeSize);
+      ImGui::Begin("##VRUIUpdateBadge", nullptr,
+         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | (clickable ? 0 : ImGuiWindowFlags_NoInputs));
+      Theme::ApplyPixelDensity();
+      ImGui::SetCursorScreenPos(badgePos);
+      if (ImGui::InvisibleButton("##update", badgeSize) && clickable)
+         UpdateCheck::StartInstall();
+      const bool hovered = clickable && ImGui::IsItemHovered();
+      ImDrawList* const badgeDrawList = ImGui::GetWindowDrawList();
+      badgeDrawList->AddRectFilled(badgePos, badgePos + badgeSize, hovered ? Theme::kWarningHover : Theme::kWarning, badgeHeight * 0.5f);
+      const float textY = badgePos.y + (badgeHeight - ImGui::GetTextLineHeight()) * 0.5f;
+      badgeDrawList->AddText(iconFont, fontSize, ImVec2(badgePos.x + badgePad, textY), Theme::kOnWarning, ICON_FK_ARROW_CIRCLE_UP);
+      badgeDrawList->AddText(ImVec2(badgePos.x + badgePad + iconWidth, textY), Theme::kOnWarning, label.c_str());
+      ImGui::End();
+      ImGui::PopFont();
+   }
+
+#ifdef VPX_TABLE_WEBSERVER
+   // Badge below the menu (and the keyboard): address and pairing code of the Wi-Fi upload, or that it is off. It opens the Wi-Fi screen.
+   if (!player->m_isLoading)
+   {
+      WebServer& webServer = g_launcher->GetWebServer();
+      string label;
+      if (!webServer.IsRunning())
+         label = "Wi-Fi server off"s;
+      else
+      {
+         const string url = webServer.GetUrl();
+         label = "Wi-Fi: " + (url.empty() ? "no network address"s : url);
+         if (webServer.IsPairingRequired())
+            label += "   Code: " + webServer.GetPairingCode();
+      }
+      ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kSmallTextSize));
+      const float badgeHeight = Theme::Px(Theme::kBadgeHeight);
+      const ImVec2 badgeSize(Widgets::PillWidth(ICON_FK_WIFI, label.c_str(), badgeHeight), badgeHeight);
+      const ImVec2 badgePos(floorf(pos.x + (size.x - badgeSize.x) * 0.5f), belowMenuY + Theme::Px(Theme::kBadgeGap));
+      ImGui::SetNextWindowPos(badgePos);
+      ImGui::SetNextWindowSize(badgeSize);
+      ImGui::Begin("##VRUIWiFiBadge", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+      Theme::ApplyPixelDensity();
+      ImGui::GetWindowDrawList()->AddRectFilled(badgePos, badgePos + badgeSize, panelBg, badgeHeight * 0.5f);
+      ImGui::SetCursorScreenPos(badgePos);
+      if (Widgets::Pill("##wifi", ICON_FK_WIFI, label.c_str(), badgeHeight, true, false))
+      {
+         if (menu)
+            menu->SetScreen(Screen::WiFi);
+         else
+         {
+            MainMenuPage::SetLastScreen(Screen::WiFi);
+            NavigateWithFreshHistory(ui, "homepage"s);
+         }
+      }
+      ImGui::End();
+      ImGui::PopFont();
+   }
+#endif
+
+   // Popups of the page (input mapping), with the padding of a window (the menu has none)
+   if (content)
+   {
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Theme::Px(1.2f), Theme::Px(1.f)));
+      InGameUIPageView::RenderPopups(*content);
+      ImGui::PopStyleVar();
+   }
+   Theme::PopStyle();
+   ImGui::PopFont();
+
+   g_lastShownFrame = ImGui::GetFrameCount();
+   SelfTest::Update(page, std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - renderStart).count());
+   return true;
+}
+
+}
