@@ -315,7 +315,13 @@ void Renderer::ApplyTableSettings()
    m_disableAO = m_table->GetSettings().GetPlayer_DisableAO();
    for (int wnd = VPXWindowId::VPXWINDOW_Backglass; wnd <= VPXWindowId::VPXWINDOW_Topper; wnd++)
       m_ancillaryWndRotation[wnd] = 90 * clamp(m_table->GetSettings().GetWindow_Rotation(wnd), 0, 3); // Setting is an index in the 0 / 90 / 180 / 270 literals
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   // The Steam Frame's desktop window is never seen, and rendering the scene for it costs 4.5 to 6.6 ms per frame on a heavy table
+   // (docs/Performance on the Steam Frame.md): the setting is ignored and not offered in the VR settings page
+   m_vrDesktop = VRDesktopMode::Disabled;
+#else
    m_vrDesktop = static_cast<VRDesktopMode>(m_table->GetSettings().GetPlayerVR_DesktopDisplay());
+#endif
    m_vrDesktopShrink = m_table->GetSettings().GetPlayerVR_ShrinkDesktopDisplay();
    m_FXAA = m_table->GetSettings().GetPlayer_FXAA();
    m_sharpen = m_table->GetSettings().GetPlayer_Sharpen();
