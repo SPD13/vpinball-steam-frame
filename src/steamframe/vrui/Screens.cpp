@@ -227,7 +227,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
 {
    switch (screen)
    {
-   case Screen::Tables: return std::make_unique<TablePickerPage>();
+   case Screen::Tables: return std::make_unique<TablePickerPage>(true);
    case Screen::ThisTable: return std::make_unique<ThisTablePage>();
    case Screen::Scores: return std::make_unique<ScoresScreenPage>();
    case Screen::Room:

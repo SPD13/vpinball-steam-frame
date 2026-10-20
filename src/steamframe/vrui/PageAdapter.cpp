@@ -12,6 +12,7 @@
 #include "core/stdafx.h"
 #include "PageView.h"
 
+#include "Keyboard.h"
 #include "Shell.h"
 #include "Theme.h"
 #include "VRUI.h"
@@ -27,6 +28,7 @@ namespace VPX::InGameUI
 {
 
 using VPX::Properties::PropertyDef;
+namespace Keyboard = VPX::VRUI::Keyboard;
 namespace Theme = VPX::VRUI::Theme;
 namespace Widgets = VPX::VRUI::Widgets;
 
@@ -101,6 +103,15 @@ void InGameUIPageView::SetWindowOutputs(InGameUIPage& page, const ImVec2& pos, c
 void InGameUIPageView::RenderPopups(InGameUIPage& page) { page.RenderInputActionPopup(); }
 
 void InGameUIPageView::Back(InGameUIPage& page) { page.m_player->m_liveUI->m_inGameUI.NavigateBack(); }
+
+// The item of a page for a property, looked up again each time as the page may have been rebuilt
+static InGameUIItem* FindPropertyItem(const vector<std::unique_ptr<InGameUIItem>>& items, const string& groupId, const string& propId)
+{
+   for (const auto& item : items)
+      if (item->m_type == InGameUIItem::Type::Property && item->m_property->m_groupId == groupId && item->m_property->m_propId == propId)
+         return item.get();
+   return nullptr;
+}
 
 // Marker of a property: modified (to be saved), or overridden by the table
 static void RenderPropertyMarker(const InGameUIItem& item, const ImVec2& pos, float rowHeight)
@@ -492,7 +503,36 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          {
             auto prop = dynamic_cast<VPX::Properties::StringPropertyDef*>(item->m_property.get());
             string v = item->GetStringValue();
-            if (prop->m_pathType != VPX::Properties::StringPropertyDef::PathType::None)
+            if (prop->m_pathType == VPX::Properties::StringPropertyDef::PathType::None && Keyboard::IsUsed())
+            {
+               // No keyboard in VR: the field opens the keyboard of the menu, which changes the value at each key
+               const string owner = std::format("{}:{}.{}", static_cast<const void*>(&page), prop->m_groupId, prop->m_propId);
+               Keyboard::KeepOpen(owner);
+               const bool editing = Keyboard::IsEditing(owner);
+               const ImVec2 fieldSize(widgetWidth, frameHeight);
+               const bool clicked = ImGui::InvisibleButton("##value", fieldSize);
+               const bool hovered = ImGui::IsItemHovered();
+               const float rounding = Theme::Px(0.45f);
+               drawList->AddRectFilled(widgetPos, widgetPos + fieldSize, hovered ? Theme::kSurfaceHover : Theme::kSurface, rounding);
+               if (editing)
+                  drawList->AddRect(widgetPos, widgetPos + fieldSize, Theme::kAccent, rounding, ImDrawFlags_None, Theme::Px(0.15f));
+               const float iconWidth = ImGui::CalcTextSize(ICON_FK_KEYBOARD_O).x;
+               ImGui::SetCursorScreenPos(ImVec2(widgetPos.x + pad, textY));
+               Widgets::TextEllipsis(v.empty() ? "Type..." : v.c_str(), widgetWidth - 3.f * pad - iconWidth, v.empty() ? Theme::kTextDisabled : Theme::kText);
+               drawList->AddText(ImVec2(widgetPos.x + widgetWidth - pad - iconWidth, textY), editing ? Theme::kAccent : Theme::kTextMuted, ICON_FK_KEYBOARD_O);
+               if (clicked)
+               {
+                  page.m_selectedItem = i;
+                  InGameUIPage* const pagePtr = &page;
+                  Keyboard::Open(owner, prop->m_label, v, 256,
+                     [pagePtr, groupId = prop->m_groupId, propId = prop->m_propId](const string& text)
+                     {
+                        if (InGameUIItem* edited = FindPropertyItem(pagePtr->m_items, groupId, propId); edited)
+                           edited->SetValue(text);
+                     });
+               }
+            }
+            else if (prop->m_pathType != VPX::Properties::StringPropertyDef::PathType::None)
             {
                const bool isFolder = prop->m_pathType == VPX::Properties::StringPropertyDef::PathType::Folder;
                const float buttonWidth = frameHeight * 1.4f;
@@ -507,7 +547,8 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
                ImGui::SetNextItemWidth(widgetWidth);
                ImGui::InputText("##value", &v);
             }
-            item->SetValue(v);
+            if (!Keyboard::IsUsed() || prop->m_pathType != VPX::Properties::StringPropertyDef::PathType::None)
+               item->SetValue(v);
             break;
          }
          }

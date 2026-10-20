@@ -25,6 +25,7 @@ public:
    static Screen GetLastScreen();
    static void SetLastScreen(Screen screen);
 
+   void Close(bool isBackwardAnimation) override;
    void Render(float elapsedS) override;
    void SelectNextItem() override;
    void SelectPrevItem() override;

@@ -3,6 +3,7 @@
 #include "core/stdafx.h"
 #include "Shell.h"
 
+#include "Keyboard.h"
 #include "MainMenuPage.h"
 #include "PageView.h"
 #include "SelfTest.h"
@@ -80,6 +81,10 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
    if (ui.GetActivePage() != &page || !page.IsActive())
       return true;
+
+   // A keyboard left opened by a previous menu
+   if (!WasShownLastFrame())
+      Keyboard::Close();
 
    MainMenuPage* const menu = dynamic_cast<MainMenuPage*>(&page);
    InGameUIPage* const content = menu ? menu->GetContent() : &page;
@@ -181,8 +186,11 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
 
    // Content: the items of the page, or of the screen of the menu
    const float footerHeight = Theme::Px(Theme::kFooterHeight);
+   // The keyboard takes the bottom of the menu on the desktop; in VR, where the panel is much larger than the menu, it stands below it
+   const bool keyboardInside = Keyboard::IsOpen() && !Theme::IsVR();
+   const float keyboardHeight = keyboardInside ? Keyboard::GetHeight(contentWidth) + Theme::Px(0.6f) : 0.f;
    const ImVec2 contentPos(contentX, pos.y + headerHeight + Theme::Px(0.5f));
-   const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f));
+   const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f) - keyboardHeight);
    const InGameUIItem* hoveredItem = nullptr;
    ImGui::SetCursorScreenPos(contentPos);
    Widgets::BeginRegion("##content", contentSize, true);
@@ -205,6 +213,10 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    }
    const bool contentHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
    Widgets::EndRegion();
+
+   // Keyboard, between the content and the footer (desktop)
+   if (keyboardInside)
+      Keyboard::Render(ImVec2(contentX, contentPos.y + contentSize.y + Theme::Px(0.6f)), contentWidth);
 
    // Footer: description of the hovered item (or of the page), and the Defaults/Undo/Save buttons of the page
    {
@@ -231,6 +243,23 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
 
    InGameUIPageView::SetWindowOutputs(page, pos, size, contentHovered || ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
    ImGui::End();
+
+   // Keyboard, below the menu (VR)
+   if (Keyboard::IsOpen() && !keyboardInside)
+   {
+      const float gap = Theme::Px(1.f);
+      const float keyboardPad = Theme::Px(0.8f);
+      const ImVec2 keyboardPos(contentX - keyboardPad, pos.y + size.y + gap);
+      const ImVec2 keyboardSize(contentWidth + 2.f * keyboardPad, Keyboard::GetHeight(contentWidth) + 2.f * keyboardPad);
+      ImGui::SetNextWindowPos(keyboardPos);
+      ImGui::SetNextWindowSize(keyboardSize);
+      ImGui::Begin("##VRUIKeyboard", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+      Theme::ApplyPixelDensity();
+      ImGui::GetWindowDrawList()->AddRectFilled(keyboardPos, keyboardPos + keyboardSize, panelBg, rounding);
+      Keyboard::Render(keyboardPos + ImVec2(keyboardPad, keyboardPad), contentWidth);
+      ImGui::End();
+   }
+   Keyboard::EndFrame();
 
    if (content)
       InGameUIPageView::RenderPopups(*content);
