@@ -5,6 +5,7 @@
 
 #include "Keyboard.h"
 #include "MainMenuPage.h"
+#include "PageView.h"
 #include "Shell.h"
 
 #include "renderer/Renderer.h"
@@ -141,6 +142,22 @@ void Update(InGameUIPage& page)
    {
       // Button navigation, as the controllers do it: on the System screen (its first items are actions), down selects an item, left gets
       // to the rail, down then changes the screen
+      if (g_dpadStep == 100)
+      {
+         // The page of a table: captured, then back to the menu
+         if (now - g_stepStart < 1500)
+            return;
+         g_dpadStep = 101;
+         Capture(player, "table-page"s, Step::DPad);
+         return;
+      }
+      if (g_dpadStep == 101)
+      {
+         g_dpadStep = 102;
+         ui.NavigateBack();
+         g_stepStart = now;
+         return;
+      }
       MainMenuPage* const menu = dynamic_cast<MainMenuPage*>(ui.GetActivePage());
       if (menu == nullptr || now - g_stepStart < 800)
          return;
@@ -173,6 +190,18 @@ void Update(InGameUIPage& page)
       case 15: Capture(player, "composed-modified"s, Step::DPad); break;
       case 16: ui.OnUICancelChanges(); break;
       case 17: Capture(player, "composed-undone"s, Step::DPad); break;
+      // The page of a table (play, favorite, rename, scores...), opened from the Tables screen
+      case 18: menu->SetScreen(Screen::Tables); break;
+      case 19:
+         if (InGameUIPage* const tables = menu->GetContent(); tables)
+            for (const auto& item : InGameUIPageView::GetItems(*tables))
+               if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
+               {
+                  ui.Navigate(item->m_path);
+                  g_dpadStep = 100; // Captured below, as the menu is no longer the active page
+                  break;
+               }
+         break;
       default: g_step = Step::SubPage; break;
       }
       break;
