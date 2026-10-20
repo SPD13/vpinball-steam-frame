@@ -17,6 +17,9 @@
 #include "renderer/Texture.h"
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
+#include "steamframe/vrui/Keyboard.h"
+#include "steamframe/vrui/Theme.h"
+#include "steamframe/vrui/Widgets.h"
 
 #include "fonts/IconsForkAwesome.h"
 #include "imgui/imgui_stdlib.h"
@@ -31,6 +34,9 @@ namespace VPX::InGameUI
 enum class PickerTab { All, Recent, NewlyAdded, MostPlayed, Favorites, Scores, Menu }; // Scores: the leaderboards, Menu: the options of the library and the application, instead of a list
 static constexpr const char* TAB_NAMES[] = { "All", "Recent", "New", "Most played", "Favorites", "Scores", "MENU" }; // Short names: the tabs fit on one line in VR
 static PickerTab s_tab = PickerTab::All;
+// Tabs of the new VR menu, in order: its Scores and System screens replace the last two tabs
+static constexpr PickerTab NEW_VIEW_TABS[] = { PickerTab::All, PickerTab::Recent, PickerTab::Favorites, PickerTab::MostPlayed, PickerTab::NewlyAdded };
+static constexpr const char* NEW_VIEW_TAB_NAMES[] = { "All", "Recent", "Favorites", "Most played", "Newly added" };
 static string s_search;
 static int s_page = 0;
 static char s_filterInitial = 0; // 'All' tab: 0 for all tables, '#' for names which do not start with a letter
@@ -98,8 +104,12 @@ static bool IsRunningTable(const Player* player, const LibraryTable& table)
 }
 
 
-TablePickerPage::TablePickerPage()
-   : InGameUIPage("Tables"s, "Select a table to play it.\nTables are added by copying their folder to the tables folder."s, SaveMode::None)
+TablePickerPage::TablePickerPage(bool newView)
+   : InGameUIPage("Tables"s,
+        newView ? "Select a table to play it. Tables are added by copying their folder to the tables folder, or from a browser (Wi-Fi upload)."s
+                : "Select a table to play it.\nTables are added by copying their folder to the tables folder."s,
+        SaveMode::None)
+   , m_newView(newView)
 {
 }
 
@@ -207,6 +217,21 @@ void TablePickerPage::SetTab(int tab)
    RequestRebuild();
 }
 
+void TablePickerPage::StepTab(int direction)
+{
+   if (!m_newView)
+   {
+      SetTab(static_cast<int>(s_tab) + direction);
+      return;
+   }
+   const int nTabs = static_cast<int>(std::size(NEW_VIEW_TABS));
+   int index = 0;
+   for (int i = 0; i < nTabs; i++)
+      if (NEW_VIEW_TABS[i] == s_tab)
+         index = i;
+   SetTab(static_cast<int>(NEW_VIEW_TABS[(index + direction + nTabs) % nTabs]));
+}
+
 void TablePickerPage::SetPage(int page, const string& pagerItem)
 {
    s_page = clamp(page, 0, max(m_pageCount - 1, 0));
@@ -233,7 +258,7 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
    {
       if (item->m_label == TABS_ITEM)
       {
-         SetTab(static_cast<int>(s_tab) + (direction < 0.f ? -1 : 1));
+         StepTab(direction < 0.f ? -1 : 1);
          return;
       }
       if (item->m_label == PAGER_TOP_ITEM || item->m_label == PAGER_BOTTOM_ITEM)
@@ -421,6 +446,9 @@ void TablePickerPage::BuildPage()
    TableLibrary& library = g_launcher->GetTableLibrary();
    m_revision = library.GetRevision();
    m_scanning = library.IsScanning();
+   // The new VR menu shows the scores and the options on screens of their own
+   if (m_newView && (s_tab == PickerTab::Scores || s_tab == PickerTab::Menu))
+      s_tab = PickerTab::All;
    m_scoresRevision = g_launcher->GetScoreStore().GetRevision();
    const bool gridView = g_settingsService.GetAppSettings().GetStandalone_TablePickerGridView();
    const bool sortAscending = g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending();
@@ -443,7 +471,8 @@ void TablePickerPage::BuildPage()
    {
    case PickerTab::All:
       std::erase_if(tables, [](const LibraryTable& table) { return s_filterInitial != 0 && GetInitial(table) != s_filterInitial; });
-      emptyMessage = "No table yet: copy table folders to the tables folder, or add them from a browser (see MENU)";
+      emptyMessage = m_newView ? "No table yet: copy table folders to the tables folder, or add them from a browser (see Wi-Fi upload)"
+                               : "No table yet: copy table folders to the tables folder, or add them from a browser (see MENU)";
       break;
    case PickerTab::Recent:
       std::erase_if(tables, [](const LibraryTable& table) { return table.lastPlayedAt == 0; });
@@ -493,22 +522,24 @@ void TablePickerPage::BuildPage()
       tables = vector<LibraryTable>(tables.begin() + static_cast<std::ptrdiff_t>(first), tables.begin() + static_cast<std::ptrdiff_t>(min(first + TABLES_PER_PAGE, matchCount)));
    }
 
-   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { RenderTabs(); })).m_customHighlight = true;
+   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
+      .m_customHighlight = true;
    if (s_tab == PickerTab::Menu)
    {
       KeepThumbnails({});
       BuildMenuTab();
       return;
    }
-   // Who is playing, for the leaderboards
-   AddPlayerItem(*this);
+   // Who is playing, for the leaderboards (on the Scores screen of the new VR menu)
+   if (!m_newView)
+      AddPlayerItem(*this);
    if (s_tab == PickerTab::Scores)
    {
       KeepThumbnails({});
       BuildLeaderboardList(*this);
       return;
    }
-   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { RenderSearch(); }));
+   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header,
       m_scanning                   ? "Scanning tables folder..."s
@@ -520,7 +551,7 @@ void TablePickerPage::BuildPage()
          "Left/Right: only show the tables starting with the previous/next letter"s, []() { /* Handled by AdjustItem as it depends on the direction */ }));
 
    if (m_pageCount > 1)
-      AddItem(std::make_unique<InGameUIItem>(PAGER_TOP_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { RenderPager(PAGER_TOP_ITEM); }));
+      AddItem(std::make_unique<InGameUIItem>(PAGER_TOP_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { m_newView ? RenderPagerNewView(PAGER_TOP_ITEM) : RenderPager(PAGER_TOP_ITEM); }));
 
    if (tables.empty() && !m_scanning)
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, emptyMessage));
@@ -552,7 +583,7 @@ void TablePickerPage::BuildPage()
    }
 
    if (m_pageCount > 1)
-      AddItem(std::make_unique<InGameUIItem>(PAGER_BOTTOM_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { RenderPager(PAGER_BOTTOM_ITEM); }));
+      AddItem(std::make_unique<InGameUIItem>(PAGER_BOTTOM_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { m_newView ? RenderPagerNewView(PAGER_BOTTOM_ITEM) : RenderPager(PAGER_BOTTOM_ITEM); }));
 
    KeepThumbnails(displayedTables);
 }
@@ -706,6 +737,145 @@ void AddQuitItem(InGameUIPage& page)
          g_launcher->m_launcherMode = false;
          page.m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
+}
+
+// New VR menu: the tabs as pills, then the view (grid or list) and sort order as icon buttons on the right
+void TablePickerPage::RenderTabsNewView()
+{
+   namespace Theme = VPX::VRUI::Theme;
+   namespace Widgets = VPX::VRUI::Widgets;
+   const float height = Theme::Px(2.9f);
+   const float gap = Theme::Px(0.5f);
+   const float left = ImGui::GetCursorScreenPos().x;
+   const float right = left + ImGui::GetContentRegionAvail().x;
+   const float y = ImGui::GetCursorScreenPos().y;
+   const InGameUIItem* const selectedItem = GetSelectedItem();
+   const bool hasFocus = m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selectedItem != nullptr && selectedItem->m_label == TABS_ITEM;
+   ImGui::PushID(TABS_ITEM);
+   float x = left;
+   for (int i = 0; i < static_cast<int>(std::size(NEW_VIEW_TABS)); i++)
+   {
+      const bool isActive = s_tab == NEW_VIEW_TABS[i];
+      ImGui::SetCursorScreenPos(ImVec2(x, y));
+      if (Widgets::Pill(NEW_VIEW_TAB_NAMES[i], nullptr, NEW_VIEW_TAB_NAMES[i], height, true, hasFocus && isActive, isActive))
+         SetTab(static_cast<int>(NEW_VIEW_TABS[i]));
+      x += Widgets::PillWidth(nullptr, NEW_VIEW_TAB_NAMES[i], height) + gap;
+   }
+   const bool gridView = g_settingsService.GetAppSettings().GetStandalone_TablePickerGridView();
+   const bool sortAscending = g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending();
+   const char* const viewIcon = gridView ? ICON_FK_LIST : ICON_FK_TH_LARGE;
+   const char* const sortIcon = sortAscending ? ICON_FK_SORT_ALPHA_DESC : ICON_FK_SORT_ALPHA_ASC;
+   const float sortWidth = Widgets::PillWidth(sortIcon, nullptr, height);
+   const float viewWidth = Widgets::PillWidth(viewIcon, nullptr, height);
+   ImGui::SetCursorScreenPos(ImVec2(right - sortWidth, y));
+   if (Widgets::Pill("##sort", sortIcon, nullptr, height, true, false))
+   {
+      g_settingsService.GetAppSettings().SetStandalone_TablePickerSortAscending(!sortAscending, false);
+      RequestRebuild();
+   }
+   if (ImGui::IsItemHovered())
+      ImGui::SetTooltip(sortAscending ? "Sort from Z to A" : "Sort from A to Z");
+   ImGui::SetCursorScreenPos(ImVec2(right - sortWidth - gap - viewWidth, y));
+   if (Widgets::Pill("##view", viewIcon, nullptr, height, true, false))
+   {
+      g_settingsService.GetAppSettings().SetStandalone_TablePickerGridView(!gridView, false);
+      RequestRebuild();
+   }
+   if (ImGui::IsItemHovered())
+      ImGui::SetTooltip(gridView ? "Show a list of names" : "Show a grid of table images");
+   ImGui::PopID();
+   ImGui::SetCursorScreenPos(ImVec2(left, y));
+   ImGui::Dummy(ImVec2(right - left, height));
+}
+
+// New VR menu: the search field. In VR (no keyboard), it opens the keyboard of the menu, which filters the list at each key.
+void TablePickerPage::RenderSearchNewView()
+{
+   namespace Theme = VPX::VRUI::Theme;
+   namespace Widgets = VPX::VRUI::Widgets;
+   namespace Keyboard = VPX::VRUI::Keyboard;
+   const float height = Theme::Px(2.9f);
+   const ImVec2 pos = ImGui::GetCursorScreenPos();
+   const float width = ImGui::GetContentRegionAvail().x;
+   const float clearWidth = s_search.empty() ? 0.f : height * 1.3f;
+   const float rounding = Theme::Px(0.45f);
+   ImDrawList* const drawList = ImGui::GetWindowDrawList();
+   const float iconWidth = ImGui::CalcTextSize(ICON_FK_SEARCH).x;
+   const float pad = Theme::Px(0.7f);
+   const float textY = pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f;
+   ImGui::PushID(SEARCH_ITEM);
+   if (Keyboard::IsUsed())
+   {
+      static const string owner = "tables/search"s;
+      Keyboard::KeepOpen(owner);
+      const bool editing = Keyboard::IsEditing(owner);
+      const ImVec2 fieldSize(width - clearWidth, height);
+      if (ImGui::InvisibleButton("##field", fieldSize))
+         OpenSearchKeyboard();
+      const bool hovered = ImGui::IsItemHovered();
+      drawList->AddRectFilled(pos, pos + fieldSize, hovered ? Theme::kSurfaceHover : Theme::kSurface, rounding);
+      if (editing)
+         drawList->AddRect(pos, pos + fieldSize, Theme::kAccent, rounding, ImDrawFlags_None, Theme::Px(0.15f));
+      drawList->AddText(ImVec2(pos.x + pad, textY), Theme::kTextMuted, ICON_FK_SEARCH);
+      ImGui::SetCursorScreenPos(ImVec2(pos.x + 2.f * pad + iconWidth, textY));
+      Widgets::TextEllipsis(s_search.empty() ? "Search: a few letters of the name" : s_search.c_str(), fieldSize.x - 3.f * pad - iconWidth,
+         s_search.empty() ? Theme::kTextDisabled : Theme::kText);
+   }
+   else
+   {
+      // A keyboard: a text box, filtering while typing
+      ImGui::SetCursorScreenPos(pos);
+      ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.f * pad + iconWidth, (height - ImGui::GetTextLineHeight()) * 0.5f));
+      ImGui::SetNextItemWidth(width - clearWidth);
+      string search = s_search;
+      if (ImGui::InputTextWithHint("##text", "Search: a few letters of the name", &search) && search != s_search)
+         SetSearch(search);
+      ImGui::PopStyleVar();
+      drawList->AddText(ImVec2(pos.x + pad, textY), Theme::kTextMuted, ICON_FK_SEARCH);
+   }
+   if (!s_search.empty())
+   {
+      ImGui::SetCursorScreenPos(ImVec2(pos.x + width - clearWidth + Theme::Px(0.4f), pos.y));
+      if (Widgets::Pill("##clear", ICON_FK_TIMES, nullptr, height, true, false))
+      {
+         SetSearch(string());
+         if (Keyboard::IsEditing("tables/search"s))
+            Keyboard::Close();
+      }
+   }
+   ImGui::PopID();
+   ImGui::SetCursorScreenPos(pos);
+   ImGui::Dummy(ImVec2(width, height));
+}
+
+void TablePickerPage::OpenSearchKeyboard()
+{
+   VPX::VRUI::Keyboard::Open("tables/search"s, "Search"s, s_search, 64, [this](const string& search) { SetSearch(search); });
+}
+
+void TablePickerPage::RenderPagerNewView(const char* item)
+{
+   namespace Theme = VPX::VRUI::Theme;
+   namespace Widgets = VPX::VRUI::Widgets;
+   const float height = Theme::Px(2.6f);
+   const ImVec2 pos = ImGui::GetCursorScreenPos();
+   const float width = ImGui::GetContentRegionAvail().x;
+   const string label = std::format("Page {} of {}", s_page + 1, m_pageCount);
+   const float labelWidth = ImGui::CalcTextSize(label.c_str()).x;
+   const float buttonWidth = Widgets::PillWidth(ICON_FK_ANGLE_LEFT, nullptr, height);
+   const float total = 2.f * buttonWidth + labelWidth + 2.f * Theme::Px(1.f);
+   const float x = pos.x + (width - total) * 0.5f;
+   ImGui::PushID(item);
+   ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
+   if (Widgets::Pill("##prev", ICON_FK_ANGLE_LEFT, nullptr, height, true, false))
+      SetPage((s_page + m_pageCount - 1) % m_pageCount, item);
+   ImGui::GetWindowDrawList()->AddText(ImVec2(x + buttonWidth + Theme::Px(1.f), pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f), Theme::kTextMuted, label.c_str());
+   ImGui::SetCursorScreenPos(ImVec2(x + buttonWidth + labelWidth + 2.f * Theme::Px(1.f), pos.y));
+   if (Widgets::Pill("##next", ICON_FK_ANGLE_RIGHT, nullptr, height, true, false))
+      SetPage((s_page + 1) % m_pageCount, item);
+   ImGui::PopID();
+   ImGui::SetCursorScreenPos(pos);
+   ImGui::Dummy(ImVec2(width, height));
 }
 
 #ifdef VPX_TABLE_WEBSERVER
