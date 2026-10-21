@@ -80,6 +80,7 @@ private:
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    void RenderPager(const char* item);
    const bool m_newView;
+   bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard opens when the buttons select it)
    int m_pageCount = 1;
    string m_reselectItem;
    int m_reselectDelay = 0;

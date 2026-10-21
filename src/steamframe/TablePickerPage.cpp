@@ -831,6 +831,20 @@ void TablePickerPage::RenderSearchNewView()
    {
       static const string owner = "tables/search"s;
       Keyboard::KeepOpen(owner);
+      // Buttons: the keyboard opens when the field gets the focus, and closes when it loses it (not when the pointer is used)
+      const InGameUIItem* const selectedItem = GetSelectedItem();
+      const bool selected = selectedItem != nullptr && selectedItem->m_label == SEARCH_ITEM;
+      if (selected != m_searchSelected)
+      {
+         m_searchSelected = selected;
+         if (m_player->m_liveUI->m_inGameUI.IsFlipperNav())
+         {
+            if (selected && !Keyboard::IsEditing(owner))
+               OpenSearchKeyboard();
+            else if (!selected && Keyboard::IsEditing(owner))
+               Keyboard::Close();
+         }
+      }
       const bool editing = Keyboard::IsEditing(owner);
       const ImVec2 fieldSize(width - clearWidth, height);
       if (ImGui::InvisibleButton("##field", fieldSize))
