@@ -14,8 +14,8 @@ namespace VPX::VRUI::Theme
 inline constexpr float kVRPanelWidth = 2.8f; // meters
 
 // Layout, in degrees
-inline constexpr float kMenuWidth = 64.f;
-inline constexpr float kMenuHeight = 42.f;
+inline constexpr float kMenuWidth = 84.f;
+inline constexpr float kMenuHeight = 56.f;
 inline constexpr float kRailWidth = 5.4f;
 inline constexpr float kRailButton = 3.6f; // Square, smaller when the buttons would not fit the height of the menu (see kRailMargin)
 inline constexpr float kRailMargin = 0.6f; // Above and below the buttons of the rail, at least
@@ -24,6 +24,7 @@ inline constexpr float kHeaderHeight = 4.4f;
 inline constexpr float kFooterHeight = 5.2f;
 inline constexpr float kPadding = 1.2f;
 inline constexpr float kRowHeight = 3.4f; // Smallest pointing target of the content
+inline constexpr float kTileWidth = 12.f; // At least: the tiles share the width of the content, 6 per row in a menu of 84 degrees
 inline constexpr float kRowGap = 0.25f;
 inline constexpr float kRounding = 0.6f;
 inline constexpr float kPillHeight = 3.2f;

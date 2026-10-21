@@ -62,6 +62,7 @@ static void SetWebServerPairing(bool required)
 #endif
 
 static constexpr int TABLES_PER_PAGE = 12; // Rows of 2, 3, 4 or 6 tiles, depending on the width of the menu
+static constexpr int TABLES_PER_PAGE_NEW_VIEW = 24; // 4 rows of 6 tiles in the new VR menu (see Theme::kTileWidth)
 
 static char GetInitial(const LibraryTable& table)
 {
@@ -521,12 +522,13 @@ void TablePickerPage::BuildPage()
 
    // Pages: a short list is quicker to go through with buttons, and only the images of the page are kept in memory
    const size_t matchCount = tables.size();
-   m_pageCount = max(1, static_cast<int>((matchCount + TABLES_PER_PAGE - 1) / TABLES_PER_PAGE));
+   const size_t perPage = m_newView ? TABLES_PER_PAGE_NEW_VIEW : TABLES_PER_PAGE;
+   m_pageCount = max(1, static_cast<int>((matchCount + perPage - 1) / perPage));
    s_page = clamp(s_page, 0, m_pageCount - 1);
-   if (matchCount > TABLES_PER_PAGE)
+   if (matchCount > perPage)
    {
-      const size_t first = static_cast<size_t>(s_page) * TABLES_PER_PAGE;
-      tables = vector<LibraryTable>(tables.begin() + static_cast<std::ptrdiff_t>(first), tables.begin() + static_cast<std::ptrdiff_t>(min(first + TABLES_PER_PAGE, matchCount)));
+      const size_t first = static_cast<size_t>(s_page) * perPage;
+      tables = vector<LibraryTable>(tables.begin() + static_cast<std::ptrdiff_t>(first), tables.begin() + static_cast<std::ptrdiff_t>(min(first + perPage, matchCount)));
    }
 
    AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
