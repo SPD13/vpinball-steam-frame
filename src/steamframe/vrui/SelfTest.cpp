@@ -119,7 +119,7 @@ void Update(InGameUIPage& page)
       MainMenuPage* const menu = dynamic_cast<MainMenuPage*>(ui.GetActivePage());
       if (menu == nullptr)
       {
-         // For example the 'Who is playing?' page opened over the lobby the first time
+         // For example the result page opened over the lobby, back from a table
          MainMenuPage::SetLastScreen(screen);
          Shell::NavigateWithFreshHistory(ui, "homepage"s);
          g_stepStart = now;
