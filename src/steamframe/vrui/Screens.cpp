@@ -115,7 +115,6 @@ private:
 
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Application"s));
       AddQuitItem(*this);
-      AddNewUIItem(*this);
    }
 };
 
