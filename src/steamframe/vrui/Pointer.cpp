@@ -17,9 +17,8 @@
 #include "imgui/imgui.h"
 
 // In VR, a controller is used as a pointer when the in-game UI is opened: move the mouse where it points to, its trigger being the left button.
-// Navigation switches from buttons to pointer on a trigger press, or when the pointer clearly moves (a hand is never still enough to switch on any
-// move: pointing a little further than the jitter of a held controller, from where it was when button navigation started, tells a deliberate aim).
-// The thumbsticks being buttons too, scrolling with them does not switch.
+// Pointer navigation is the default (see InGameUI::Open): a button of the UI switches to button navigation (InGameUI::UseButtonNav), a trigger
+// press switches back. Moving the pointer or scrolling does not switch, as a held controller is never still.
 void LiveUI::UpdateVRPointer()
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -32,15 +31,6 @@ void LiveUI::UpdateVRPointer()
       {
          io.AddMousePosEvent(x * io.DisplaySize.x, y * io.DisplaySize.y);
          if (pressed && !m_vrPointerPressed)
-            m_inGameUI.UsePointerNav();
-         if (!m_inGameUI.IsFlipperNav())
-            m_vrPointerAnchorValid = false;
-         else if (!m_vrPointerAnchorValid)
-         {
-            m_vrPointerAnchor = ImVec2(x, y);
-            m_vrPointerAnchorValid = true;
-         }
-         else if (constexpr float moveThreshold = 0.03f; fabsf(x - m_vrPointerAnchor.x) > moveThreshold || fabsf(y - m_vrPointerAnchor.y) > moveThreshold)
             m_inGameUI.UsePointerNav(); // Items are then highlighted when hovered
          // The thumbstick of the pointing controller scrolls what it points at, as a mouse wheel (up to 12 notches per second), in pointer
          // navigation only: the thumbsticks also navigate with buttons (default mapping: left stick up/down selects, right stick left/right
@@ -63,14 +53,9 @@ void LiveUI::UpdateVRPointer()
       }
       m_vrPointerVisible = pointing;
       m_vrPointerPos = ImVec2(x * io.DisplaySize.x, y * io.DisplaySize.y);
-      if (!pointing)
-         m_vrPointerAnchorValid = false;
    }
    else
-   {
       m_vrPointerVisible = false;
-      m_vrPointerAnchorValid = false;
-   }
 }
 
 void LiveUI::RenderVRPointerDot()
