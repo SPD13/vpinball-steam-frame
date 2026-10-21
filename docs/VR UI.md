@@ -55,8 +55,10 @@ button is on the screen, so that moving down the rail never quits; during a tabl
 The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
 
 - Pointer (VR controller, mouse): click the rail, the items, the Back/Close and Defaults/Undo/Save buttons.
-- Buttons (d-pad): on the rail, up/down change the screen and right enters it; in a screen, up/down select an item and left/right adjust it,
-  left on an item which does not use it (link, action, text) gets back to the rail.
+- Buttons (d-pad, or thumbsticks as in upstream's mapping: left stick up/down, right stick left/right): on the rail, up/down change the
+  screen and right enters it; in a screen, up/down select an item and left/right adjust it, left on an item which does not use it (link,
+  action, text) gets back to the rail. The thumbstick of the pointing controller scrolls only in pointer navigation (aim or pull the trigger
+  to get back to it), so that the sticks do not fight the button navigation.
 - Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
 - Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): below the menu, it edits the clicked field (search of the Tables

@@ -19,6 +19,7 @@
 // In VR, a controller is used as a pointer when the in-game UI is opened: move the mouse where it points to, its trigger being the left button.
 // Navigation switches from buttons to pointer on a trigger press, or when the pointer clearly moves (a hand is never still enough to switch on any
 // move: pointing a little further than the jitter of a held controller, from where it was when button navigation started, tells a deliberate aim).
+// The thumbsticks being buttons too, scrolling with them does not switch.
 void LiveUI::UpdateVRPointer()
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -41,14 +42,19 @@ void LiveUI::UpdateVRPointer()
          }
          else if (constexpr float moveThreshold = 0.03f; fabsf(x - m_vrPointerAnchor.x) > moveThreshold || fabsf(y - m_vrPointerAnchor.y) > moveThreshold)
             m_inGameUI.UsePointerNav(); // Items are then highlighted when hovered
-         // The thumbstick of the pointing controller scrolls what it points at, as a mouse wheel (up to 12 notches per second). This also
-         // switches to pointer navigation, as button navigation keeps scrolling back to the selected item
+         // The thumbstick of the pointing controller scrolls what it points at, as a mouse wheel (up to 12 notches per second), in pointer
+         // navigation only: the thumbsticks also navigate with buttons (default mapping: left stick up/down selects, right stick left/right
+         // adjusts, see XRInputHandler), and button navigation keeps scrolling back to the selected item anyway. After a UI navigation action,
+         // the stick does not scroll until it gets back to its center, so that pushing or releasing it does not scroll on its way.
          constexpr float deadZone = 0.2f;
-         if (fabsf(scroll) > deadZone)
-         {
-            m_inGameUI.UsePointerNav();
+         const InputManager& input = m_player->m_pininput;
+         if (input.IsPressed(input.GetUIUpActionId()) || input.IsPressed(input.GetUIDownActionId()) || input.IsPressed(input.GetUILeftActionId())
+            || input.IsPressed(input.GetUIRightActionId()))
+            m_vrPointerScrollBlocked = true;
+         else if (fabsf(scroll) <= deadZone)
+            m_vrPointerScrollBlocked = false;
+         if (fabsf(scroll) > deadZone && !m_vrPointerScrollBlocked && !m_inGameUI.IsFlipperNav())
             io.AddMouseWheelEvent(0.f, (scroll > 0.f ? 1.f : -1.f) * (fabsf(scroll) - deadZone) / (1.f - deadZone) * 12.f * io.DeltaTime);
-         }
       }
       if (pressed != m_vrPointerPressed && (pointing || !pressed))
       {
