@@ -18,7 +18,6 @@
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
 #include "steamframe/vrui/Keyboard.h"
-#include "steamframe/vrui/Shell.h"
 #include "steamframe/vrui/VRUI.h"
 #include "steamframe/vrui/Theme.h"
 #include "steamframe/vrui/Widgets.h"
@@ -202,13 +201,6 @@ void TablePickerPage::Render(float elapsedS)
       RequestRebuild();
 #endif
    InGameUIPage::Render(elapsedS);
-
-   // Switched to the new view while opened: show its Tables screen instead (the route gives the page of the active view)
-   if (!m_newView && IsActive() && VPX::VRUI::IsActive())
-   {
-      VPX::VRUI::Shell::NavigateWithFreshHistory(m_player->m_liveUI->m_inGameUI, "tables/picker"s);
-      return;
-   }
 
    // Get back on an item which moved as the page was rebuilt (the rebuild happens at the beginning of the render following the request)
    if (!m_reselectItem.empty() && m_reselectDelay-- <= 0)
@@ -659,24 +651,9 @@ void TablePickerPage::BuildMenuTab()
    if (g_launcher->m_launcherMode)
       AddQuitItem(*this);
 
-   AddNewUIItem(*this);
-
 #ifdef VPX_TABLE_WEBSERVER
    AddWebServerItems(*this);
 #endif
-}
-
-void AddNewUIItem(InGameUIPage& page)
-{
-   page.AddItem(std::make_unique<InGameUIItem>(Settings::m_propStandalone_NewVRUI,
-      []() { return g_settingsService.GetAppSettings().GetStandalone_NewVRUI(); },
-      [&page](bool v)
-      {
-         g_settingsService.GetAppSettings().SetStandalone_NewVRUI(v, false);
-         g_settingsService.GetAppSettings().Save();
-         if (getenv("VPX_VRUI") != nullptr)
-            page.m_player->m_liveUI->PushNotification("The VPX_VRUI environment variable keeps the menu it names: unset it to use this switch"s, 6000);
-      }));
 }
 
 void AddLibraryItems(InGameUIPage& page)

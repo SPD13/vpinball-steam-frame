@@ -24,7 +24,6 @@ void AddLibraryItems(InGameUIPage& page); // View, image focus, menu distance, s
 void AddMenuDistanceItem(InGameUIPage& page); // VR only
 void AddLobbyRoomItems(InGameUIPage& page); // Launcher mode only
 void AddQuitItem(InGameUIPage& page);
-void AddNewUIItem(InGameUIPage& page); // The "New UI" switch, between the classic menu and the new one (src/steamframe/vrui/)
 #ifdef VPX_TABLE_WEBSERVER
 void AddWebServerItems(InGameUIPage& page); // Wi-Fi upload
 bool HaveWebServerItemsChanged(); // Address or pairing code changed since the items were added: they must be rebuilt
