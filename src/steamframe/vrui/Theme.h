@@ -28,6 +28,8 @@ inline constexpr float kTileWidth = 12.f; // At least: the tiles share the width
 inline constexpr float kRowGap = 0.25f;
 inline constexpr float kRounding = 0.6f;
 inline constexpr float kPillHeight = 3.2f;
+inline constexpr float kBadgeHeight = 2.6f; // Wi-Fi badge, below the menu
+inline constexpr float kBadgeGap = 0.8f;
 
 // Text, in degrees (font size)
 inline constexpr float kTextSize = 1.6f;

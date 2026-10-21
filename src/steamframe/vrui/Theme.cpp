@@ -33,8 +33,8 @@ void BeginFrame()
    }
    else
    {
-      // Desktop preview: the menu fits the window, with a margin
-      g_pxPerDegree = 0.94f * min(io.DisplaySize.x / kMenuWidth, io.DisplaySize.y / kMenuHeight);
+      // Desktop preview: the menu fits the window, with a margin, and room for the Wi-Fi badge below it (the menu staying centered)
+      g_pxPerDegree = 0.94f * min(io.DisplaySize.x / kMenuWidth, io.DisplaySize.y / (kMenuHeight + 2.f * (kBadgeGap + kBadgeHeight)));
       g_pixelDensity = io.DisplayFramebufferScale.x > 0.f ? io.DisplayFramebufferScale.x : 1.f;
    }
 

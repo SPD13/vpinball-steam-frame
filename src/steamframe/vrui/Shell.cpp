@@ -12,8 +12,12 @@
 
 #include "fonts/IconsForkAwesome.h"
 #include "renderer/Renderer.h"
+#include "steamframe/Launcher.h"
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/LoadingPage.h"
+#ifdef VPX_TABLE_WEBSERVER
+#include "lib/src/WebServer.h"
+#endif
 
 namespace VPX::InGameUI
 {
@@ -263,6 +267,7 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    ImGui::End();
 
    // Keyboard, below the menu (VR)
+   float belowMenuY = pos.y + size.y;
    if (Keyboard::IsOpen() && !keyboardInside)
    {
       const float gap = Theme::Px(1.f);
@@ -276,8 +281,49 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
       ImGui::GetWindowDrawList()->AddRectFilled(keyboardPos, keyboardPos + keyboardSize, panelBg, rounding);
       Keyboard::Render(keyboardPos + ImVec2(keyboardPad, keyboardPad), contentWidth);
       ImGui::End();
+      belowMenuY = keyboardPos.y + keyboardSize.y;
    }
    Keyboard::EndFrame();
+
+#ifdef VPX_TABLE_WEBSERVER
+   // Badge below the menu (and the keyboard): address and pairing code of the Wi-Fi upload, or that it is off. It opens the Wi-Fi screen.
+   if (!player->m_isLoading)
+   {
+      WebServer& webServer = g_launcher->GetWebServer();
+      string label;
+      if (!webServer.IsRunning())
+         label = "Wi-Fi server off"s;
+      else
+      {
+         const string url = webServer.GetUrl();
+         label = "Wi-Fi: " + (url.empty() ? "no network address"s : url);
+         if (webServer.IsPairingRequired())
+            label += "   Code: " + webServer.GetPairingCode();
+      }
+      ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kSmallTextSize));
+      const float badgeHeight = Theme::Px(Theme::kBadgeHeight);
+      const ImVec2 badgeSize(Widgets::PillWidth(ICON_FK_WIFI, label.c_str(), badgeHeight), badgeHeight);
+      const ImVec2 badgePos(floorf(pos.x + (size.x - badgeSize.x) * 0.5f), belowMenuY + Theme::Px(Theme::kBadgeGap));
+      ImGui::SetNextWindowPos(badgePos);
+      ImGui::SetNextWindowSize(badgeSize);
+      ImGui::Begin("##VRUIWiFiBadge", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+      Theme::ApplyPixelDensity();
+      ImGui::GetWindowDrawList()->AddRectFilled(badgePos, badgePos + badgeSize, panelBg, badgeHeight * 0.5f);
+      ImGui::SetCursorScreenPos(badgePos);
+      if (Widgets::Pill("##wifi", ICON_FK_WIFI, label.c_str(), badgeHeight, true, false))
+      {
+         if (menu)
+            menu->SetScreen(Screen::WiFi);
+         else
+         {
+            MainMenuPage::SetLastScreen(Screen::WiFi);
+            NavigateWithFreshHistory(ui, "homepage"s);
+         }
+      }
+      ImGui::End();
+      ImGui::PopFont();
+   }
+#endif
 
    // Popups of the page (input mapping), with the padding of a window (the menu has none)
    if (content)
