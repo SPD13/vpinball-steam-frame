@@ -75,8 +75,10 @@ void EndFrame()
    g_ownerShown = false;
 }
 
-void TypeForTest(const string& text)
+void TypeForTest(const string& text, bool clear)
 {
+   if (clear)
+      g_text.clear();
    g_text += text;
    Changed();
 }

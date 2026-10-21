@@ -27,8 +27,8 @@ bool IsEditing(const string& owner);
 void KeepOpen(const string& owner);
 void EndFrame();
 
-// Types as if the keys were clicked (screenshot self-test)
-void TypeForTest(const string& text);
+// Types as if the keys were clicked (screenshot self-test), after clearing the text with 'clear'
+void TypeForTest(const string& text, bool clear = false);
 
 float GetHeight(float width);
 void Render(const ImVec2& pos, float width);

@@ -39,14 +39,11 @@ static PickerTab s_tab = PickerTab::All;
 static constexpr PickerTab NEW_VIEW_TABS[] = { PickerTab::All, PickerTab::Recent, PickerTab::Favorites, PickerTab::MostPlayed, PickerTab::NewlyAdded };
 static constexpr const char* NEW_VIEW_TAB_NAMES[] = { "All", "Recent", "Favorites", "Most played", "Newly added" };
 static string s_search;
-static int s_page = 0;
 static char s_filterInitial = 0; // 'All' tab: 0 for all tables, '#' for names which do not start with a letter
 
 // Custom rendered items are identified by their label, which is not displayed
 static constexpr const char* TABS_ITEM = "##tabs";
 static constexpr const char* SEARCH_ITEM = "##search";
-static constexpr const char* PAGER_TOP_ITEM = "##pager-top";
-static constexpr const char* PAGER_BOTTOM_ITEM = "##pager-bottom";
 static constexpr const char* PAIRING_ITEM = "##pairing";
 static constexpr const char* FILTER_LABEL = "Show: ";
 
@@ -60,9 +57,6 @@ static void SetWebServerPairing(bool required)
    PLOGI << "Wi-Fi upload pairing code " << (required ? "enabled" : "disabled");
 }
 #endif
-
-static constexpr int TABLES_PER_PAGE = 12; // Rows of 2, 3, 4 or 6 tiles, depending on the width of the menu
-static constexpr int TABLES_PER_PAGE_NEW_VIEW = 48; // 8 rows of 6 tiles in the new VR menu (see Theme::kTileWidth)
 
 static char GetInitial(const LibraryTable& table)
 {
@@ -118,6 +112,8 @@ TablePickerPage::TablePickerPage(bool newView)
 
 // Each decode keeps a core busy: a few at a time leave the others to the game and rendering threads
 static constexpr int MAX_THUMBNAIL_LOADS = 2;
+// Images kept on the GPU (about 0.5 MB each): the ones on screen and around it, the least recently displayed ones being released beyond that
+static constexpr size_t MAX_KEPT_THUMBNAILS = 120;
 
 static bool IsReady(const std::future<std::shared_ptr<BaseTexture>>& future)
 {
@@ -137,6 +133,7 @@ ImTextureID TablePickerPage::GetThumbnail(const LibraryTable& table)
    if (table.image.empty())
       return nullptr;
    Thumbnail& thumbnail = m_thumbnails[table.uuid];
+   thumbnail.lastUsedFrame = ImGui::GetFrameCount();
    // First use, or the image was replaced (the library updates the modification date): decode it on a worker thread
    if (thumbnail.modifiedAt != table.modifiedAt && !thumbnail.loading.valid())
    {
@@ -178,6 +175,30 @@ void TablePickerPage::UpdateThumbnailLoads()
          thumbnail.modifiedAt = thumbnail.loadingModifiedAt;
       }
    }
+
+   // Beyond the budget, release the images displayed the longest time ago (never the ones of the last frame)
+   if (m_thumbnails.size() <= MAX_KEPT_THUMBNAILS)
+      return;
+   vector<std::pair<int, string>> byAge;
+   byAge.reserve(m_thumbnails.size());
+   for (const auto& [uuid, thumbnail] : m_thumbnails)
+      byAge.emplace_back(thumbnail.lastUsedFrame, uuid);
+   std::ranges::sort(byAge);
+   const int lastFrame = ImGui::GetFrameCount() - 1;
+   for (size_t i = 0; i < byAge.size() - MAX_KEPT_THUMBNAILS && byAge[i].first < lastFrame; i++)
+   {
+      const auto it = m_thumbnails.find(byAge[i].second);
+      ReleaseThumbnail(it->second);
+      m_thumbnails.erase(it);
+   }
+}
+
+void TablePickerPage::ReleaseThumbnail(Thumbnail& thumbnail)
+{
+   if (thumbnail.texture)
+      m_player->m_renderer->m_renderDevice->m_texMan.UnloadTexture(thumbnail.texture.get());
+   if (thumbnail.loading.valid())
+      m_abandonedLoads.push_back(std::move(thumbnail.loading));
 }
 
 void TablePickerPage::Open(bool isBackwardAnimation)
@@ -202,21 +223,12 @@ void TablePickerPage::Render(float elapsedS)
       RequestRebuild();
 #endif
    InGameUIPage::Render(elapsedS);
-
-   // Get back on an item which moved as the page was rebuilt (the rebuild happens at the beginning of the render following the request)
-   if (!m_reselectItem.empty() && m_reselectDelay-- <= 0)
-   {
-      for (int i = 0; i < 1000 && GetItem(m_reselectItem) != nullptr && GetSelectedItem() != GetItem(m_reselectItem); i++)
-         SelectNextItem();
-      m_reselectItem.clear();
-   }
 }
 
 void TablePickerPage::SetTab(int tab)
 {
    const int nTabs = static_cast<int>(std::size(TAB_NAMES));
    s_tab = static_cast<PickerTab>((tab + nTabs) % nTabs);
-   s_page = 0;
    RequestRebuild();
 }
 
@@ -246,22 +258,12 @@ void TablePickerPage::StepFilter(int direction)
    const size_t pos = initials.find(s_filterInitial);
    const size_t count = initials.size();
    s_filterInitial = initials[pos == string::npos ? 0 : (pos + (direction < 0 ? count - 1 : 1)) % count];
-   s_page = 0;
-   RequestRebuild();
-}
-
-void TablePickerPage::SetPage(int page, const string& pagerItem)
-{
-   s_page = clamp(page, 0, max(m_pageCount - 1, 0));
-   m_reselectItem = pagerItem; // The number of items above the bottom pager changes with the page
-   m_reselectDelay = 1;
    RequestRebuild();
 }
 
 void TablePickerPage::SetSearch(const string& search)
 {
    s_search = search;
-   s_page = 0;
    RequestRebuild();
 }
 
@@ -279,11 +281,6 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
          StepTab(direction < 0.f ? -1 : 1);
          return;
       }
-      if (item->m_label == PAGER_TOP_ITEM || item->m_label == PAGER_BOTTOM_ITEM)
-      {
-         SetPage((s_page + (direction < 0.f ? m_pageCount - 1 : 1)) % max(m_pageCount, 1), item->m_label);
-         return;
-      }
 #ifdef VPX_TABLE_WEBSERVER
       if (AdjustWebServerItem(*item))
          return;
@@ -292,7 +289,7 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
       {
          // Without a keyboard, the search text is entered with the navigation buttons
          m_player->m_liveUI->m_inGameUI.AddPage("tables/search"s,
-            []() { return std::make_unique<TextEntryPage>("Search tables"s, s_search, [](const string& search) { s_search = search; s_page = 0; }, true); });
+            []() { return std::make_unique<TextEntryPage>("Search tables"s, s_search, [](const string& search) { s_search = search; }, true); });
          m_player->m_liveUI->m_inGameUI.Navigate("tables/search"s);
          return;
       }
@@ -434,21 +431,6 @@ bool RenderVirtualKeyboard(string& text, size_t maxLength, bool capitalizeWords,
    return done;
 }
 
-void TablePickerPage::RenderPager(const char* item)
-{
-   ImGui::PushID(item);
-   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.f));
-   if (ImGui::Button(ICON_FK_ANGLE_LEFT))
-      SetPage((s_page + m_pageCount - 1) % m_pageCount, item);
-   ImGui::SameLine();
-   ImGui::Text("Page %d of %d", s_page + 1, m_pageCount);
-   ImGui::SameLine();
-   if (ImGui::Button(ICON_FK_ANGLE_RIGHT))
-      SetPage((s_page + 1) % m_pageCount, item);
-   ImGui::PopStyleVar();
-   ImGui::PopID();
-}
-
 void TablePickerPage::BuildPage()
 {
    TableLibrary& library = g_launcher->GetTableLibrary();
@@ -520,16 +502,8 @@ void TablePickerPage::BuildPage()
       emptyMessage = "No table matches the search";
    }
 
-   // Pages: a short list is quicker to go through with buttons, and only the images of the page are kept in memory
+   // All the tables are listed: the views only draw the ones on screen, and the images are loaded as they get displayed (see GetThumbnail)
    const size_t matchCount = tables.size();
-   const size_t perPage = m_newView ? TABLES_PER_PAGE_NEW_VIEW : TABLES_PER_PAGE;
-   m_pageCount = max(1, static_cast<int>((matchCount + perPage - 1) / perPage));
-   s_page = clamp(s_page, 0, m_pageCount - 1);
-   if (matchCount > perPage)
-   {
-      const size_t first = static_cast<size_t>(s_page) * perPage;
-      tables = vector<LibraryTable>(tables.begin() + static_cast<std::ptrdiff_t>(first), tables.begin() + static_cast<std::ptrdiff_t>(min(first + perPage, matchCount)));
-   }
 
    AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
       .m_customHighlight = true;
@@ -583,9 +557,6 @@ void TablePickerPage::BuildPage()
             []() { /* Handled by AdjustItem as it depends on the direction */ }));
    }
 
-   if (m_pageCount > 1)
-      AddItem(std::make_unique<InGameUIItem>(PAGER_TOP_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { m_newView ? RenderPagerNewView(PAGER_TOP_ITEM) : RenderPager(PAGER_TOP_ITEM); }));
-
    if (tables.empty() && !m_scanning)
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, emptyMessage));
 
@@ -616,13 +587,10 @@ void TablePickerPage::BuildPage()
       }
    }
 
-   if (m_pageCount > 1)
-      AddItem(std::make_unique<InGameUIItem>(PAGER_BOTTOM_ITEM, "Left/Right: previous/next page"s, [this](int, const InGameUIItem*) { m_newView ? RenderPagerNewView(PAGER_BOTTOM_ITEM) : RenderPager(PAGER_BOTTOM_ITEM); }));
-
    KeepThumbnails(displayedTables);
 }
 
-// Only keep the images of the displayed page
+// Only keep the images of the listed tables
 void TablePickerPage::KeepThumbnails(const ankerl::unordered_dense::set<string>& displayedTables)
 {
    for (auto it = m_thumbnails.begin(); it != m_thumbnails.end();)
@@ -631,10 +599,7 @@ void TablePickerPage::KeepThumbnails(const ankerl::unordered_dense::set<string>&
          ++it;
       else
       {
-         if (it->second.texture)
-            m_player->m_renderer->m_renderDevice->m_texMan.UnloadTexture(it->second.texture.get());
-         if (it->second.loading.valid())
-            m_abandonedLoads.push_back(std::move(it->second.loading));
+         ReleaseThumbnail(it->second);
          it = m_thumbnails.erase(it);
       }
    }
@@ -890,31 +855,6 @@ void TablePickerPage::RenderSearchNewView()
 void TablePickerPage::OpenSearchKeyboard()
 {
    VPX::VRUI::Keyboard::Open("tables/search"s, "Search"s, s_search, 64, [this](const string& search) { SetSearch(search); });
-}
-
-void TablePickerPage::RenderPagerNewView(const char* item)
-{
-   namespace Theme = VPX::VRUI::Theme;
-   namespace Widgets = VPX::VRUI::Widgets;
-   const float height = Theme::Px(2.6f);
-   const ImVec2 pos = ImGui::GetCursorScreenPos();
-   const float width = ImGui::GetContentRegionAvail().x;
-   const string label = std::format("Page {} of {}", s_page + 1, m_pageCount);
-   const float labelWidth = ImGui::CalcTextSize(label.c_str()).x;
-   const float buttonWidth = Widgets::PillWidth(ICON_FK_ANGLE_LEFT, nullptr, height);
-   const float total = 2.f * buttonWidth + labelWidth + 2.f * Theme::Px(1.f);
-   const float x = pos.x + (width - total) * 0.5f;
-   ImGui::PushID(item);
-   ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
-   if (Widgets::Pill("##prev", ICON_FK_ANGLE_LEFT, nullptr, height, true, false))
-      SetPage((s_page + m_pageCount - 1) % m_pageCount, item);
-   ImGui::GetWindowDrawList()->AddText(ImVec2(x + buttonWidth + Theme::Px(1.f), pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f), Theme::kTextMuted, label.c_str());
-   ImGui::SetCursorScreenPos(ImVec2(x + buttonWidth + labelWidth + 2.f * Theme::Px(1.f), pos.y));
-   if (Widgets::Pill("##next", ICON_FK_ANGLE_RIGHT, nullptr, height, true, false))
-      SetPage((s_page + 1) % m_pageCount, item);
-   ImGui::PopID();
-   ImGui::SetCursorScreenPos(pos);
-   ImGui::Dummy(ImVec2(width, height));
 }
 
 #ifdef VPX_TABLE_WEBSERVER

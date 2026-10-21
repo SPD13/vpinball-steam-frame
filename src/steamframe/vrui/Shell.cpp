@@ -102,6 +102,7 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
    if (ui.GetActivePage() != &page || !page.IsActive())
       return true;
+   const auto renderStart = std::chrono::steady_clock::now();
 
    // A keyboard left opened by a previous menu
    if (!WasShownLastFrame())
@@ -336,7 +337,7 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    ImGui::PopFont();
 
    g_lastShownFrame = ImGui::GetFrameCount();
-   SelfTest::Update(page);
+   SelfTest::Update(page, std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - renderStart).count());
    return true;
 }
 

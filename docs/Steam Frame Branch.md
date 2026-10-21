@@ -18,7 +18,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Lists of tables** as tabs: All, Recent, Newly added, Most played, Favorites, plus a MENU tab for the library and application options. The tabs are large buttons, easy to hit with a mouse or a VR pointer.
 - **Thumbnails**: a grid of table images, loaded in the background with a spinner on each tile meanwhile; a list view is also available. A table without an image gets a screenshot when it is closed, and "Replace table image" takes a new one (sections 4 and 8).
 - **Favorites**: a star on each thumbnail, or "Add to favorites" in the table's page; the Favorites tab lists them.
-- **Pagination**: 12 tables per page (48 in the new VR menu), with a pager above and below the list, so large libraries stay fast.
+- **One list** of all the tables, without pages: only the tables on screen are drawn and only their images are loaded, so libraries of thousands of tables stay fast.
 - **Search** as you type (a virtual keyboard in VR), a letter filter and A–Z / Z–A sort in the All tab, and play statistics (added, last played, times played) for the hovered table.
 - **Table actions**: play, restart, rename, reset the table settings, delete, and use the table's VR room in the lobby.
 - **Lobby** in launcher mode, from which tables are started and to which they return (section 4).
@@ -88,14 +88,14 @@ New files: `src/steamframe/TablePickerPage.h/.cpp`. Registered as `tables/picker
 
 - **Tabs:** All, Recent (by last played), Newly added (by date added), Most played, Favorites, and MENU at the right end (the library and application options, section 8). They are drawn as padded buttons (`RenderTabs`); only the hovered button is highlighted, not the whole row (new `InGameUIItem::m_customHighlight`), and with buttons the current tab turns green when the row has the focus.
 - **Search box** filtering as you type, on every tab. In All, results are ordered by score.
-- **Pages** of 12 tables (48 in the new VR menu), with a pager above and below the tables. Only the tables of the page get menu items, sub-pages and thumbnails; thumbnails of other pages are released.
+- **All the tables in one list**, without pages: every table gets a menu item and a sub-page, but only the tiles and rows on screen are drawn. Thumbnails are loaded when their tile is displayed (and, in the new VR menu, when it is less than a screen below the view); beyond 120 thumbnails, the ones displayed the longest time ago are released. With 3000 tables on macOS, the Tables screen draws in about 0.1 ms per frame, and rebuilding the list (opening it, typing in the search, changing a favorite) takes 7 to 17 ms once.
 - **Grid view** with thumbnails (decoded when visible on worker threads, two at a time, with a spinner on the tile meanwhile, uploaded to the GPU at most one per frame, downscaled to 512 px) and a **favorite star** on each thumbnail, or **list view**.
 - In the All tab: letter filter (from 9 tables up) and A–Z / Z–A sort.
 - Hovering or selecting a table shows when it was added, when it was last played and how many times.
 - Per-table page: Play / Restart, Add to / Remove from favorites, Rename, Reset table settings (if an `.ini` exists), Delete with confirmation. Reset and Delete are not offered for the running table. Actions fire once per press (the stock menu repeats an action every frame while a button is held).
 - `TextEntryPage`: text entry with four buttons (left/right pick a character, then "Add"), used for rename and for search when there is no keyboard.
 - Library section: view mode, sort, rescan, tables folder, ROM folder hint, and in launcher mode "Settings" (opens the menu's home page) and "Quit Visual Pinball".
-- Inputs: with a mouse or pointer, tabs, pager arrows, stars and the search box are clicked directly. With buttons, left/right on the tab row, a pager or the letter filter changes them, activating the search row opens the text entry page, and favorites are toggled from the table's page.
+- Inputs: with a mouse or pointer, tabs, stars and the search box are clicked directly. With buttons, left/right on the tab row or the letter filter changes them, activating the search row opens the text entry page, and favorites are toggled from the table's page.
 
 New settings (`src/core/Settings_properties.inl`): `Standalone/TablesPath` (empty = `VPinballX/Tables` in the user's documents folder), `Standalone/TablePickerGridView`, `Standalone/TablePickerSortAscending`. The current tab, search text and page are kept for the session only.
 

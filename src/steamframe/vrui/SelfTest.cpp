@@ -28,6 +28,9 @@ namespace
    int g_dpadStep = 0;
    int g_shotCount = 0;
    std::atomic<bool> g_capturing = false;
+   // Time taken to draw the menu since the last capture
+   float g_renderMsSum = 0.f, g_renderMsMax = 0.f;
+   int g_renderCount = 0;
 
    const char* GetFolder() { return getenv("VPX_VRUI_SHOTS"); }
 
@@ -49,6 +52,11 @@ namespace
    void Capture(Player* player, const string& name, Step next)
    {
       const std::filesystem::path path = std::filesystem::path(GetFolder()) / FileName(name);
+      if (g_renderCount > 0)
+         PLOGI << std::format("VRUI self-test: menu drawn in {:.2f} ms on average, {:.2f} ms at most, over {} frames before {}", g_renderMsSum / static_cast<float>(g_renderCount),
+            g_renderMsMax, g_renderCount, path.filename().string());
+      g_renderMsSum = g_renderMsMax = 0.f;
+      g_renderCount = 0;
       g_capturing = true;
       player->m_renderer->m_renderDevice->CaptureScreenshot({ player->m_playfieldWnd }, { path },
          [path, next](bool ok)
@@ -86,10 +94,13 @@ void OnPlayerCreated(Player* player, bool isLobby)
       player->m_liveUI->OpenInGameUI();
 }
 
-void Update(InGameUIPage& page)
+void Update(InGameUIPage& page, float renderMs)
 {
    if (!IsEnabled() || g_capturing)
       return;
+   g_renderMsSum += renderMs;
+   g_renderMsMax = max(g_renderMsMax, renderMs);
+   g_renderCount++;
    Player* const player = page.m_player;
    VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
    const uint32_t now = msec();
@@ -200,9 +211,34 @@ void Update(InGameUIPage& page)
       case 18: Capture(player, "composed-modified"s, Step::DPad); break;
       case 19: ui.OnUICancelChanges(); break;
       case 20: Capture(player, "composed-undone"s, Step::DPad); break;
-      // The page of a table (play, favorite, rename, scores...), opened from the Tables screen
-      case 21: menu->SetScreen(Screen::Tables); break;
+      // The end of the list of tables (all the tables of the library are listed), selected with the buttons as a player would scroll down
+      case 21:
+         menu->SetScreen(Screen::Tables);
+         if (auto* picker = dynamic_cast<TablePickerPage*>(menu->GetContent()); picker && Keyboard::IsUsed())
+         {
+            // Without the search typed above
+            picker->OpenSearchKeyboard();
+            Keyboard::TypeForTest(""s, true);
+            Keyboard::Close();
+         }
+         break;
       case 22:
+         if (InGameUIPage* const tables = menu->GetContent(); tables)
+         {
+            const InGameUIItem* last = nullptr;
+            for (const auto& item : InGameUIPageView::GetItems(*tables))
+               if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
+                  last = item.get();
+            for (size_t i = 0; last && i < InGameUIPageView::GetItems(*tables).size() && tables->GetSelectedItem() != last; i++)
+               ui.OnUIDownAction();
+         }
+         break;
+      case 23: break; // Scrolled to it, images loading
+      case 24: break;
+      case 25: Capture(player, "list-end"s, Step::DPad); break;
+      // The page of a table (play, favorite, rename, scores...), opened from the Tables screen
+      case 26: menu->SetScreen(Screen::Tables); break;
+      case 27:
          if (InGameUIPage* const tables = menu->GetContent(); tables)
             for (const auto& item : InGameUIPageView::GetItems(*tables))
                if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
