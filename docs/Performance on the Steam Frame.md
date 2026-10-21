@@ -27,8 +27,10 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
   (section 7.4). The earlier observation of 2–3 ms more after ten minutes was made with the mirror on.
 - **A frame pacing stall can make the runtime report a full frame period of GPU time.** At fixed 2160² on Ghostbusters, every run started
   in a state where the render thread blocks 11.9 ms per frame in submission and the runtime's GPU counter reads 13.9 ms, while the GPU
-  work is unchanged (9.4 ms of passes) and 72 fps hold; a single missed frame ends it. Dynamic resolution steers by that counter and
-  would fall to its floor: it now holds the scale on such readings and ends the stall by letting one frame miss (section 7.5).
+  work is unchanged (9.4 ms of passes) and 72 fps hold; a single missed frame ends it. The cause was the hidden desktop window, still
+  presented every frame into gamescope's 60 Hz Xwayland: the Frame build no longer draws into it, which ends the stall (0 of 7 runs
+  instead of most table starts) and gives the render thread 2 ms per frame back (section 7.6). Dynamic resolution also holds its scale
+  on such readings, as a safety net (section 7.5).
 
 ## 2. Method
 
@@ -277,8 +279,37 @@ decisions are logged):
 The stall also happens with dynamic resolution on: the runs of section 7 that had it on happened not to start in it. In normal play 0–9
 readings per 5 s fall in the band without a missed frame (single heavy frames); they are held, which costs nothing, and stay far from the
 90 % that triggers a break. No regression: default 2158², 9.8 ms; a real overload (`drhigh`, `ResFactor` 1.75, 3024² ceiling) still comes
-down to 2331² at 10.7 ms within five seconds; neither had a stall break. What submission waits on in the stalled state (the bgfx frame
-against the OpenXR wait, begin and end frame calls) is still to be found.
+down to 2331² at 10.7 ms within five seconds; neither had a stall break. The cause is in section 7.6; the guard stays as a safety net.
+
+### 7.6 Cause of the stall: the desktop window
+
+The render thread's "submit" section is VPX's recording of the frame into bgfx plus bgfx's own CPU time for the frame
+(`FrameProfiler::AdjustBGFXSubmit` moves it out of "flip"), and bgfx runs on the render thread itself (single-threaded, `bgfx::renderFrame()`
+before `bgfx::init`). On Linux the desktop window is bgfx's main swapchain (`init.swapChain.nwh` is the X11 window). With the mirror off,
+the "Desktop Display" pass of `Renderer` still cleared that window every frame, so every frame bgfx acquired one of its images (blocking,
+and the frame's queue submission waits on the acquire semaphore, `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT`) and presented it (`IMMEDIATE`, vsync
+off). On the Frame that window lives in gamescope's Xwayland (`gamescope --backend openvr`, 1280×720 at **59.86 Hz**): a 72 Hz headset
+frame tied to a 60 Hz presentation engine, which explains why the stall locks in, why one late frame shifts the phase out of it, and why
+the GPU work is unchanged while the runtime counts a full period.
+
+Experiment, same binary with the desktop pass skipped by a temporary switch (Ghostbusters, fixed 2160², alternated):
+
+| Ghostbusters 2160², fixed | Stalled | Submit (normal state) | Flip (idle) | VPX CPU |
+|---|---|---|---|---|
+| Desktop window drawn (4 runs) | **4 of 4** (3 for the whole run, 1 for 10 s) | 6.2 ms | 5.9 ms | 70–72 % |
+| Desktop window not drawn (4 runs) | **0 of 4** | **4.1 ms** | 8.0 ms | 65–66 % |
+
+The GPU passes are the same in both (9.15–9.27 ms). **Fix**: the Frame build (`VPX_STEAM_FRAME_HEADSET`) no longer draws into the
+desktop window (`Renderer`, the "Desktop Display" pass), so bgfx neither acquires nor presents it. Validation with the fix: 7 runs
+(Ghostbusters fixed 2160² on four copies of the table, default, `drhigh`; Addams default), **no stall, no stall break**; the render
+thread's submission is 4.1 ms per frame on Ghostbusters (6.2 ms before in the normal state, 11.9 ms stalled) and 1.7 ms on Addams
+(3.3 ms before); Addams settles at 2027², 10.7 ms. Nothing else draws into that window on the Frame: the passes that render the scene
+for it only run with the mirror on.
+
+The coupling is generic: any VR session whose desktop window is presented by a display slower than the headset (a 60 Hz monitor and a
+90 Hz PC headset, for example) shares the frame's submission with that presentation. Upstream, with a desktop mirror that is wanted,
+the fix would be to present the window without blocking the headset frame (acquire with a zero timeout and skip the window when no
+image is free, as bgfx already does for secondary windows), which needs a change in bgfx: not tested here.
 
 ## 8. Opportunities
 
@@ -294,7 +325,7 @@ millisecond saved lets dynamic resolution raise the size by about 4–5 % per ax
 | 5 | Overlap frame preparation with submission | 1.1–1.6 ms of render thread time (mirror off); frame rate at 90 Hz | Threading change | Idea |
 | 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
-| 8 | Dynamic resolution robust to the pacing stall | Avoids a fall to the floor resolution | Small change in `VRDevice` | **Done** (section 7.5); cause still unknown |
+| 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off | Table script option today | To evaluate (section 7.2) |
 
 Details:
@@ -313,14 +344,15 @@ Details:
 5. **Frame preparation and submission**: the render thread waits 1.1–1.6 ms per frame for the logic thread with the mirror off (1.8–3.5 ms
    with it on). Preparing frame N+1 while frame N is submitted would give the render thread that time back, which matters most for
    90 Hz.
-6. **Submission cost**: 4–6 ms of render thread time per frame on Ghostbusters (34 % of a core) against about 3 ms on Addams (15 %).
+6. **Submission cost**: 4–6 ms of render thread time per frame on Ghostbusters (34 % of a core) against about 3 ms on Addams (15 %);
+   since the desktop window is no longer drawn (section 7.6), 4.1 ms and 1.7 ms.
    Ghostbusters submits 1 000 draws and 29 000 shader parameter changes per frame; Addams 332 and 9 600. Fewer parameter uploads (only the
    ones that changed, or per-material uniform buffers) are the first thing to look at.
 7. **Dynamic resolution settings**: with the mirror off, Addams runs at 93 % and no longer reaches the 70 % floor; a lower floor only
    matters for heavier tables or a hot device, at a visible cost in sharpness. Per table, with the settings of the VR page.
-8. **Pacing stall**: see section 7.5. Dynamic resolution holds on stalled readings and breaks the stall with one missed frame. What the
-   render thread waits on in submission in that state is still to be found; the break only runs with dynamic resolution on (it needs the
-   runtime's counter), so a fixed resolution can still stall, at 72 fps.
+8. **Pacing stall**: caused by the desktop window presented along the headset frames, no longer drawn in the Frame build (section 7.6).
+   Dynamic resolution also holds on stalled readings and breaks a stall with one missed frame (section 7.5), for other setups. Upstream
+   candidate: present the desktop mirror without blocking the headset frame.
 9. **VR room**: on Ghostbusters the full room costs about a fifth of the GPU frame, in pixels rather than geometry, and the table's
    minimal room saves little of it. Today the room is a constant in each table's script (Ghostbusters `VRRoom`, Addams
    `VR_Room_Minimal`). Worth checking which room surfaces are expensive to shade (lights, reflections, large textures) before an engine
@@ -351,5 +383,5 @@ table option changed by a `<table>.vbs` next to a hard link of the table (sectio
 less: the Frame goes to sleep when no VPX has run for a few minutes, which ends the series (`systemd-inhibit` needs an interactive login).
 
 The results are on the Frame: `~/perf-test/results` (mirror off: Ghostbusters by resolution, VR room and stall runs, Addams by
-resolution and the 15-minute run `-default-hot15`), `~/perf-test/results-prev` (the Ghostbusters default run of section 7.1),
-`~/perf-test/results-guard` and `~/perf-test/results-break` (section 7.5), and `~/perf-test/results-before` (mirror on).
+resolution and the 15-minute run `-default-hot15`), `~/perf-test/results-prev` (the Ghostbusters default and fixed2160 runs of section 7.1),
+`~/perf-test/results-guard` and `~/perf-test/results-break` (section 7.5), `~/perf-test/results-nodesk` and `~/perf-test/results-fix` (section 7.6), and `~/perf-test/results-before` (mirror on).
