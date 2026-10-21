@@ -224,7 +224,6 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
       if (IsCoreType(item->m_type) || (filter && !(*filter)(i)))
          continue;
       const bool selected = flipperNav && i == page.m_selectedItem;
-      ImGui::PushID(i);
 
       // Tiles: image with the label below, and an optional toggle (favorite star) in the top right corner of the image
       if (item->m_tileImage && (item->m_type == Navigation || item->m_type == Runnable))
@@ -232,6 +231,18 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          if (tileColumn == 0)
             tileRowY = ImGui::GetCursorScreenPos().y;
          const ImVec2 pos(x0 + static_cast<float>(tileColumn) * tileWidth, tileRowY);
+         // Off screen (lists of thousands of tables): only its place in the layout, its image being loaded when it is less than a screen
+         // below the view, ready to be scrolled to. The selected tile is always drawn, as it scrolls the view to itself.
+         if (!selected && !ImGui::IsRectVisible(pos, pos + tileSize))
+         {
+            if (ImGui::IsRectVisible(pos - ImVec2(0.f, ImGui::GetWindowHeight()), pos + tileSize))
+               item->m_tileImage();
+            ImGui::SetCursorScreenPos(ImVec2(x0, pos.y + tileSize.y + tileGap));
+            ImGui::Dummy(ImVec2(0.f, 0.f));
+            tileColumn = (tileColumn + 1) % tileColumns;
+            continue;
+         }
+         ImGui::PushID(i);
          ImGui::SetCursorScreenPos(pos);
          const bool clicked = ImGui::InvisibleButton("tile", tileSize);
          const bool hovered = ImGui::IsItemHovered();
@@ -306,6 +317,14 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
       }
 
       const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+      // Rows of a list off screen (the tables of the list view): only their place in the layout, as tiles
+      if ((item->m_type == Navigation || item->m_type == Runnable) && !selected && !ImGui::IsRectVisible(rowMin, ImVec2(rowMin.x + width, rowMin.y + rowHeight)))
+      {
+         ImGui::SetCursorScreenPos(ImVec2(rowMin.x, rowMin.y + rowHeight));
+         ImGui::Dummy(ImVec2(0.f, 0.f));
+         continue;
+      }
+      ImGui::PushID(i);
       const bool isMouseOver = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(rowMin, ImVec2(rowMin.x + width, rowMin.y + rowHeight));
       const float textY = rowMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f;
 
@@ -358,6 +377,8 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
             drawList->AddText(ImVec2(rowMin.x + width - pad - ImGui::CalcTextSize(ICON_FK_ANGLE_RIGHT).x, textY), hovered || selected ? Theme::kAccent : Theme::kTextMuted, ICON_FK_ANGLE_RIGHT);
          if (hovered || selected)
             hoveredItem = item;
+         if (selected)
+            Widgets::ScrollIntoView(rowMin, ImVec2(rowMin.x + width, rowMin.y + rowHeight));
          if (clicked)
          {
             page.m_selectedItem = i;

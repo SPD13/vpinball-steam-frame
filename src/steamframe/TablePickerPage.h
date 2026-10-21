@@ -35,7 +35,7 @@ class TablePickerPage final : public InGameUIPage
 {
 public:
    // 'newView': the Tables screen of the new VR menu (src/steamframe/vrui/), which shows the scores and the options of the MENU tab on
-   // screens of their own, and draws the tabs, the search field and the pager with its widgets
+   // screens of their own, and draws the tabs and the search field with its widgets
    explicit TablePickerPage(bool newView = false);
    ~TablePickerPage() override;
 
@@ -50,17 +50,20 @@ private:
    void BuildPage() override;
 
    // Table images, loaded when they get visible. Decoding takes a few milliseconds, too long for a frame: it runs on worker threads, a few at
-   // a time, and the decoded images are uploaded to the GPU one per frame at most. The tiles show a spinner meanwhile.
+   // a time, and the decoded images are uploaded to the GPU one per frame at most. The tiles show a spinner meanwhile. The images not
+   // displayed for the longest time are released beyond a budget (MAX_KEPT_THUMBNAILS), so that long lists do not fill the GPU memory.
    struct Thumbnail
    {
       std::shared_ptr<BaseTexture> texture;
       int64_t modifiedAt = 0;
       std::future<std::shared_ptr<BaseTexture>> loading; // Valid while decoding
       int64_t loadingModifiedAt = 0;
+      int lastUsedFrame = 0;
    };
    ImTextureID GetThumbnail(const VPinballLib::Table& table);
    bool IsThumbnailLoading(const VPinballLib::Table& table) const;
    void UpdateThumbnailLoads();
+   void ReleaseThumbnail(Thumbnail& thumbnail);
    ankerl::unordered_dense::map<string, Thumbnail> m_thumbnails;
    vector<std::future<std::shared_ptr<BaseTexture>>> m_abandonedLoads; // Of thumbnails no longer displayed, kept until done not to wait for them
    bool m_thumbnailLoadedThisFrame = false;
@@ -68,22 +71,16 @@ private:
    void SetTab(int tab);
    void StepTab(int direction);
    void StepFilter(int direction);
-   void SetPage(int page, const string& pagerItem);
    void SetSearch(const string& search);
    void RenderTabs();
    void RenderTabsNewView();
    void RenderSearchNewView();
-   void RenderPagerNewView(const char* item);
    void BuildMenuTab();
    void KeepThumbnails(const ankerl::unordered_dense::set<string>& displayedTables);
    void RenderSearch();
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
-   void RenderPager(const char* item);
    const bool m_newView;
    bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard opens when the buttons select it)
-   int m_pageCount = 1;
-   string m_reselectItem;
-   int m_reselectDelay = 0;
 
    uint64_t m_revision = 0;
    uint64_t m_scoresRevision = 0; // Of the profiles and scores, shown by the player item and the Scores tab

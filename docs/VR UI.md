@@ -80,8 +80,9 @@ table (its actions, then its lighting and difficulty options).
 
 On macOS (or any desktop build), `VPX_VRUI=new` shows the new menu in the window (the mouse is the pointer, the keys of the in-game UI the
 d-pad), `VPX_VRUI_KEYBOARD=1` types with the keyboard of the menu as in VR. `VPX_VRUI_SHOTS=<folder>` captures every screen, a d-pad
-sequence, a search typed with the keyboard, a value changed then undone on a composed screen, the page of a table and a sub-page, then
-quits (`SelfTest.cpp`):
+sequence, a search typed with the keyboard, a value changed then undone on a composed screen, the end of the list of tables (selected with
+the buttons), the page of a table and a sub-page, then quits (`SelfTest.cpp`). Each capture logs the time taken to draw the menu since the
+previous one: a large library is checked with a tables folder of empty `.vpx` files and their images (cloned with `cp -c` on macOS).
 
 ```
 VPX_VRUI=new VPX_VRUI_KEYBOARD=1 VPX_VRUI_SHOTS=/tmp/shots VPinballX_BGFX -PrefPath <folder> -Launcher
