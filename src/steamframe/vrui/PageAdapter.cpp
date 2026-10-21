@@ -205,7 +205,7 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
    const float frameHeight = ImGui::GetFrameHeight();
 
    // Consecutive tiles are laid out as a grid, which still is navigated as a list
-   const int tileColumns = clamp(static_cast<int>(width / Theme::Px(13.f)), 2, 6);
+   const int tileColumns = clamp(static_cast<int>(width / Theme::Px(Theme::kTileWidth)), 2, 6);
    const float tileWidth = floorf(width / static_cast<float>(tileColumns));
    const float tileGap = Theme::Px(0.5f);
    const float tileImageHeight = (tileWidth - tileGap - 2.f * pad) * 0.625f;
