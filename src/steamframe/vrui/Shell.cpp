@@ -45,6 +45,9 @@ namespace
    ImVec2 g_menuPos, g_menuSize;
    const InGameUIItem* g_embeddedHovered = nullptr;
    int g_lastShownFrame = -10;
+   // The content region is the same ImGui window for every page and screen, so its scroll must not carry over from one to the next (from
+   // the table list to the page of a table, whose leaderboard can make it scroll that far): each one opens at its top
+   string g_contentKey;
 
    // Draws the title, cut to fit
    void Title(const char* text, const ImVec2& pos, float maxWidth, float height)
@@ -218,6 +221,12 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f) - keyboardHeight);
    const InGameUIItem* hoveredItem = nullptr;
    ImGui::SetCursorScreenPos(contentPos);
+   const string contentKey = menu ? "screen/" + std::to_string(static_cast<int>(menu->GetScreen())) : std::format("page/{}", static_cast<const void*>(&page));
+   if (contentKey != g_contentKey)
+   {
+      ImGui::SetNextWindowScroll(ImVec2(-1.f, 0.f));
+      g_contentKey = contentKey;
+   }
    Widgets::BeginRegion("##content", contentSize, true);
    if (content)
    {
