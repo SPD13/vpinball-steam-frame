@@ -21,6 +21,8 @@ set(VRUI_SOURCES
    src/steamframe/vrui/Theme.h
    src/steamframe/vrui/Theme.cpp
    src/steamframe/vrui/Tripwires.cpp
+   src/steamframe/vrui/UpdateCheck.h
+   src/steamframe/vrui/UpdateCheck.cpp
    src/steamframe/vrui/Widgets.h
    src/steamframe/vrui/Widgets.cpp
 
@@ -31,6 +33,11 @@ set(VRUI_SOURCES
 )
 
 target_sources(vpinball PRIVATE ${VRUI_SOURCES})
+
+# The update check loads the libcurl of the system with dlopen (libdl before glibc 2.34, as in the Steam Linux Runtime)
+if(PLATFORM STREQUAL "macos" OR PLATFORM STREQUAL "linux")
+   target_link_libraries(vpinball PUBLIC ${CMAKE_DL_LIBS})
+endif()
 
 # A new upstream item or property type must break the build of the view, not be silently skipped (see Tripwires.cpp)
 if(NOT MSVC)

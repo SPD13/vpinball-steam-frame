@@ -8,6 +8,7 @@
 #include "PageView.h"
 #include "SelfTest.h"
 #include "Theme.h"
+#include "UpdateCheck.h"
 #include "Widgets.h"
 
 #include "fonts/IconsForkAwesome.h"
@@ -103,6 +104,7 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    if (ui.GetActivePage() != &page || !page.IsActive())
       return true;
    const auto renderStart = std::chrono::steady_clock::now();
+   UpdateCheck::Start();
 
    // A keyboard left opened by a previous menu
    if (!WasShownLastFrame())
@@ -285,6 +287,32 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
       belowMenuY = keyboardPos.y + keyboardSize.y;
    }
    Keyboard::EndFrame();
+
+   // Yellow badge above the menu when a newer release is published: it is installed with the installer app, from a computer
+   if (UpdateCheck::IsUpdateAvailable())
+   {
+      static constexpr const char* label = "Update Available - Use the installer";
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kSmallTextSize));
+      const float badgeHeight = Theme::Px(Theme::kBadgeHeight);
+      const float badgePad = badgeHeight * 0.45f;
+      // The icons are only merged in the regular font
+      ImFont* const iconFont = Theme::Font();
+      const float fontSize = ImGui::GetFontSize();
+      const float iconWidth = iconFont->CalcTextSizeA(fontSize, FLT_MAX, 0.f, ICON_FK_ARROW_CIRCLE_UP).x + badgeHeight * 0.25f;
+      const ImVec2 badgeSize(floorf(2.f * badgePad + iconWidth + ImGui::CalcTextSize(label).x), badgeHeight);
+      const ImVec2 badgePos(floorf(pos.x + (size.x - badgeSize.x) * 0.5f), pos.y - Theme::Px(Theme::kBadgeGap) - badgeHeight);
+      ImGui::SetNextWindowPos(badgePos);
+      ImGui::SetNextWindowSize(badgeSize);
+      ImGui::Begin("##VRUIUpdateBadge", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+      Theme::ApplyPixelDensity();
+      ImDrawList* const badgeDrawList = ImGui::GetWindowDrawList();
+      badgeDrawList->AddRectFilled(badgePos, badgePos + badgeSize, Theme::kWarning, badgeHeight * 0.5f);
+      const float textY = badgePos.y + (badgeHeight - ImGui::GetTextLineHeight()) * 0.5f;
+      badgeDrawList->AddText(iconFont, fontSize, ImVec2(badgePos.x + badgePad, textY), Theme::kOnWarning, ICON_FK_ARROW_CIRCLE_UP);
+      badgeDrawList->AddText(ImVec2(badgePos.x + badgePad + iconWidth, textY), Theme::kOnWarning, label);
+      ImGui::End();
+      ImGui::PopFont();
+   }
 
 #ifdef VPX_TABLE_WEBSERVER
    // Badge below the menu (and the keyboard): address and pairing code of the Wi-Fi upload, or that it is off. It opens the Wi-Fi screen.
