@@ -511,7 +511,13 @@ private:
    std::atomic<float> m_dynamicRenderScale = 1.f; // Scale given to the renderer for the next frame
    std::atomic<float> m_lastGpuFrameTimeMs = 0.f; // Last reading of the counter, for the status
    std::atomic<float> m_frameBudgetMs = 0.f; // Frame period of the display: the shortest predicted display period of the session (see UpdateDynamicResolution)
-   void UpdateDynamicResolution(const XrDuration predictedDisplayPeriod); // Render thread, once per frame before the frame is prepared
+   std::atomic<bool> m_dynamicResolutionHeld = false; // The last reading was taken for a frame pacing stall, not GPU work: the scale was kept
+   XrTime m_lastPredictedDisplayTime = 0; // Of the previous frame: a step of more than one frame period means a frame missed its display
+   unsigned int m_framesSinceMissed = 0;
+   unsigned int m_missedFrames = 0, m_heldReadings = 0, m_stallBreaks = 0; // Since the last status log
+   unsigned int m_stallWindowFrames = 0, m_stallWindowHeld = 0; // Readings, and held readings, in the current second
+   unsigned int m_stallBreaksLeft = 0; // For the current table (see UpdateDynamicResolution)
+   void UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime); // Render thread, once per frame before the frame is prepared
    double m_nextStatusLogTime = 0.;
    void LogRuntimeStatus();
 
