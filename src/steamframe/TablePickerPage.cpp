@@ -990,7 +990,7 @@ static constexpr const char* CHARACTER_LABEL = "Character: ";
 static constexpr std::string_view TEXT_ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz0123456789-'&!().,";
 
 TextEntryPage::TextEntryPage(const string& title, const string& text, const std::function<void(const string&)>& onSave, bool allowEmpty, size_t maxLength)
-   : InGameUIPage(title, "Type on the keyboard, or with buttons: Left/Right select a character, which is then added to the text"s, SaveMode::None)
+   : InGameUIPage(title, VPX::VRUI::IsActive() ? "Type with the keyboard, then press Done"s : "Type on the keyboard, or with buttons: Left/Right select a character, which is then added to the text"s, SaveMode::None)
    , m_text(text)
    , m_onSave(onSave)
    , m_allowEmpty(allowEmpty)
@@ -1016,6 +1016,30 @@ void TextEntryPage::AdjustItem(float direction, bool isInitialPress)
       InGameUIPage::AdjustItem(direction, isInitialPress);
 }
 
+void TextEntryPage::OpenKeyboard()
+{
+   VPX::VRUI::Keyboard::Open(std::format("textentry:{}", static_cast<const void*>(this)), ""s, m_text, m_maxLength,
+      [this](const string& text)
+      {
+         m_text = text;
+         RequestRebuild();
+      },
+      // Done saves the text, when it can be saved
+      [this]()
+      {
+         if (CanSave())
+            Save();
+      });
+}
+
+bool TextEntryPage::CanSave() const { return m_allowEmpty || m_text.find_first_not_of(' ') != string::npos; }
+
+void TextEntryPage::Save()
+{
+   m_onSave(m_text);
+   m_player->m_liveUI->m_inGameUI.NavigateBack();
+}
+
 void TextEntryPage::BuildPage()
 {
    const char c = TEXT_ENTRY_CHARACTERS[m_charIndex];
@@ -1034,13 +1058,11 @@ void TextEntryPage::BuildPage()
             const float height = ImGui::GetFrameHeight();
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const ImVec2 size(ImGui::GetContentRegionAvail().x, height);
-            if (ImGui::InvisibleButton("##field", size))
-               Keyboard::Open(owner, ""s, m_text, m_maxLength,
-                  [this](const string& text)
-                  {
-                     m_text = text;
-                     RequestRebuild();
-                  });
+            if (ImGui::InvisibleButton("##field", size) || !m_keyboardOpened)
+            {
+               m_keyboardOpened = true;
+               OpenKeyboard();
+            }
             ImDrawList* const drawList = ImGui::GetWindowDrawList();
             drawList->AddRectFilled(pos, pos + size, ImGui::IsItemHovered() ? Theme::kSurfaceHover : Theme::kSurface, Theme::Px(0.45f));
             if (Keyboard::IsEditing(owner))
@@ -1057,6 +1079,19 @@ void TextEntryPage::BuildPage()
             RequestRebuild();
          }
       })).m_customHighlight = true;
+   const auto addSaveItem = [this]()
+   {
+      if (CanSave())
+         AddItem(std::make_unique<InGameUIItem>("Save"s, ""s, [this]() { Save(); }));
+   };
+
+   // New VR menu: its keyboard only (Done saves), without the selection of the characters with the buttons
+   if (VPX::VRUI::IsActive())
+   {
+      addSaveItem();
+      return;
+   }
+
    AddItem(std::make_unique<InGameUIItem>(CHARACTER_LABEL + "< "s + displayedChar + " >", "Left/Right: previous/next character"s, []() { /* Handled by AdjustItem as it depends on the direction */ }));
    AddItem(std::make_unique<InGameUIItem>("Add '" + displayedChar + '\'', ""s,
       [this, c]()
@@ -1081,13 +1116,7 @@ void TextEntryPage::BuildPage()
                m_text.pop_back();
             RequestRebuild();
          }));
-   if (m_allowEmpty || m_text.find_first_not_of(' ') != string::npos)
-      AddItem(std::make_unique<InGameUIItem>("Save"s, ""s,
-         [this]()
-         {
-            m_onSave(m_text);
-            m_player->m_liveUI->m_inGameUI.NavigateBack();
-         }));
+   addSaveItem();
 }
 
 

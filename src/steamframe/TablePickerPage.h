@@ -100,9 +100,13 @@ public:
 
 private:
    void BuildPage() override;
+   void OpenKeyboard(); // New VR menu
+   bool CanSave() const;
+   void Save();
 
    string m_text;
    size_t m_charIndex = 0;
+   bool m_keyboardOpened = false; // New VR menu: the keyboard opens with the page, once
    const std::function<void(const string&)> m_onSave;
    const bool m_allowEmpty;
    const size_t m_maxLength;
