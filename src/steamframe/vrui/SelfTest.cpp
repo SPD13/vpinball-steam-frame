@@ -183,16 +183,26 @@ void Update(InGameUIPage& page)
          break;
       case 10: Capture(player, "keyboard-search"s, Step::DPad); break;
       case 11: Keyboard::Close(); break;
+      // Search field reached with the buttons: its keyboard opens
+      case 12:
+         for (int i = 0; i < 10; i++)
+            if (const InGameUIItem* selected = menu->GetContent() ? menu->GetContent()->GetSelectedItem() : nullptr; selected && selected->m_label == "##search"s)
+               break;
+            else
+               ui.OnUIDownAction();
+         break;
+      case 13: Capture(player, "search-focused"s, Step::DPad); break;
+      case 14: Keyboard::Close(); break;
       // A value of a composed screen changed with the buttons, then undone (the footer follows)
-      case 12: menu->SetScreen(Screen::Sound); break;
-      case 13: ui.OnUIDownAction(); break;
-      case 14: ui.OnUILeftAction(); ui.OnUILeftAction(); break;
-      case 15: Capture(player, "composed-modified"s, Step::DPad); break;
-      case 16: ui.OnUICancelChanges(); break;
-      case 17: Capture(player, "composed-undone"s, Step::DPad); break;
+      case 15: menu->SetScreen(Screen::Sound); break;
+      case 16: ui.OnUIDownAction(); break;
+      case 17: ui.OnUILeftAction(); ui.OnUILeftAction(); break;
+      case 18: Capture(player, "composed-modified"s, Step::DPad); break;
+      case 19: ui.OnUICancelChanges(); break;
+      case 20: Capture(player, "composed-undone"s, Step::DPad); break;
       // The page of a table (play, favorite, rename, scores...), opened from the Tables screen
-      case 18: menu->SetScreen(Screen::Tables); break;
-      case 19:
+      case 21: menu->SetScreen(Screen::Tables); break;
+      case 22:
          if (InGameUIPage* const tables = menu->GetContent(); tables)
             for (const auto& item : InGameUIPageView::GetItems(*tables))
                if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
