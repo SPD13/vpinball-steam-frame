@@ -84,16 +84,17 @@ static string FormatTime(int64_t secondsSinceEpoch, bool withTime)
    return strftime(buffer, sizeof(buffer), withTime ? "%d %b %Y at %H:%M" : "%d %b %Y", &localTime) > 0 ? string(buffer) : string();
 }
 
-// What is displayed when a table is hovered or selected: when it was added, when it was last played and how many times.
-// The information area of the pages holds 3 lines: 'compact' uses 2, to leave one for something else.
+// What is displayed when a table is hovered or selected: when it was added, when it was last played and how many times, in 2 lines (the
+// information area of the pages holds 3 lines, the first one is left for the name or the path of the table). 'compact' puts the dates
+// on separate lines.
 static string GetTableStatsInfo(const LibraryTable& table, bool compact = false)
 {
    const string added = "Added on " + FormatTime(table.createdAt, false);
    if (table.playCount == 0 || table.lastPlayedAt == 0)
       return added + (compact ? ", never played" : "\nNever played");
-   const string lastPlayed = "Last played on " + FormatTime(table.lastPlayedAt, true);
+   const string lastPlayed = "ast played on " + FormatTime(table.lastPlayedAt, true);
    const string played = table.playCount == 1 ? "layed once"s : std::format("layed {} times", table.playCount);
-   return compact ? added + ", p" + played + '\n' + lastPlayed : added + '\n' + lastPlayed + "\nP" + played;
+   return compact ? added + ", p" + played + "\nL" + lastPlayed : added + ", l" + lastPlayed + "\nP" + played;
 }
 
 static bool IsRunningTable(const Player* player, const LibraryTable& table)
@@ -597,9 +598,10 @@ void TablePickerPage::BuildPage()
    ankerl::unordered_dense::set<string> displayedTables;
    for (const LibraryTable& table : tables)
    {
-      string label = table.name;
+      string fullName = table.name;
       if (nameCounts[table.name] > 1)
-         label += " [" + table.path + ']';
+         fullName += " [" + table.path + ']';
+      string label = fullName;
       if (runningTable == library.GetFullPath(table).lexically_normal())
          label += " (playing)";
       if (!gridView && table.favorite)
@@ -608,7 +610,7 @@ void TablePickerPage::BuildPage()
       const string uuid = table.uuid;
       displayedTables.insert(uuid);
       m_player->m_liveUI->m_inGameUI.AddPage(path, [uuid]() { return std::make_unique<TableActionsPage>(uuid); });
-      InGameUIItem& item = AddItem(std::make_unique<InGameUIItem>(label, GetTableStatsInfo(table), path));
+      InGameUIItem& item = AddItem(std::make_unique<InGameUIItem>(label, fullName + '\n' + GetTableStatsInfo(table), path));
       if (gridView)
       {
          item.m_tileImage = [this, table]() { return GetThumbnail(table); };
