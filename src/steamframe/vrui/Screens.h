@@ -18,8 +18,9 @@ enum class Screen
    Sound,
    Controls,
    Plugins,
-   System, // Library, other settings, classic menu, quit
+   System, // Library, other settings
    WiFi, // Adding tables from a browser
+   Quit, // Leaving the application (a button on the screen, so that moving down the rail never quits)
    Count
 };
 
