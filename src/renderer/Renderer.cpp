@@ -3189,7 +3189,15 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
 
       // Mirror the rendered eye(s) to the desktop display (unless it shows a dedicated render of the scene, see RenderDesktopScene)
       RenderTarget* desktopRT = nullptr;
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      // The Steam Frame's desktop window is never seen (the mirror is off, see the constructor), and drawing into it, even a clear, makes BGFX
+      // acquire and present its swapchain each frame: it is BGFX's main swapchain, presented into gamescope's Xwayland at 60 Hz, and tying
+      // it to the 72 Hz headset frames made the render thread wait for it in most table starts (frame pacing stall, 12 ms per frame in
+      // bgfx::frame for up to minutes) and cost 2 ms per frame otherwise (docs/Performance on the Steam Frame.md, section 7.6)
+      if (false)
+#else
       if (m_renderDevice->m_outputWnd.size() >= 2 && !NeedsDesktopSceneRender())
+#endif
       {
          assert(m_renderDevice->m_outputWnd.size() >= 2); // For the time being, we rely on the fact that the First output is the VR Headset, and the second is the desktop display OS window
          desktopRT = m_renderDevice->m_outputWnd[1]->GetBackBuffer();
