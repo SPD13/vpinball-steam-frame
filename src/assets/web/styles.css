@@ -1421,6 +1421,31 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
   margin-right: auto;
 }
 
+/* Tables page: the search and the "Add table" button, which opens the Files page */
+.tables-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn.tables-add {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Files page: the upload and refresh buttons, above the path */
+.path-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.path-buttons .btn {
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .tables-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1431,6 +1456,15 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
   .tables-toolbar .search-container input,
   .tables-toolbar .search-container input:focus {
     width: 100%;
+  }
+
+  .tables-toolbar-actions {
+    width: 100%;
+  }
+
+  .tables-toolbar-actions .search-container {
+    flex: 1;
+    min-width: 0;
   }
 }
 

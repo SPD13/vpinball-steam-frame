@@ -32,6 +32,37 @@
     </header>
 
     <main id="main" class="main-container">
+      <div class="path-buttons">
+        <button type="button" class="btn btn-secondary" onclick="uploadFile()">
+          <span class="btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </span>
+          Upload File
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="uploadFolder()">
+          <span class="btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              <polyline points="15 13 12 10 9 13"></polyline>
+              <line x1="12" y1="10" x2="12" y2="17"></line>
+            </svg>
+          </span>
+          Upload Folder
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="refreshTables()">
+          <span class="btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 4v6h6"></path>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+          </span>
+          Refresh Tables
+        </button>
+      </div>
       <div class="path-actions-container">
         <div id="breadcrumb" class="breadcrumb"></div>
         <div class="path-actions">
@@ -62,35 +93,6 @@
                   </svg>
                 </span>
                 New Folder
-              </a>
-              <a href="#" onclick="event.preventDefault(); uploadFile(); hideMainActionsDropdown(); return false;">
-                <span class="dropdown-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                </span>
-                Upload File
-              </a>
-              <a href="#" onclick="event.preventDefault(); uploadFolder(); hideMainActionsDropdown(); return false;">
-                <span class="dropdown-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    <polyline points="15 13 12 10 9 13"></polyline>
-                    <line x1="12" y1="10" x2="12" y2="17"></line>
-                  </svg>
-                </span>
-                Upload Folder
-              </a>
-              <a href="#" onclick="event.preventDefault(); refreshTables(); hideMainActionsDropdown(); return false;">
-                <span class="dropdown-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 4v6h6"></path>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                  </svg>
-                </span>
-                Refresh Tables
               </a>
               <a href="#" id="log-stream-menu-item" onclick="event.preventDefault(); toggleLogViewer(); hideMainActionsDropdown(); return false;">
                 <span class="dropdown-icon">
