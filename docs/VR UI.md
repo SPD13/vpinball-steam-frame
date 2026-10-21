@@ -60,7 +60,7 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   action, text) gets back to the rail.
 - In VR, the menu opens in pointer navigation (hovered items are highlighted). Any button of the UI (d-pad, sticks, Save, Undo, Defaults,
   Back) switches to button navigation, the selected item being highlighted: the first press of a direction only shows it. A trigger press
-  switches back (and clicks); aiming or scrolling does not. The thumbstick of the pointing controller scrolls in pointer navigation only,
+  switches back without clicking (the next one clicks); aiming or scrolling does not. The thumbstick of the pointing controller scrolls in pointer navigation only,
   and not until it gets back to its center after a navigation, so that the sticks do not fight the buttons.
 - Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
