@@ -1232,9 +1232,9 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    const float budgetMs = m_frameBudgetMs;
    const float targetMs = budgetMs * m_dynamicResolutionTarget;
    const float minScale = clamp(m_dynamicResolutionMinScale.load(), 0.5f, 1.f);
-   // Frame pacing stall (seen on the Frame at a fixed 2160 x 2160, for up to two minutes after a table starts: docs/Performance on the Steam
-   // Frame.md, section 7.5): the render thread waits for the GPU in submission instead of in xrWaitFrame, and the counter then reads the
-   // whole frame period whatever the GPU work (9 ms of it). GPU work that long makes frames miss their display, while in the stall every
+   // Frame pacing stall (docs/Performance on the Steam Frame.md, sections 7.5 and 7.6): the render thread waits in submission instead of in
+   // xrWaitFrame, and the counter then reads the whole frame period whatever the GPU work (9 ms of it). On the Frame it came from the
+   // desktop window presented along the headset frames (no longer drawn there); this stays as a safety net for other desktop setups. GPU work that long makes frames miss their display, while in the stall every
    // frame is on time: a reading at the frame period with no frame missed lately says nothing about the GPU work, and the scale is kept
    // (lowering it would take the table to the minimum within a second). The readings of a stall spread a little around the period (13.4 to
    // 14.2 ms at 72 Hz).
