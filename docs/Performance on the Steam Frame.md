@@ -27,8 +27,8 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
   (section 7.4). The earlier observation of 2–3 ms more after ten minutes was made with the mirror on.
 - **A frame pacing stall can make the runtime report a full frame period of GPU time.** At fixed 2160² on Ghostbusters, every run started
   in a state where the render thread blocks 11.9 ms per frame in submission and the runtime's GPU counter reads 13.9 ms, while the GPU
-  work is unchanged (9.4 ms of passes) and 72 fps hold; a single long frame ends it. Dynamic resolution steers by that counter, so a
-  session caught in this state would fall to its floor (section 7.5).
+  work is unchanged (9.4 ms of passes) and 72 fps hold; a single missed frame ends it. Dynamic resolution steers by that counter and
+  would fall to its floor: it now holds the scale on such readings and ends the stall by letting one frame miss (section 7.5).
 
 ## 2. Method
 
@@ -251,9 +251,34 @@ is the same: the time it used to wait in flip (for the runtime's next frame) mov
 the runtime's GPU counter then reads a full frame period. No run with dynamic resolution (Ghostbusters, Addams 2 and 15 minutes) entered it.
 
 The risk is dynamic resolution: it steers by that counter, lowering the scale by about 2.4 % per frame at 13.9 ms, so a session that fell
-into the stall would drop to its floor within a fraction of a second, and could stay there while the stall lasts. Next steps: find
-what submission waits on in that state (the bgfx frame against the OpenXR wait, begin and end frame calls), and have dynamic resolution
-cross-check the counter against bgfx's own GPU times, or ignore readings pinned at the frame period.
+into the stall would drop to its floor within a fraction of a second, and could stay there while the stall lasts.
+
+**Fix (2026-10-20), in `VRDevice::UpdateDynamicResolution`:**
+
+- *Telling the stall from real load.* A real overload makes frames miss their display; in the stall every frame is on time (no frame
+  missed in any stalled interval measured). Missed frames are read from the runtime's predicted display time, which moves by more than
+  one frame period after a miss. A reading between 95 % and 105 % of the frame period with no frame missed in the last three frames is
+  *held*: the scale is kept, neither lowered nor raised.
+- *Ending the stall.* Each stall measured ended with one missed frame. When at least 90 % of the readings of one second were held, the
+  render thread waits one frame period once, so that one frame misses its display; at most three times per table, in case a load right at
+  the frame period was taken for a stall.
+- The status line (VR settings page and log) says when the scale is held; the log adds the missed frames, held readings and stall breaks
+  of each 5 s.
+
+Measured with Ghostbusters at 2160² (`drpin`: dynamic resolution on with its minimum at 100 %, so it behaves like a fixed size while its
+decisions are logged):
+
+| Build | Runs | Started stalled | How long the stall lasted |
+|---|---|---|---|
+| Before the fix (fixed 2160² and `drpin`) | 9 | 6 | 60 s to the whole 120 s run |
+| Hold only | 3 `drpin` | 1 | the whole run: 341–358 of the ~360 readings of each 5 s held, the rest leaking through (enough to reach the floor in 10–20 s with a normal minimum) |
+| Hold and break | 3 `drpin` | 3 | 1.3–2.2 s, ended by one break each time |
+
+The stall also happens with dynamic resolution on: the runs of section 7 that had it on happened not to start in it. In normal play 0–9
+readings per 5 s fall in the band without a missed frame (single heavy frames); they are held, which costs nothing, and stay far from the
+90 % that triggers a break. No regression: default 2158², 9.8 ms; a real overload (`drhigh`, `ResFactor` 1.75, 3024² ceiling) still comes
+down to 2331² at 10.7 ms within five seconds; neither had a stall break. What submission waits on in the stalled state (the bgfx frame
+against the OpenXR wait, begin and end frame calls) is still to be found.
 
 ## 8. Opportunities
 
@@ -269,7 +294,7 @@ millisecond saved lets dynamic resolution raise the size by about 4–5 % per ax
 | 5 | Overlap frame preparation with submission | 1.1–1.6 ms of render thread time (mirror off); frame rate at 90 Hz | Threading change | Idea |
 | 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
-| 8 | Dynamic resolution robust to the pacing stall | Avoids a fall to the floor resolution | Small change in `VRDevice`, after finding the cause | To do (section 7.5) |
+| 8 | Dynamic resolution robust to the pacing stall | Avoids a fall to the floor resolution | Small change in `VRDevice` | **Done** (section 7.5); cause still unknown |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off | Table script option today | To evaluate (section 7.2) |
 
 Details:
@@ -293,8 +318,9 @@ Details:
    ones that changed, or per-material uniform buffers) are the first thing to look at.
 7. **Dynamic resolution settings**: with the mirror off, Addams runs at 93 % and no longer reaches the 70 % floor; a lower floor only
    matters for heavier tables or a hot device, at a visible cost in sharpness. Per table, with the settings of the VR page.
-8. **Pacing stall**: see section 7.5. Find what the render thread waits on in submission in the stalled state; whatever the cause,
-   dynamic resolution should not lower the scale on readings pinned at the frame period that bgfx's own GPU times contradict.
+8. **Pacing stall**: see section 7.5. Dynamic resolution holds on stalled readings and breaks the stall with one missed frame. What the
+   render thread waits on in submission in that state is still to be found; the break only runs with dynamic resolution on (it needs the
+   runtime's counter), so a fixed resolution can still stall, at 72 fps.
 9. **VR room**: on Ghostbusters the full room costs about a fifth of the GPU frame, in pixels rather than geometry, and the table's
    minimal room saves little of it. Today the room is a constant in each table's script (Ghostbusters `VRRoom`, Addams
    `VR_Room_Minimal`). Worth checking which room surfaces are expensive to shade (lights, reflections, large textures) before an engine
@@ -325,4 +351,5 @@ table option changed by a `<table>.vbs` next to a hard link of the table (sectio
 less: the Frame goes to sleep when no VPX has run for a few minutes, which ends the series (`systemd-inhibit` needs an interactive login).
 
 The results are on the Frame: `~/perf-test/results` (mirror off: Ghostbusters by resolution, VR room and stall runs, Addams by
-resolution and the 15-minute run `-default-hot15`) and `~/perf-test/results-before` (mirror on).
+resolution and the 15-minute run `-default-hot15`), `~/perf-test/results-prev` (the Ghostbusters default run of section 7.1),
+`~/perf-test/results-guard` and `~/perf-test/results-break` (section 7.5), and `~/perf-test/results-before` (mirror on).
