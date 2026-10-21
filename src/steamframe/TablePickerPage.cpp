@@ -1193,7 +1193,7 @@ void TableActionsPage::BuildPage()
       return;
    }
 
-   AddItem(std::make_unique<InGameUIItem>(isRunning ? "Restart"s : "Play"s, ""s,
+   AddItem(std::make_unique<InGameUIItem>(isRunning ? ICON_FK_REPEAT " Restart"s : ICON_FK_PLAY " Play"s, ""s,
       [this, tablePath = library.GetFullPath(*table)]()
       {
          g_launcher->m_nextTableFilename = tablePath;
@@ -1207,7 +1207,7 @@ void TableActionsPage::BuildPage()
          RequestRebuild();
       }));
 
-   AddItem(std::make_unique<InGameUIItem>("Rename..."s, "Change the name displayed for this table (its files are not renamed)"s,
+   AddItem(std::make_unique<InGameUIItem>(ICON_FK_PENCIL " Rename..."s, "Change the name displayed for this table (its files are not renamed)"s,
       [this, name = table->name]()
       {
          const string uuid = m_uuid;
@@ -1228,7 +1228,7 @@ void TableActionsPage::BuildPage()
                RequestRebuild();
             }));
 
-      AddItem(std::make_unique<InGameUIItem>("Delete..."s, "Remove this table from the device"s,
+      AddItem(std::make_unique<InGameUIItem>(ICON_FK_TRASH " Delete..."s, "Remove this table from the device"s,
          [this]()
          {
             m_confirmDelete = true;
