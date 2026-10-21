@@ -177,6 +177,12 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_dynamicResolutionMinScale = clamp(settings.GetPlayerVR_DynamicResolutionMinScale(), 0.5f, 1.f);
       m_dynamicRenderScale = 1.f; // Each table starts at full size
       m_frameBudgetMs = 0.f; // Learned again from the session's frame periods
+      m_dynamicResolutionHeld = false;
+      m_lastPredictedDisplayTime = 0;
+      m_framesSinceMissed = 0;
+      m_stallWindowFrames = 0;
+      m_stallWindowHeld = 0;
+      m_stallBreaksLeft = 3;
 
       // State of the previous table
       m_headsetViewCentering = false;
@@ -1186,7 +1192,7 @@ void VRDevice::SetDynamicResolution(bool enabled)
 // as it heats up, which this absorbs). The scale moves by small steps: down as soon as a frame is over the target, so a heavy view is
 // caught within a few frames, up slowly once frames are well under it, so the sharpness does not pump. The lower limit is the runtime's
 // recommended size (the headset's own performance target), the upper one the swapchain size chosen with ResFactor.
-void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod)
+void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime)
 {
    // The budget is the display's frame period: the shortest period the runtime predicted in this session. SteamVR doubles the predicted
    // period when it throttles an application to half rate after missed frames; taking that as the budget would raise the resolution
@@ -1197,6 +1203,19 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod)
       if (m_frameBudgetMs <= 0.f || periodMs < m_frameBudgetMs)
          m_frameBudgetMs = periodMs;
    }
+   // Missed frames: the predicted display time moves by one frame period per frame while the application keeps up, by more after a frame
+   // missed its display (compared with the budget, since the predicted period itself doubles when SteamVR throttles to half rate)
+   if (m_lastPredictedDisplayTime != 0 && m_frameBudgetMs > 0.f)
+   {
+      if (static_cast<float>(predictedDisplayTime - m_lastPredictedDisplayTime) / 1000000.f > m_frameBudgetMs * 1.5f)
+      {
+         m_framesSinceMissed = 0;
+         m_missedFrames++;
+      }
+      else if (m_framesSinceMissed < 1000)
+         m_framesSinceMissed++;
+   }
+   m_lastPredictedDisplayTime = predictedDisplayTime;
    if (!m_dynamicResolution)
       return;
    if (!m_performanceCountersEnabled)
@@ -1213,6 +1232,35 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod)
    const float budgetMs = m_frameBudgetMs;
    const float targetMs = budgetMs * m_dynamicResolutionTarget;
    const float minScale = clamp(m_dynamicResolutionMinScale.load(), 0.5f, 1.f);
+   // Frame pacing stall (seen on the Frame at a fixed 2160 x 2160, for up to two minutes after a table starts: docs/Performance on the Steam
+   // Frame.md, section 7.5): the render thread waits for the GPU in submission instead of in xrWaitFrame, and the counter then reads the
+   // whole frame period whatever the GPU work (9 ms of it). GPU work that long makes frames miss their display, while in the stall every
+   // frame is on time: a reading at the frame period with no frame missed lately says nothing about the GPU work, and the scale is kept
+   // (lowering it would take the table to the minimum within a second). The readings of a stall spread a little around the period (13.4 to
+   // 14.2 ms at 72 Hz).
+   m_dynamicResolutionHeld = gpuMs > budgetMs * 0.95f && gpuMs < budgetMs * 1.05f && m_framesSinceMissed >= 3;
+   // The stall lasts until a frame misses its display (one missed frame ended each stall measured, after 1 to 120 s): when nearly every
+   // reading of a second was held, the render thread waits one frame period here, so that one frame misses its display and the pipeline
+   // falls back into step. At most a few times per table, in case a load right at the frame period was taken for a stall
+   m_stallWindowFrames++;
+   if (m_dynamicResolutionHeld)
+      m_stallWindowHeld++;
+   if (static_cast<float>(m_stallWindowFrames) * budgetMs >= 1000.f)
+   {
+      if (m_stallWindowHeld * 10 >= m_stallWindowFrames * 9 && m_stallBreaksLeft > 0)
+      {
+         m_stallBreaksLeft--;
+         m_stallBreaks++;
+         std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int>(budgetMs * 1000.f)));
+      }
+      m_stallWindowFrames = 0;
+      m_stallWindowHeld = 0;
+   }
+   if (m_dynamicResolutionHeld)
+   {
+      m_heldReadings++;
+      return;
+   }
    float scale = m_dynamicRenderScale;
    if (gpuMs > targetMs)
       scale -= 0.02f * (1.f + (gpuMs - targetMs) / targetMs); // Faster the further over
@@ -1231,6 +1279,8 @@ string VRDevice::GetDynamicResolutionStatus() const
    string status = std::format("{}x{} ({:.0f} %)", static_cast<int>(lroundf(static_cast<float>(m_eyeWidth) * scale)), static_cast<int>(lroundf(static_cast<float>(m_eyeHeight) * scale)), scale * 100.f);
    if (m_lastGpuFrameTimeMs > 0.f)
       status += std::format(", GPU {:.1f} ms of {:.1f} ms (target {:.0f} %)", m_lastGpuFrameTimeMs.load(), m_frameBudgetMs.load(), m_dynamicResolutionTarget.load() * 100.f);
+   if (m_dynamicResolutionHeld)
+      status += ", held (GPU time at the frame period with every frame on time: frame pacing stall)";
    return status;
 }
 
@@ -1247,6 +1297,10 @@ void VRDevice::LogRuntimeStatus()
    if (m_foveationEyeTrackedActive)
       status += std::format(" (gaze{} L {:.2f},{:.2f} R {:.2f},{:.2f})", m_gazeRayValid ? " ray" : "", m_foveationCenter[0].x, m_foveationCenter[0].y, m_foveationCenter[1].x, m_foveationCenter[1].y);
    status += " | Dynamic resolution: " + GetDynamicResolutionStatus();
+   status += std::format(", {} frames missed, {} readings held, {} stall breaks", m_missedFrames, m_heldReadings, m_stallBreaks);
+   m_missedFrames = 0;
+   m_heldReadings = 0;
+   m_stallBreaks = 0;
    for (const auto& counter : m_performanceCounters)
    {
       XrPerformanceMetricsCounterMETA value { XR_TYPE_PERFORMANCE_METRICS_COUNTER_META };
@@ -2444,7 +2498,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
    constexpr XrFrameWaitInfo frameWaitInfo { XR_TYPE_FRAME_WAIT_INFO, nullptr };
    OPENXR_CHECK(xrWaitFrame(m_session, &frameWaitInfo, &frameState), "Failed to wait for XR Frame.");
    // Dynamic resolution: the scale of the frame about to be prepared, from the GPU time of the previous ones
-   UpdateDynamicResolution(frameState.predictedDisplayPeriod);
+   UpdateDynamicResolution(frameState.predictedDisplayPeriod, frameState.predictedDisplayTime);
    g_pplayer->m_renderProfiler->ExitProfileSection();
    #ifdef MSVC_CONCURRENCY_VIEWER
    delete tagSpanFF;
