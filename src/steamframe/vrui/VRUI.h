@@ -10,8 +10,8 @@ class Player;
 namespace VPX::VRUI
 {
 
-// Whether the new VR UI draws the in-game UI. The choice comes from the VPX_VRUI environment variable ('new' or 'classic', in VR and on the
-// desktop, for tests), else from the Standalone.NewVRUI setting (in VR only). It is latched once per frame, and not while an item is being
+// Whether the new VR UI draws the in-game UI, in VR and on the desktop. The choice comes from the VPX_VRUI environment variable ('new' or
+// 'classic', for tests), else from the Standalone.NewVRUI setting (the "New UI" switch of both views). It is latched once per frame, and not while an item is being
 // edited (slider dragged, text typed), so that a page never changes view in the middle of an interaction.
 bool IsActive();
 

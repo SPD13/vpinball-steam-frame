@@ -6,9 +6,10 @@ the same settings: switching between them loses nothing.
 
 ## Switch
 
-- `Standalone.NewVRUI` (VPinballX.ini): the new view in VR. Off by default.
-- `VPX_VRUI=new` or `VPX_VRUI=classic` (environment variable): overrides the setting, in VR and on the desktop (to try the new view on a
-  Mac, without a headset).
+- The **New UI** switch, at the end of the System screen of the new view and of the MENU tab of the classic table picker, or
+  `Standalone.NewVRUI` (VPinballX.ini): the new view, in VR and on the desktop. On by default. Turned on in the classic table picker, it
+  opens the Tables screen of the new menu; turned off in the new menu, it opens the classic home page.
+- `VPX_VRUI=new` or `VPX_VRUI=classic` (environment variable): overrides the setting, for tests.
 - The choice is read once per frame, and not while an item is being edited (slider dragged, text typed).
 
 ## How it works

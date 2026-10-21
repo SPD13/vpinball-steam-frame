@@ -113,18 +113,9 @@ private:
       AddItem(std::make_unique<InGameUIItem>("Logging Settings"s, ""s, "settings/logging"s));
       AddItem(std::make_unique<InGameUIItem>("System Info"s, ""s, "misc/systeminfo"s));
 
-      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Menu"s));
-      AddItem(std::make_unique<InGameUIItem>("Use the classic VR menu"s, "Switch back to the classic menu (it can be switched again from the MENU tab of its table picker)"s,
-         [this]()
-         {
-            g_settingsService.GetAppSettings().SetStandalone_NewVRUI(false, false);
-            g_settingsService.GetAppSettings().Save();
-            if (getenv("VPX_VRUI") != nullptr)
-               m_player->m_liveUI->PushNotification("The VPX_VRUI environment variable keeps the new menu: unset it to use the classic one"s, 6000);
-         }));
-
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Application"s));
       AddQuitItem(*this);
+      AddNewUIItem(*this);
    }
 };
 
