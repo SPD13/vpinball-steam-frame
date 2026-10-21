@@ -61,6 +61,14 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
 - Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): below the menu, it edits the clicked field (search of the Tables
   screen, text settings, names) and updates it at each key.
+- Below the menu (and the keyboard), a badge gives the address and pairing code of the Wi-Fi upload, or that it is off; clicking it opens
+  the Wi-Fi upload screen.
+- Above the menu, a yellow badge "Update Available - Use the installer" appears when GitHub has a newer release than the one running
+  (`UpdateCheck.cpp`). The check runs once per launch, on a worker thread, when the menu is first shown: it reads the `VERSION` file next to
+  the executable (written by `make-release.sh`), asks `api.github.com` for the latest release, whose game archive names its version, and
+  compares the dates of the two versions (another release of the same day is newer too). The request uses the libcurl of the system,
+  loaded with `dlopen` (the Steam Linux Runtime has one): no check without it, nor offline, nor for development builds, which have no
+  `VERSION` file. `VPX_UPDATE_CHECK_VERSION=<version>` replaces the installed version, to test. The result is in the log ("Update check").
 
 ## Screens made of several pages
 
