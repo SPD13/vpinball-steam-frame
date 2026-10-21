@@ -145,6 +145,7 @@ private:
    ImVec2 m_vrPointerPos;
    ImVec2 m_vrPointerAnchor; // Pointed position (0..1) when button navigation started, to switch to pointer navigation when the pointer clearly moves
    bool m_vrPointerAnchorValid = false;
+   bool m_vrPointerScrollBlocked = false; // The thumbstick was used for button navigation and is not back to its center yet
    bool m_vrInGameUIWasOpened = false; // To place the VR UI panel in front of the player each time the in-game UI opens
    ImFont *m_baseFont = nullptr;
    ImFont *m_overlayBoldFont = nullptr;
