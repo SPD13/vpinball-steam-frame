@@ -18,7 +18,8 @@
 
 // In VR, a controller is used as a pointer when the in-game UI is opened: move the mouse where it points to, its trigger being the left button.
 // Pointer navigation is the default (see InGameUI::Open): a button of the UI switches to button navigation (InGameUI::UseButtonNav), a trigger
-// press switches back. Moving the pointer or scrolling does not switch, as a held controller is never still.
+// press switches back, without clicking: what was hovered may not be what the player looked at, the selected item. Moving the pointer or
+// scrolling does not switch, as a held controller is never still.
 void LiveUI::UpdateVRPointer()
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -30,8 +31,11 @@ void LiveUI::UpdateVRPointer()
       if (pointing)
       {
          io.AddMousePosEvent(x * io.DisplaySize.x, y * io.DisplaySize.y);
-         if (pressed && !m_vrPointerPressed)
+         if (pressed && !m_vrPointerPressed && m_inGameUI.IsFlipperNav())
+         {
             m_inGameUI.UsePointerNav(); // Items are then highlighted when hovered
+            m_vrPointerClickSwallowed = true;
+         }
          // The thumbstick of the pointing controller scrolls what it points at, as a mouse wheel (up to 12 notches per second), in pointer
          // navigation only: the thumbsticks also navigate with buttons (default mapping: left stick up/down selects, right stick left/right
          // adjusts, see XRInputHandler), and button navigation keeps scrolling back to the selected item anyway. After a UI navigation action,
@@ -48,14 +52,20 @@ void LiveUI::UpdateVRPointer()
       }
       if (pressed != m_vrPointerPressed && (pointing || !pressed))
       {
-         io.AddMouseButtonEvent(ImGuiMouseButton_Left, pressed);
+         if (!m_vrPointerClickSwallowed)
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, pressed);
+         else if (!pressed)
+            m_vrPointerClickSwallowed = false;
          m_vrPointerPressed = pressed;
       }
       m_vrPointerVisible = pointing;
       m_vrPointerPos = ImVec2(x * io.DisplaySize.x, y * io.DisplaySize.y);
    }
    else
+   {
       m_vrPointerVisible = false;
+      m_vrPointerClickSwallowed = false;
+   }
 }
 
 void LiveUI::RenderVRPointerDot()
