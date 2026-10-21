@@ -526,15 +526,13 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
    if (!isLobby)
       return;
    player->m_liveUI->OpenInGameUI("tables/picker"s);
-   // Back from a table: the scores of its games and their rank. Otherwise, the first time without any player, ask who is playing.
-   static bool s_profileAsked = false;
+   // Back from a table: the scores of its games and their rank. Without any profile, nothing is asked: the scores stay unassigned, and can
+   // be given to a profile later (from the browser, or the 'Who is playing?' page).
    if (m_lastSessionResult)
    {
       VPX::InGameUI::ScoreResultPage::SetResult(*std::exchange(m_lastSessionResult, std::nullopt));
       player->m_liveUI->m_inGameUI.Navigate("scores/result"s);
    }
-   else if (!std::exchange(s_profileAsked, true) && GetScoreStore().GetProfiles().empty())
-      player->m_liveUI->m_inGameUI.Navigate("profiles"s);
 }
 
 void Launcher::OnTableClosed()
