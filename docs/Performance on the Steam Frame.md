@@ -2,7 +2,8 @@
 
 *2026-10-19, fork `master` at 53c794380 (upstream sync of 2026-10-18). Measurements on the Steam Frame (Adreno, Turnip, SteamVR 2.17) at
 72 Hz (13.9 ms per frame), Standard FXAA, specular AA, foveated rendering, two tables: the Ghostbusters VR room (light, no ROM) and the
-Addams Family VR room (heavy, PinMAME WPC).*
+Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
+(section 7).*
 
 ## 1. Summary
 
@@ -12,15 +13,22 @@ Addams Family VR room (heavy, PinMAME WPC).*
 - **The desktop mirror was the largest avoidable cost.** The default *Desktop display* ("Playfield and other displays") renders the scene
   a third time, with its own playfield reflection, for a 1080p window nobody sees on the Frame. The Frame build now always keeps it off
   (section 6), which takes **Addams from 18.0 to 11.6 ms per frame at 2160²** (4.5–6.6 ms saved, 35–40 % of the GPU frame): Addams
-  now holds 72 fps at the native resolution, and dynamic resolution settles at 94 % instead of its 70 % floor.
-- **The scene pass is geometry-bound, not pixel-bound.** On Addams, 2.8× the pixels cost only 1.4× the time (about 3.8 ms fixed + 0.6 ms
-  per million pixels per eye). Lowering the resolution gains little; the next gains are in geometry and draw calls, and in the passes
-  that render the scene again (playfield reflection, desktop mirror).
-- **The CPU is not the bottleneck at 72 Hz, but it is close on some tables.** The render thread uses 56 % of a core on Ghostbusters
-  (7.5–9 ms per frame to submit), leaving about 2 ms; at 90 Hz it would limit before the GPU. PinMAME uses 71–74 % of a core on Addams,
-  on its own core.
-- **Heat is the other limit.** The CPU peaked at 90–96 °C and the GPU at 83–86 °C in 2-minute runs; earlier measurements showed the same
-  frame costing 2–3 ms more after ten minutes. Every millisecond saved also lowers the heat.
+  now holds 72 fps at the native resolution, and dynamic resolution settles at 93–94 % instead of its 70 % floor. Ghostbusters gains
+  4.4–6.9 ms and runs at its 2160² ceiling in 10.1 ms (section 7.1).
+- **The scene pass is geometry-bound on Addams, pixel-bound on Ghostbusters.** On Addams, 2.8× the pixels cost only 1.4× the time
+  (about 3.8 ms fixed + 0.6 ms per million pixels per eye): it draws 1.9 million triangles per frame, 7× Ghostbusters. Ghostbusters'
+  scene pass is about 1.0 ms fixed + 0.66 ms per million pixels, and a fifth of its frame is the VR room: turning the room off saves
+  2.1–2.3 ms at 2160², the table's "minimal room" only 0.4–0.5 ms (section 7.2).
+- **The CPU is not the bottleneck at 72 Hz.** With the mirror on, the render thread used 56 % of a core on Ghostbusters (7.5–9 ms per
+  frame to submit); with it off, 34 % (4–6 ms). Ghostbusters submits 1000 draws and 29 000 shader parameter changes per frame, 3× Addams.
+  PinMAME uses 71–76 % of a core on Addams, on its own core.
+- **Heat did not throttle a 15-minute run.** Addams with dynamic resolution, from cool: the GPU clock held 903 MHz throughout, the
+  temperatures levelled at 85–86 °C (GPU) and 89–91 °C (CPU) after five minutes, and the resolution held 2000–2010² at 10.7 ms
+  (section 7.4). The earlier observation of 2–3 ms more after ten minutes was made with the mirror on.
+- **A frame pacing stall can make the runtime report a full frame period of GPU time.** At fixed 2160² on Ghostbusters, every run started
+  in a state where the render thread blocks 11.9 ms per frame in submission and the runtime's GPU counter reads 13.9 ms, while the GPU
+  work is unchanged (9.4 ms of passes) and 72 fps hold; a single long frame ends it. Dynamic resolution steers by that counter, so a
+  session caught in this state would fall to its floor (section 7.5).
 
 ## 2. Method
 
@@ -127,7 +135,7 @@ Logic and render thread profilers (ms per frame, sliding averages) and CPU per t
 
 The CPU runs hotter worn (the headset's own services). Earlier runs measured the same Addams frame 2–3 ms slower after ten minutes of
 play (*Image Quality on the Steam Frame.md*, section 8.3): heat erodes the margins above, and dynamic resolution absorbs it by lowering
-the resolution.
+the resolution. With the mirror off, a 15-minute headless Addams run did not slow down (section 7.4).
 
 ## 6. Desktop mirror always off on the Frame (2026-10-19)
 
@@ -155,51 +163,149 @@ CPU gains too: render thread 15 % of a core instead of 25 %, frame preparation 0
 2-minute runs: GPU 68–87 °C, CPU 77–90 °C (the 2160² run being the hottest, as it now renders at full rate).
 
 Addams now fits the native resolution within the 11.8 ms target of dynamic resolution (85 % of 13.9 ms), with little margin: on a hot
-device dynamic resolution will lower it. Ghostbusters was not re-run; from section 3.2 it should gain at least the 2 ms of its mirror pass
-plus part of its 2.0–2.9 ms reflection, which would bring its 2160² frame under the budget too.
+device dynamic resolution will lower it (a 15-minute run did not need to: section 7.4). Ghostbusters with the mirror off: section 7.1.
 
 One of two runs at 1728² measured exactly one frame period (13.9 ms) on the runtime's counter for the whole run, while the passes summed
 to 8.7 ms and the render thread spent 12.3 ms per frame in submission: a frame pacing stall, not GPU work (72 fps held). The second run
-measured 9.1 ms. Worth watching for in the headset.
+measured 9.1 ms. Section 7.5 reproduces it on Ghostbusters.
 
-## 7. Opportunities
+## 7. Measurements with the mirror off (2026-10-20)
 
-Ranked by gain for the effort. Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolution raise the size by
-about 4–5 % per axis.
+Same method (section 2), same build plus a counter line in the test hook: the render device's counters of the last frame (draws,
+triangles, state and shader parameter changes, all passes and both eyes).
+
+### 7.1 Ghostbusters by resolution
+
+| Ghostbusters, runtime GPU per frame | 1296² | 1728² | 2160² | Default (dynamic resolution) |
+|---|---|---|---|---|
+| Mirror on (section 3.1) | 9.3 ms | 11.7 ms | 17.0 ms, 40 fps | 1568², 11.3 ms |
+| **Mirror off** | **4.9 ms** | **7.2 ms** | **10.1 ms**, 72 fps (see 7.5) | **2158²** (its ceiling), 10.1 ms |
+| Saved | 4.4 ms | 4.5 ms | 6.9 ms | |
+
+Per pass, mirror off (ms per frame, 1296² / 1728² / 2160²): scene 2.09 / 2.96 / 4.05, playfield reflection 0.98 / 1.09 / 1.23, tonemap
+0.60 / 1.07 / 1.66, FXAA 0.56 / 1.02 / 1.53, bloom 0.35 / 0.56 / 0.87; sum 4.57 / 6.69 / 9.34. As on Addams, the saving is larger than the
+mirror's own pass because its scene render had its own reflection (the reflection row falls from 2.0–2.9 ms to 1.0–1.2 ms). The scene
+pass fits about 1.0 ms fixed + 0.66 ms per million pixels per eye: Ghostbusters is limited by pixels, Addams (3.8 ms fixed) by geometry.
+
+Dynamic resolution now reaches the `ResFactor` ceiling (125 %, 2160²) with about 1.7 ms left under its 11.8 ms target. The render thread
+uses 34 % of a core (submission 4.1–4.3 ms per frame at fixed resolutions) instead of 56 %.
+
+### 7.2 Cost of the VR room (Ghostbusters, 2160²)
+
+The table's script has a `VRRoom` option (0 off, 1 full 360° room, the default, 2 minimal room). The variants ran from hard links of the
+table with a `<table>.vbs` next to them, which VPX loads in place of the embedded script.
+
+| Room | Runtime GPU | Sum of passes | Scene | FXAA | Bloom | Draws | Triangles |
+|---|---|---|---|---|---|---|---|
+| Full (default) | 10.1 ms | 9.34 ms | 4.05 | 1.53 | 0.87 | 999 | 272 600 |
+| Minimal | 9.6 ms | 8.92 ms | 3.62 | 1.57 | 0.85 | 996 | 270 900 |
+| Off | **7.8 ms** | **7.22 ms** | **2.61** | 1.14 | 0.68 | 987 | 270 400 |
+
+The room is only 12 draws and about 2 000 triangles: its 2.1–2.3 ms are the shading of the walls, floor and ceiling that fill most of the
+view, plus FXAA and bloom over them (FXAA is cheaper on the flat black background). The minimal room still fills the view, so it saves
+only 0.4–0.5 ms. On a pixel-bound table, the room is the largest single cost after the table itself.
+
+### 7.3 Draws and triangles per frame
+
+| Per frame (all passes, both eyes) | Ghostbusters | Addams Family |
+|---|---|---|
+| Draws | 1 000 | 332 |
+| Triangles | 273 000 | 1 900 000 |
+| Shader parameter changes | 29 000 | 9 600 |
+| Render state changes | 19 | 21 |
+| Render thread CPU (mirror off) | 34 % of a core | 15 % |
+
+Addams' 7× more triangles explain its fixed scene cost; Ghostbusters' 3× more draws and parameter changes explain its higher submission
+cost on the render thread (opportunity 6).
+
+### 7.4 Fifteen minutes on Addams (dynamic resolution, from cool)
+
+Started with the GPU at 36 °C, headless, mirror off. Per minute:
+
+| Minute | 0 | 1 | 2 | 3 | 5 | 8 | 11 | 14 |
+|---|---|---|---|---|---|---|---|---|
+| Render size | 2004² | 2004² | 2009² | 2010² | 2008² | 2008² | 2009² | 2008² |
+| Runtime GPU | 10.73 ms | 10.74 | 10.73 | 10.83 | 10.71 | 10.71 | 10.71 | 10.80 |
+| GPU clock | 888 MHz | 903 | 903 | 903 | 903 | 903 | 903 | 903 |
+| Max GPU / CPU temperature | 70 / 73 °C | 77 / 81 | 82 / 84 | 84 / 89 | 85 / 90 | 86 / 91 | 85 / 89 | 85 / 90 |
+
+Over the whole run: 72.0 fps, 2005² average (93 % of 2160²), GPU 10.7 ms (10.0–11.9), CPU clusters at 2.2–2.7 GHz with no drop; PinMAME
+76 % of a core, logic thread 29 %, render thread 15 %. No throttling at this load: the temperatures level off after five minutes and the
+frame cost does not drift. The resolution stays under 2160² because dynamic resolution only raises the scale while the GPU time is under
+90 % of the target (10.6 ms), and Addams sits at 10.7 ms. The CPU runs hotter worn (section 2.2), so a long worn session remains worth a
+check.
+
+### 7.5 Frame pacing stall
+
+At fixed 2160² on Ghostbusters, three runs out of three started in a second, stable state of the pipeline:
+
+| Ghostbusters 2160², per frame | Runtime GPU | Sum of passes | Render thread: submission | Render thread: flip |
+|---|---|---|---|---|
+| Normal | 10.1 ms | 9.2–9.5 ms | 5.5–6.8 ms | 5.1–6.5 ms |
+| Stalled | **13.9 ms** | 9.2–9.5 ms | **11.7–12.0 ms** | 0.2–0.3 ms |
+
+The first run stayed stalled for its whole 120 s, the second for 70 s, a run without the bgfx profiler for 115 s (so the profiler is not
+the cause); each left the state with one long frame, then stayed normal. The Addams run at 1728² of section 6 was the same state. In
+the stalled state the GPU work and the frame rate are unchanged (72 fps, GPU 72 % busy in both states) and the render thread's CPU use
+is the same: the time it used to wait in flip (for the runtime's next frame) moves into submission, where it waits for the GPU, and
+the runtime's GPU counter then reads a full frame period. No run with dynamic resolution (Ghostbusters, Addams 2 and 15 minutes) entered it.
+
+The risk is dynamic resolution: it steers by that counter, lowering the scale by about 2.4 % per frame at 13.9 ms, so a session that fell
+into the stall would drop to its floor within a fraction of a second, and could stay there while the stall lasts. Next steps: find
+what submission waits on in that state (the bgfx frame against the OpenXR wait, begin and end frame calls), and have dynamic resolution
+cross-check the counter against bgfx's own GPU times, or ignore readings pinned at the frame period.
+
+## 8. Opportunities
+
+Ranked by gain for the effort; items 8 and 9 come from the measurements of section 7. Gains are per frame at 72 Hz; on Addams, a
+millisecond saved lets dynamic resolution raise the size by about 4–5 % per axis.
 
 | # | Opportunity | Gain | Effort | Status |
 |---|---|---|---|---|
-| 1 | Desktop mirror off on the Frame | 4.5–6.6 ms on Addams; at least 2 ms on Ghostbusters | Forced off in the Frame build | **Done** (section 6) |
-| 2 | Lighter playfield reflection on heavy tables | 1.1–1.3 ms on Addams once the mirror is off | Per-table setting today (`PFReflection = 3`, "Static & Balls"); engine options below | To evaluate |
-| 3 | Fuse FXAA into the tonemap pass | Part of 1.1–3.1 ms (one full-resolution write and read less) | Shader and pass change | Idea (*Image Quality*, section 4) |
-| 4 | Reduce the scene pass's fixed geometry cost | Up to 3.8 ms on Addams | Investigation, engine work | To measure first |
-| 5 | Overlap frame preparation with submission | 1.8–3.5 ms of render thread time; frame rate at 90 Hz | Threading change | Idea |
-| 6 | Reduce the render thread's submission cost | Several ms of CPU on Ghostbusters | Investigation | To measure first |
-| 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavy tables | Settings | Available now |
+| 1 | Desktop mirror off on the Frame | 4.5–6.6 ms on Addams, 4.4–6.9 ms on Ghostbusters | Forced off in the Frame build | **Done** (sections 6, 7.1) |
+| 2 | Lighter playfield reflection on heavy tables | 1.1–1.3 ms on Addams, 1.0–1.2 ms on Ghostbusters | Per-table setting today (`PFReflection = 3`, "Static & Balls"); engine options below | To evaluate |
+| 3 | Fuse FXAA into the tonemap pass | Part of 1.1–3.2 ms (one full-resolution write and read less) | Shader and pass change | Idea (*Image Quality*, section 4) |
+| 4 | Reduce the scene pass's fixed geometry cost | Up to 3.8 ms on Addams | Investigation, engine work | Counted (section 7.3) |
+| 5 | Overlap frame preparation with submission | 1.1–1.6 ms of render thread time (mirror off); frame rate at 90 Hz | Threading change | Idea |
+| 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
+| 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
+| 8 | Dynamic resolution robust to the pacing stall | Avoids a fall to the floor resolution | Small change in `VRDevice`, after finding the cause | To do (section 7.5) |
+| 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off | Table script option today | To evaluate (section 7.2) |
 
 Details:
 
-1. **Desktop mirror**: see section 6.
-2. **Playfield reflection**: the probe renders the reflected scene every frame (1.1–1.3 ms on Addams with the mirror off). Today,
+1. **Desktop mirror**: see sections 6 and 7.1.
+2. **Playfield reflection**: the probe renders the reflected scene every frame (1.0–1.3 ms with the mirror off). Today,
    "Static & Balls" for a heavy table removes most of it at the cost of the dynamic reflections. Engine options: render the probe at a
    lower resolution, update it every other frame, or leave the VR room out of the reflection. Each needs a visual check in the headset.
 3. **Tonemap + FXAA**: the tonemap writes a full-resolution intermediate that FXAA reads; doing FXAA in the same pass, or tonemapping
-   straight into the swapchain when FXAA is off, removes one full-screen write and read per eye.
-4. **Scene geometry**: next measurement: log bgfx's draw and primitive counts per frame (`bgfx::Stats::numDraw`, `numPrims`) and compare
-   the scene pass with the VR room hidden, to split table and room. Then: per-eye frustum culling, merging static meshes, simpler room
-   meshes, levels of detail for distant room geometry.
-5. **Frame preparation and submission**: the render thread waits 1.8–3.5 ms per frame for the logic thread. Preparing frame N+1 while
-   frame N is submitted would give the render thread that time back, which matters most for 90 Hz and for tables like Ghostbusters.
-6. **Submission cost**: 7.5–9 ms of render thread CPU per frame on Ghostbusters against about 3.5 ms on Addams: count draws and state
-   changes per table to find what makes it expensive.
-7. **Dynamic resolution settings**: on Addams the 70 % floor is reached; a lower floor (60 %) keeps 72 fps when the device is hot, at a
-   visible cost in sharpness. Per table, with the settings of the VR page.
+   straight into the swapchain when FXAA is off, removes one full-screen write and read per eye. The code is upstream's, shared by
+   desktop and VR, so the change belongs upstream. FXAA reads the neighbours of each pixel after tonemapping, so a fused pass would
+   tonemap every sample it reads: the gain is uncertain until measured.
+4. **Scene geometry**: Addams draws 1.9 million triangles per frame in 332 draws (section 7.3). Next: split the table from the room with
+   the room hidden, as done for Ghostbusters in section 7.2; then per-eye frustum culling, merging static meshes, simpler room meshes,
+   levels of detail for distant room geometry.
+5. **Frame preparation and submission**: the render thread waits 1.1–1.6 ms per frame for the logic thread with the mirror off (1.8–3.5 ms
+   with it on). Preparing frame N+1 while frame N is submitted would give the render thread that time back, which matters most for
+   90 Hz.
+6. **Submission cost**: 4–6 ms of render thread time per frame on Ghostbusters (34 % of a core) against about 3 ms on Addams (15 %).
+   Ghostbusters submits 1 000 draws and 29 000 shader parameter changes per frame; Addams 332 and 9 600. Fewer parameter uploads (only the
+   ones that changed, or per-material uniform buffers) are the first thing to look at.
+7. **Dynamic resolution settings**: with the mirror off, Addams runs at 93 % and no longer reaches the 70 % floor; a lower floor only
+   matters for heavier tables or a hot device, at a visible cost in sharpness. Per table, with the settings of the VR page.
+8. **Pacing stall**: see section 7.5. Find what the render thread waits on in submission in the stalled state; whatever the cause,
+   dynamic resolution should not lower the scale on readings pinned at the frame period that bgfx's own GPU times contradict.
+9. **VR room**: on Ghostbusters the full room costs about a fifth of the GPU frame, in pixels rather than geometry, and the table's
+   minimal room saves little of it. Today the room is a constant in each table's script (Ghostbusters `VRRoom`, Addams
+   `VR_Room_Minimal`). Worth checking which room surfaces are expensive to shade (lights, reflections, large textures) before an engine
+   option.
 
-For sharpness (*Image Quality on the Steam Frame.md*): with the mirror off, heavy tables like Addams reach about the native 2160²; the
-*Render resolution* setting above 125 % (supersampling) only fits light tables. Beyond that, the GPU time freed by opportunities 2 to 4
-is what dynamic resolution can turn into resolution, or into headroom for the heat.
+For sharpness (*Image Quality on the Steam Frame.md*): with the mirror off, heavy tables like Addams reach about the native 2160², and light
+tables like Ghostbusters reach the 2160² ceiling with about 1.7 ms to spare, so a *Render resolution* slightly above 125 % may fit them
+(not measured). Beyond that, the GPU time freed by opportunities 2 to 4 and 9 is what dynamic resolution can turn into resolution, or
+into headroom for the heat.
 
-## 8. Reproduction
+## 9. Reproduction
 
 From `vpinball/`, with the Frame on the network:
 
@@ -214,5 +320,9 @@ VPX_PERF_FORCE_RENDER=1 VARIANTS="default fixed2160 fixed1728 fixed1296" sh perf
 python3 ../Doc/test-hooks/perf-report.py <results folder> 40
 ```
 
-Without `VPX_PERF_FORCE_RENDER`, someone has to wear the headset. The results of these runs are on the Frame: `~/perf-test/results`
-(Ghostbusters with the mirror on, Addams with it off) and `~/perf-test/results-before` (Addams with the mirror on).
+Without `VPX_PERF_FORCE_RENDER`, someone has to wear the headset. Other variants: `native` (2160² without the bgfx profiler), and a
+table option changed by a `<table>.vbs` next to a hard link of the table (section 7.2). Keep the idle gaps between runs at a minute or
+less: the Frame goes to sleep when no VPX has run for a few minutes, which ends the series (`systemd-inhibit` needs an interactive login).
+
+The results are on the Frame: `~/perf-test/results` (mirror off: Ghostbusters by resolution, VR room and stall runs, Addams by
+resolution and the 15-minute run `-default-hot15`) and `~/perf-test/results-before` (mirror on).
