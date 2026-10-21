@@ -87,7 +87,7 @@ private:
    uint64_t m_revision = 0;
 };
 
-// Library, the settings without a screen of their own, the menu and the application
+// Library and the settings without a screen of their own
 class SystemPage final : public InGameUIPage
 {
 public:
@@ -112,10 +112,20 @@ private:
       AddItem(std::make_unique<InGameUIItem>("Legacy DOF & B2S Settings"s, ""s, "settings/misc"s));
       AddItem(std::make_unique<InGameUIItem>("Logging Settings"s, ""s, "settings/logging"s));
       AddItem(std::make_unique<InGameUIItem>("System Info"s, ""s, "misc/systeminfo"s));
-
-      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Application"s));
-      AddQuitItem(*this);
    }
+};
+
+// Leaving the application (Quit screen)
+class QuitPage final : public InGameUIPage
+{
+public:
+   QuitPage()
+      : InGameUIPage("Quit"s, "Close Visual Pinball"s, SaveMode::None)
+   {
+   }
+
+private:
+   void BuildPage() override { AddQuitItem(*this); }
 };
 
 // Placement of the menu, and room of the lobby (VR & Room screen)
@@ -283,7 +293,8 @@ bool IsScreenAvailable(Screen screen)
    case Screen::Sound:
    case Screen::Controls:
    case Screen::Plugins:
-   case Screen::System: return true;
+   case Screen::System:
+   case Screen::Quit: return true;
    case Screen::Count: break;
    }
    return false;
@@ -303,6 +314,7 @@ const char* GetScreenIcon(Screen screen)
    case Screen::Plugins: return ICON_FK_PUZZLE_PIECE;
    case Screen::System: return ICON_FK_COG;
    case Screen::WiFi: return ICON_FK_WIFI;
+   case Screen::Quit: return ICON_FK_SIGN_OUT;
    case Screen::Count: break;
    }
    return "";
@@ -322,6 +334,7 @@ const char* GetScreenName(Screen screen)
    case Screen::Plugins: return "Plugins";
    case Screen::System: return "System";
    case Screen::WiFi: return "Wi-Fi upload";
+   case Screen::Quit: return "Quit";
    case Screen::Count: break;
    }
    return "";
@@ -369,6 +382,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       #else
       break;
       #endif
+   case Screen::Quit: return std::make_unique<QuitPage>();
    case Screen::Count: break;
    }
    return nullptr;

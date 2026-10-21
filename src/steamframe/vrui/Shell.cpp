@@ -133,11 +133,12 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    // Rail: one icon button per screen, centered vertically, the name of the screen in a bubble when hovered or focused
    {
       const Screen current = menu ? menu->GetScreen() : MainMenuPage::GetLastScreen();
-      const float button = Theme::Px(Theme::kRailButton);
       const float gap = Theme::Px(Theme::kRailGap);
       int count = 0;
       for (int i = 0; i < kScreenCount; i++)
          count += IsScreenAvailable(static_cast<Screen>(i)) ? 1 : 0;
+      const float button = min(Theme::Px(Theme::kRailButton),
+         floorf((size.y - 2.f * Theme::Px(Theme::kRailMargin) - static_cast<float>(count - 1) * gap) / static_cast<float>(count)));
       float y = pos.y + (size.y - static_cast<float>(count) * (button + gap) + gap) * 0.5f;
       const float x = pos.x + (railWidth - button) * 0.5f;
       for (int i = 0; i < kScreenCount; i++)
