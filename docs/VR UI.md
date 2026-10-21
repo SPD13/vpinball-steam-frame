@@ -50,7 +50,7 @@ check whether the new view needs the same change:
 
 One window with a rail of icon buttons on the left (`MainMenuPage`), each choosing a screen (`Screens.cpp`): Tables, This table (not in the
 lobby), Scores, VR & Room, Display & Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
-button is on the screen, so that moving down the rail never quits). A screen shows a page (upstream's, like
+button is on the screen, so that moving down the rail never quits; during a table it also offers Return to Lobby). A screen shows a page (upstream's, like
 `GraphicSettingsPage`, or one of the fork) inside the menu; the pages it opens (sub-pages) are shown in the same frame, with a Back button.
 The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
 

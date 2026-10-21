@@ -125,7 +125,18 @@ public:
    }
 
 private:
-   void BuildPage() override { AddQuitItem(*this); }
+   void BuildPage() override
+   {
+      // During a table started from the lobby: close it and get back to the lobby, as the Exit Game action does
+      if (g_launcher->m_launcherMode && !m_player->m_isLobby)
+         AddItem(std::make_unique<InGameUIItem>("Return to Lobby"s, "Close this table and choose another one"s,
+            [this]()
+            {
+               g_launcher->m_nextTableFilename.clear();
+               m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+            }));
+      AddQuitItem(*this);
+   }
 };
 
 // Placement of the menu, and room of the lobby (VR & Room screen)
