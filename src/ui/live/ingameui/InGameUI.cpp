@@ -132,8 +132,23 @@ void InGameUI::Open(const string& page)
 {
    assert(!IsOpened());
    Navigate(page);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: in VR, the controller points by default, until a button of the UI is pressed (see UseButtonNav)
+   m_useFlipperNav = !m_player->m_vrDevice && m_player->m_ptable->GetViewMode() == ViewSetupID::BG_FULLSCREEN;
+#else
    m_useFlipperNav = m_player->m_vrDevice || m_player->m_ptable->GetViewMode() == ViewSetupID::BG_FULLSCREEN;
+#endif
 }
+
+#if defined(VPX_STEAM_FRAME)
+bool InGameUI::UseButtonNav()
+{
+   const bool wasFlipperNav = m_useFlipperNav;
+   m_useFlipperNav = true;
+   SDL_HideCursor();
+   return wasFlipperNav;
+}
+#endif
 
 void InGameUI::Close()
 {
@@ -242,6 +257,10 @@ void InGameUI::OnUILeftAction()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (!UseButtonNav()) // The first press only shows the selected item, as up and down do
+      return;
+#endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(-1, true);
 }
@@ -251,6 +270,10 @@ void InGameUI::OnUIRightAction()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   if (!UseButtonNav())
+      return;
+#endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(1, true);
 }
@@ -260,6 +283,9 @@ void InGameUI::OnUIResetToDefaults()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->ResetToDefaults();
 }
 
@@ -268,6 +294,9 @@ void InGameUI::OnUICancelChanges()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->ResetToStoredValues();
 }
 
@@ -276,6 +305,9 @@ void InGameUI::OnUISaveChanges()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    GetActivePage()->Save();
 }
 
@@ -284,6 +316,9 @@ void InGameUI::OnUINavigateBack()
    if (ImGui::IsAnyItemActive())
       return;
 
+#if defined(VPX_STEAM_FRAME)
+   UseButtonNav();
+#endif
    NavigateBack();
 }
 

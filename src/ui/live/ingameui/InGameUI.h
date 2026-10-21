@@ -31,6 +31,9 @@ public:
 
    bool IsFlipperNav() const { return m_useFlipperNav; }
    void UsePointerNav() { m_useFlipperNav = false; } // For pointers which can not be detected from mouse moves, like VR controllers
+#if defined(VPX_STEAM_FRAME)
+   bool UseButtonNav(); // Steam Frame Edition: any button of the UI switches to button navigation. Returns whether it was already used.
+#endif
    void OnUIUpAction();
    void OnUIDownAction();
    void OnUILeftAction();
