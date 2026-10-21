@@ -21,7 +21,7 @@ using namespace VPX::InGameUI;
 
 namespace
 {
-   enum class Step { Wait, Screens, DPad, SubPage, Quit, Done };
+   enum class Step { Wait, Screens, DPad, SubPage, TextEntry, Quit, Done };
    Step g_step = Step::Wait;
    uint32_t g_stepStart = 0;
    int g_screen = -1; // Index of the screen being captured
@@ -217,7 +217,22 @@ void Update(InGameUIPage& page)
       }
       if (now - g_stepStart < 1500)
          return;
-      Capture(player, "sub-page"s, Step::Quit);
+      Capture(player, "sub-page"s, Step::TextEntry);
+      break;
+
+   case Step::TextEntry:
+      // The entry of a name (new profile, rename table): the keyboard opens with the page
+      if (dynamic_cast<TextEntryPage*>(ui.GetActivePage()) == nullptr)
+      {
+         ui.AddPage("selftest/textentry"s, []() { return std::make_unique<TextEntryPage>("New profile"s, ""s, [](const string&) { }, false, 32); });
+         ui.Navigate("selftest/textentry"s);
+         g_stepStart = now;
+         return;
+      }
+      if (now - g_stepStart < 1500)
+         return;
+      Keyboard::TypeForTest("Seb"s);
+      Capture(player, "text-entry"s, Step::Quit);
       break;
 
    case Step::Quit:
