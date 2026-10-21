@@ -62,7 +62,7 @@ static void SetWebServerPairing(bool required)
 #endif
 
 static constexpr int TABLES_PER_PAGE = 12; // Rows of 2, 3, 4 or 6 tiles, depending on the width of the menu
-static constexpr int TABLES_PER_PAGE_NEW_VIEW = 24; // 4 rows of 6 tiles in the new VR menu (see Theme::kTileWidth)
+static constexpr int TABLES_PER_PAGE_NEW_VIEW = 48; // 8 rows of 6 tiles in the new VR menu (see Theme::kTileWidth)
 
 static char GetInitial(const LibraryTable& table)
 {
