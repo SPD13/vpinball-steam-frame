@@ -45,7 +45,7 @@ namespace
       case Choice::Classic: return false;
       case Choice::FromSetting: break;
       }
-      return g_pplayer && g_pplayer->m_vrDevice && g_settingsService.GetAppSettings().GetStandalone_NewVRUI();
+      return g_pplayer && g_settingsService.GetAppSettings().GetStandalone_NewVRUI();
    }
 
    bool g_active = false;
