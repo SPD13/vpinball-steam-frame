@@ -21,11 +21,12 @@ using namespace VPX::InGameUI;
 
 namespace
 {
-   enum class Step { Wait, Screens, DPad, SubPage, TextEntry, Quit, Done };
+   enum class Step { Wait, Screens, DPad, SubPage, TextEntry, KeyboardButtons, Quit, Done };
    Step g_step = Step::Wait;
    uint32_t g_stepStart = 0;
    int g_screen = -1; // Index of the screen being captured
    int g_dpadStep = 0;
+   int g_keyboardStep = 0;
    int g_shotCount = 0;
    std::atomic<bool> g_capturing = false;
    // Time taken to draw the menu since the last capture
@@ -310,7 +311,43 @@ void Update(InGameUIPage& page, float renderMs)
       if (now - g_stepStart < 1500)
          return;
       Keyboard::TypeForTest("Seb"s);
-      Capture(player, "text-entry"s, Step::Quit);
+      Capture(player, "text-entry"s, Step::KeyboardButtons);
+      break;
+
+   case Step::KeyboardButtons:
+      // The same keyboard used with the buttons: OK on the field gives it the focus, the directions select a key, OK presses it, Back leaves it
+      if (now - g_stepStart < 500)
+         return;
+      g_stepStart = now;
+      switch (g_keyboardStep++)
+      {
+      case 0:
+         ui.UseButtonNav();
+         ui.OnUIConfirm();
+         PLOGI << "VRUI self-test: OK on the text field, keyboard focused: " << Keyboard::HasFocus();
+         break;
+      case 1:
+         // From 'q': down a row and right twice to 'd', which is typed
+         ui.OnUIDownAction();
+         ui.OnUIRightAction();
+         ui.OnUIRightAction();
+         ui.OnUIConfirm();
+         break;
+      case 2: Capture(player, "keyboard-buttons"s, Step::KeyboardButtons); break;
+      case 3:
+         // Down to the last row, on the space bar (below 'd')
+         for (int i = 0; i < 3; i++)
+            ui.OnUIDownAction();
+         break;
+      case 4: Capture(player, "keyboard-last-row"s, Step::KeyboardButtons); break;
+      case 5:
+         ui.OnUINavigateBack();
+         PLOGI << "VRUI self-test: Back on the keyboard, keyboard focused: " << Keyboard::HasFocus() << ", still on the text entry page: "
+               << (dynamic_cast<TextEntryPage*>(ui.GetActivePage()) != nullptr);
+         break;
+      case 6: Capture(player, "keyboard-back"s, Step::KeyboardButtons); break;
+      default: g_step = Step::Quit; break;
+      }
       break;
 
    case Step::Quit:

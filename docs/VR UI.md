@@ -71,7 +71,9 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 - Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
 - Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): below the menu, it edits the clicked field (search of the Tables
-  screen, text settings, names) and updates it at each key.
+  screen, text settings, names) and updates it at each key. With the buttons, OK (A) on the field gives the focus to the keyboard
+  (`Keyboard::Focus`): the directions then select a key, OK presses it and Back (B) gives the focus back to the menu, the keyboard staying
+  opened. `InGameUI` sends each button to the keyboard first (`Keyboard::HandleButton`); a trigger press (pointer) drops the focus.
 - Below the menu (and the keyboard), a badge gives the address and pairing code of the Wi-Fi upload, or that it is off; clicking it opens
   the Wi-Fi upload screen.
 - Above the menu, a yellow badge "Update Available - Use the installer" appears when GitHub has a newer release than the one running
@@ -100,7 +102,7 @@ table (its actions, then its lighting and difficulty options).
 On macOS (or any desktop build), `VPX_VRUI=new` shows the new menu in the window (the mouse is the pointer, the keys of the in-game UI the
 d-pad), `VPX_VRUI_KEYBOARD=1` types with the keyboard of the menu as in VR. `VPX_VRUI_SHOTS=<folder>` captures every screen, a d-pad
 sequence, a search typed with the keyboard, a value changed then undone on a composed screen, the end of the list of tables (selected with
-the buttons), the page of a table and a sub-page, then quits (`SelfTest.cpp`). Each capture logs the time taken to draw the menu since the
+the buttons), the page of a table, a sub-page, and a name typed with the buttons on the keyboard, then quits (`SelfTest.cpp`). Each capture logs the time taken to draw the menu since the
 previous one: a large library is checked with a tables folder of empty `.vpx` files and their images (cloned with `cp -c` on macOS).
 
 ```

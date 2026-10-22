@@ -126,6 +126,31 @@ static InGameUIItem* FindPropertyItem(const vector<std::unique_ptr<InGameUIItem>
    return nullptr;
 }
 
+// Text property typed with the keyboard of the menu (no keyboard in VR), which changes the value at each key
+static bool IsKeyboardField(const InGameUIItem& item)
+{
+   if (item.m_type != InGameUIItem::Type::Property || item.m_property->m_type != PropertyDef::Type::String || !Keyboard::IsUsed())
+      return false;
+   const auto* prop = dynamic_cast<const VPX::Properties::StringPropertyDef*>(item.m_property.get());
+   return prop && prop->m_pathType == VPX::Properties::StringPropertyDef::PathType::None;
+}
+
+static string GetKeyboardOwner(const InGameUIPage& page, const InGameUIItem& item)
+{
+   return std::format("{}:{}.{}", static_cast<const void*>(&page), item.m_property->m_groupId, item.m_property->m_propId);
+}
+
+static void OpenKeyboard(InGameUIPage& page, const InGameUIItem& item)
+{
+   InGameUIPage* const pagePtr = &page;
+   Keyboard::Open(GetKeyboardOwner(page, item), item.m_property->m_label, item.GetStringValue(), 256,
+      [pagePtr, groupId = item.m_property->m_groupId, propId = item.m_property->m_propId](const string& text)
+      {
+         if (InGameUIItem* edited = FindPropertyItem(InGameUIPageView::GetItems(*pagePtr), groupId, propId); edited)
+            edited->SetValue(text);
+      });
+}
+
 // Marker of a property: modified (to be saved), or overridden by the table
 static void RenderPropertyMarker(const InGameUIItem& item, const ImVec2& pos, float rowHeight)
 {
@@ -540,10 +565,10 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          {
             auto prop = dynamic_cast<VPX::Properties::StringPropertyDef*>(item->m_property.get());
             string v = item->GetStringValue();
-            if (prop->m_pathType == VPX::Properties::StringPropertyDef::PathType::None && Keyboard::IsUsed())
+            if (IsKeyboardField(*item))
             {
                // No keyboard in VR: the field opens the keyboard of the menu, which changes the value at each key
-               const string owner = std::format("{}:{}.{}", static_cast<const void*>(&page), prop->m_groupId, prop->m_propId);
+               const string owner = GetKeyboardOwner(page, *item);
                Keyboard::KeepOpen(owner);
                const bool editing = Keyboard::IsEditing(owner);
                const ImVec2 fieldSize(widgetWidth, frameHeight);
@@ -560,13 +585,7 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
                if (clicked)
                {
                   page.m_selectedItem = i;
-                  InGameUIPage* const pagePtr = &page;
-                  Keyboard::Open(owner, prop->m_label, v, 256,
-                     [pagePtr, groupId = prop->m_groupId, propId = prop->m_propId](const string& text)
-                     {
-                        if (InGameUIItem* edited = FindPropertyItem(pagePtr->m_items, groupId, propId); edited)
-                           edited->SetValue(text);
-                     });
+                  OpenKeyboard(page, *item);
                }
             }
             else if (prop->m_pathType != VPX::Properties::StringPropertyDef::PathType::None)
@@ -625,6 +644,19 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
    if (hoveredItem && std::ranges::none_of(page.m_items, [hoveredItem](const auto& item) { return item.get() == hoveredItem; }))
       hoveredItem = nullptr;
    return hoveredItem;
+}
+
+void InGameUIPage::ActivateItem()
+{
+   // A text field of the new view: OK gives the focus to the keyboard of the menu, to type with the buttons
+   if (const InGameUIItem* item = GetSelectedItem(); VRUI::IsActive() && item && IsKeyboardField(*item))
+   {
+      if (!Keyboard::IsEditing(GetKeyboardOwner(*this, *item)))
+         OpenKeyboard(*this, *item);
+      Keyboard::Focus();
+      return;
+   }
+   AdjustItem(1.f, true);
 }
 
 bool InGameUIPage::RenderVRUI(float elapsedS)

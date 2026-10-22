@@ -23,6 +23,13 @@ void Close();
 bool IsOpen();
 bool IsEditing(const string& owner);
 
+// Buttons: OK (A) on the edited field gives the focus to the keyboard, whose keys are then selected with the directions and pressed with OK.
+// Back (B) gives the focus back to the menu, the keyboard staying opened. The focus is lost when the keyboard closes or the pointer is used.
+enum class Button { Up, Down, Left, Right, Confirm, Back };
+void Focus();
+bool HasFocus();
+bool HandleButton(Button button); // Called for each button of the menu: true when the keyboard has the focus and used it
+
 // The field being edited is shown: keeps the keyboard opened (it closes at the end of a frame where its field was not shown)
 void KeepOpen(const string& owner);
 void EndFrame();

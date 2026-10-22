@@ -98,9 +98,11 @@ public:
    TextEntryPage(const string& title, const string& text, const std::function<void(const string&)>& onSave, bool allowEmpty = false, size_t maxLength = 64);
 
    void AdjustItem(float direction, bool isInitialPress) override;
+   void ActivateItem() override;
 
 private:
    void BuildPage() override;
+   string GetKeyboardOwner() const;
    void OpenKeyboard(); // New VR menu
    bool CanSave() const;
    void Save();

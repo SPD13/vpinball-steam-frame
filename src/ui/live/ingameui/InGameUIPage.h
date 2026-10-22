@@ -43,8 +43,9 @@ public:
    virtual bool IsModified() const;
    virtual bool IsFlipperNavNeeded() const { return false; }
 #if defined(VPX_STEAM_FRAME)
-   // Steam Frame Edition: what the OK button (A) or a click does on the selected item, which may differ from Right (tiles move in their grid)
-   virtual void ActivateItem() { AdjustItem(1.f, true); }
+   // Steam Frame Edition: what the OK button (A) or a click does on the selected item, which may differ from Right (tiles move in their grid,
+   // text fields of the new VR UI give the focus to its keyboard: src/steamframe/vrui/PageAdapter.cpp)
+   virtual void ActivateItem();
    // Moves the selection in the grid of tiles it is in (src/steamframe/vrui/LegacyTiles.cpp)
    bool StepTileGrid(int dx, int dy);
    int m_tileColumns = 1; // Columns of the grid of tiles, as last drawn by the view
