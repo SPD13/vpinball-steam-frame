@@ -13,6 +13,7 @@ upstream's files only get small, guarded hooks into it.
 | Dependencies the fork adds (libzip for the web server, libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
 | Tools to sync with upstream and regenerate the shaders | `steamframe/tools/` |
+| Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
 | Documentation of the fork | `docs/` (new files only) |
 
