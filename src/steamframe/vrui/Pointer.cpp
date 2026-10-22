@@ -68,9 +68,10 @@ void LiveUI::UpdateVRPointer()
    }
 }
 
+// The dot and the ray are hidden in button navigation (the controller still points, ready for a trigger press to switch back)
 void LiveUI::RenderVRPointerDot()
 {
-   if (!m_vrPointerVisible)
+   if (!m_vrPointerVisible || m_inGameUI.IsFlipperNav())
       return;
    ImGui::GetForegroundDrawList()->AddCircleFilled(m_vrPointerPos, 7.f * m_uiScale, m_vrPointerPressed ? IM_COL32(0, 255, 0, 255) : IM_COL32(255, 255, 255, 255));
    ImGui::GetForegroundDrawList()->AddCircle(m_vrPointerPos, 7.f * m_uiScale, IM_COL32(0, 0, 0, 255), 0, 2.f * m_uiScale);
@@ -80,7 +81,7 @@ void LiveUI::RenderVRPointerDot()
 void LiveUI::RenderVRPointerRay(bool onVRPanel, int depthSort)
 {
    const ImGuiIO& io = ImGui::GetIO();
-   if (Matrix3D rayToClip[2]; onVRPanel && m_vrPointerVisible && io.Fonts->TexRef.GetTexID() && m_player->m_vrDevice->GetUIPointerRayTransforms(rayToClip))
+   if (Matrix3D rayToClip[2]; onVRPanel && m_vrPointerVisible && !m_inGameUI.IsFlipperNav() && io.Fonts->TexRef.GetTexID() && m_player->m_vrDevice->GetUIPointerRayTransforms(rayToClip))
    {
       if (m_vrPointerRayMesh == nullptr)
       {
