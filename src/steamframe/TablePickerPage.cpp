@@ -284,6 +284,13 @@ void TablePickerPage::ActivateItem()
 {
    if (const InGameUIItem* item = GetSelectedItem(); item && item->m_tileImage)
       InGameUIPage::AdjustItem(1.f, true);
+   else if (item && item->m_label == SEARCH_ITEM && m_newView && VPX::VRUI::Keyboard::IsUsed())
+   {
+      // The keyboard of the new VR menu gets the focus, to type with the buttons
+      if (!VPX::VRUI::Keyboard::IsEditing("tables/search"s))
+         OpenSearchKeyboard();
+      VPX::VRUI::Keyboard::Focus();
+   }
    else
       AdjustItem(1.f, true);
 }
@@ -999,9 +1006,24 @@ void TextEntryPage::AdjustItem(float direction, bool isInitialPress)
       InGameUIPage::AdjustItem(direction, isInitialPress);
 }
 
+// New VR menu: OK on the field gives the focus to the keyboard, to type with the buttons
+void TextEntryPage::ActivateItem()
+{
+   if (const InGameUIItem* item = GetSelectedItem(); VPX::VRUI::IsActive() && item && item->m_label == "##keyboard"s)
+   {
+      if (!VPX::VRUI::Keyboard::IsEditing(GetKeyboardOwner()))
+         OpenKeyboard();
+      VPX::VRUI::Keyboard::Focus();
+   }
+   else
+      InGameUIPage::ActivateItem();
+}
+
+string TextEntryPage::GetKeyboardOwner() const { return std::format("textentry:{}", static_cast<const void*>(this)); }
+
 void TextEntryPage::OpenKeyboard()
 {
-   VPX::VRUI::Keyboard::Open(std::format("textentry:{}", static_cast<const void*>(this)), ""s, m_text, m_maxLength,
+   VPX::VRUI::Keyboard::Open(GetKeyboardOwner(), ""s, m_text, m_maxLength,
       [this](const string& text)
       {
          m_text = text;
@@ -1036,7 +1058,7 @@ void TextEntryPage::BuildPage()
          {
             namespace Theme = VPX::VRUI::Theme;
             namespace Keyboard = VPX::VRUI::Keyboard;
-            const string owner = std::format("textentry:{}", static_cast<const void*>(this));
+            const string owner = GetKeyboardOwner();
             Keyboard::KeepOpen(owner);
             const float height = ImGui::GetFrameHeight();
             const ImVec2 pos = ImGui::GetCursorScreenPos();
