@@ -1410,6 +1410,7 @@ PropString(Standalone, TablesPath, "Tables folder"s, "Folder of the table librar
 PropBool(Standalone, TablePickerGridView, "Table picker grid view"s, "Display the tables of the in-game table picker as a grid of images instead of a list of names"s, true);
 PropBool(Standalone, TablePickerSortAscending, "Table picker sort order"s, "Sort the tables of the in-game table picker from A to Z instead of Z to A"s, true);
 PropEnum(Standalone, TableImageFocus, "Table image focus"s, "What the images of the tables captured in VR show: the backglass, the playfield seen from above, or the whole cabinet"s, int, 0, "Backglass"s, "Table"s, "Cabinet"s);
+PropEnum(Standalone, LobbyRoom, "Lobby room"s, "The room shown behind the table picker in launcher mode (unless the room of a table is used)"s, int, 0, "Modern room"s, "Game room"s);
 PropBool(Standalone, WebServerAlwaysOn, "Wi-Fi upload always on"s, "Start the web server of the table picker with the application, instead of only when it is turned on from the menu"s, false);
 PropBool(Standalone, WebServerPairing, "Wi-Fi upload pairing code"s, "Ask the browsers for the code displayed by the application before giving them access to the tables folder. When disabled, any device on the local network can add, change or delete tables."s, true);
 PropBool(Standalone, NewVRUI, "New UI"s, "Use the new menu (one menu with big icon buttons on the left) instead of the classic one. The VPX_VRUI environment variable (new or classic) overrides it."s, true);
