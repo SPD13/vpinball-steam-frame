@@ -53,7 +53,7 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
    if (!m_uiPanelPlaced)
    {
       // The panel covers the whole UI display area, most of it being transparent. The UI windows are laid out for the full field of view
-      // of the headset: at the default distance of 1m, 2.8m wide gives about 109 degrees.
+      // of the headset: at 1m, 2.8m wide gives about 109 degrees (98 at the default distance of 1.2m).
       // The player chooses the distance (Standalone.VRMenuDistance), keeping the size, so a closer window looks bigger.
       constexpr float width = 2.8f, belowEyes = 0.1f; // meters
       const float distance = clamp(g_settingsService.GetAppSettings().GetStandalone_VRMenuDistance(), 0.3f, 3.f);

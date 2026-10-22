@@ -1414,7 +1414,7 @@ PropBool(Standalone, WebServerAlwaysOn, "Wi-Fi upload always on"s, "Start the we
 PropBool(Standalone, WebServerPairing, "Wi-Fi upload pairing code"s, "Ask the browsers for the code displayed by the application before giving them access to the tables folder. When disabled, any device on the local network can add, change or delete tables."s, true);
 PropBool(Standalone, NewVRUI, "New UI"s, "Use the new menu (one menu with big icon buttons on the left) instead of the classic one. The VPX_VRUI environment variable (new or classic) overrides it."s, true);
 #endif
-PropFloat(Standalone, VRMenuDistance, "VR menu distance"s, "Distance in meters between the player and the menu window in VR"s, 0.3f, 3.f, 1.f);
+PropFloat(Standalone, VRMenuDistance, "VR menu distance"s, "Distance in meters between the player and the menu window in VR"s, 0.3f, 3.f, 1.2f);
 
 // Editor settings
 PropIntUnbounded(Editor, WindowLeft, "WindowLeft"s, "Main window left"s, -1);
