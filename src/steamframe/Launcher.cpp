@@ -133,11 +133,41 @@ void Launcher::SetupSharedPinMAMEFolder()
    m_isSharedPinMAMEFolderApplied = true;
 }
 
+// The rooms of the lobby, in the order of the values of Standalone.LobbyRoom
+static constexpr std::pair<const char*, const char*> LOBBY_ROOMS[] = { { "Modern room", "lobby.vpx" }, { "Game room", "lobby-gameroom.vpx" } };
+
+static int GetLobbyRoomIndex()
+{
+   return clamp(g_settingsService.GetAppSettings().GetStandalone_LobbyRoom(), 0, static_cast<int>(std::size(LOBBY_ROOMS)) - 1);
+}
+
 std::filesystem::path Launcher::GetLobbyTablePath() const
 {
-   // Base of the lobby, which is then emptied and given a floor (see BuildLobby)
-   // FIXME replace by a dedicated lobby table (a room with nothing to play, designed for VR)
+   // The room of the lobby, a table holding only a room baked in Blender (steamframe/lobby-room): the chosen one, or the first one. Without
+   // any, the blank table, which is then emptied and given a floor (see BuildLobby).
+   for (const int index : { GetLobbyRoomIndex(), 0 })
+   {
+      const std::filesystem::path lobbyRoom = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, LOBBY_ROOMS[index].second);
+      if (FileExists(lobbyRoom))
+         return lobbyRoom;
+   }
    return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpx");
+}
+
+bool Launcher::IsLobbyRoomFile(const std::filesystem::path& tablePath)
+{
+   return std::ranges::any_of(LOBBY_ROOMS, [&tablePath](const auto& room) { return tablePath.filename() == room.second; });
+}
+
+string Launcher::GetLobbyRoomLabel()
+{
+   return "Lobby room: "s + LOBBY_ROOMS[GetLobbyRoomIndex()].first;
+}
+
+void Launcher::NextLobbyRoom()
+{
+   g_settingsService.GetAppSettings().SetStandalone_LobbyRoom((GetLobbyRoomIndex() + 1) % static_cast<int>(std::size(LOBBY_ROOMS)), false);
+   g_settingsService.GetAppSettings().Save();
 }
 
 // The parts of the VR room of a table:
@@ -397,11 +427,11 @@ static Primitive* CreateQuad(PinTable* table, const string& name, float left, fl
    return quad;
 }
 
-// The lobby is what is displayed behind the table picker of the launcher mode: an empty room with a floor. A table file can only be
-// authored with the Windows editor, so for the time being the lobby is made from the blank table shipped with the application, by
-// removing everything it contains (parts, script, playfield) and adding a floor. The room of a table can be used instead (see
-// Launcher::GetLobbyRoom): then the lobby is made from that table, keeping only the parts of its room.
-static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room)
+// The lobby is what is displayed behind the table picker of the launcher mode: a lobby room (see LOBBY_ROOMS), a table holding only a
+// room made in Blender (see steamframe/lobby-room), whose parts are kept as they are. Without such a file, the lobby is made from the blank
+// table shipped with the application, by removing everything it contains (parts, script, playfield) and adding a floor. The room of a
+// table can be used instead (see Launcher::GetLobbyRoom): then the lobby is made from that table, keeping only the parts of its room.
+static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool isLobbyRoom)
 {
    // Displayed by the home page of the in-game menu
    table->m_tableName = "Visual Pinball"s;
@@ -430,7 +460,7 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room)
             table->RemovePart(part);
       }
    }
-   else
+   else if (!isLobbyRoom)
    {
       // Parts hold a reference on their group, so groups go last
       for (const bool removeGroups : { false, true })
@@ -448,7 +478,15 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room)
    {
       viewSetup = ViewSetup();
       viewSetup.mMode = VLM_CAMERA;
-      viewSetup.mLookAt = 300.f; // In percent of the table length: look a few meters ahead instead of down at a playfield, to see the floor up to its far edge
+      // In percent of the table length: look a few meters ahead instead of down at a playfield, to see the floor up to its far edge, or
+      // the far wall of the lobby room at eye level, with a wider view
+      viewSetup.mLookAt = isLobbyRoom ? 1000.f : 300.f;
+      if (isLobbyRoom)
+      {
+         // At the height of the playfield, the view of the room is level
+         viewSetup.mFOV = 60.f;
+         viewSetup.mViewZ = 0.f;
+      }
    }
 
    // An invisible explicit playfield, otherwise the player adds the default one
@@ -457,8 +495,8 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room)
    table->AddPart(playfield);
    playfield->Release();
 
-   // The room of a table has its own floor
-   if (room)
+   // The room of a table, and the lobby room, have their own floor
+   if (room || isLobbyRoom)
       return;
 
    // The floor lies in the room space, which in VR is the real world: z = 0 is the ground, without the playfield inclination
@@ -512,7 +550,8 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
    {
       // The room of a table, if the lobby was loaded from that table (see LauncherCommand)
       const std::optional<LobbyRoom> room = GetLobbyRoom();
-      BuildLobby(table, (room && room->tablePath == tableFilename) ? &*room : nullptr);
+      const bool isRoomOfTable = room && room->tablePath == tableFilename;
+      BuildLobby(table, isRoomOfTable ? &*room : nullptr, !isRoomOfTable && IsLobbyRoomFile(tableFilename));
    }
    else
       GetTableLibrary().RecordPlay(tableFilename); // For the 'Recent' and 'Most played' lists of the table picker

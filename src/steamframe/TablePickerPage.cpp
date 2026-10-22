@@ -750,7 +750,19 @@ void AddLobbyRoomItems(InGameUIPage& page)
          }));
    }
    else
-      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: default (the room of a table can be used, from the menu of that table)"s));
+      page.AddItem(std::make_unique<InGameUIItem>(Launcher::GetLobbyRoomLabel(), "Change the room of the lobby. The room of a table can also be used, from the menu of that table."s,
+         [&page]()
+         {
+            Launcher::NextLobbyRoom();
+            if (page.m_player->m_isLobby)
+            {
+               // Load the lobby again, in the new room
+               g_launcher->m_reloadLobby = true;
+               page.m_player->SetCloseState(Player::CS_CLOSE_APP);
+            }
+            else
+               page.RequestRebuild();
+         }));
 }
 
 void AddQuitItem(InGameUIPage& page)
