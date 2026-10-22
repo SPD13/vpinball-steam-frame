@@ -42,6 +42,13 @@ public:
    virtual bool IsDefaults() const;
    virtual bool IsModified() const;
    virtual bool IsFlipperNavNeeded() const { return false; }
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: what the OK button (A) or a click does on the selected item, which may differ from Right (tiles move in their grid)
+   virtual void ActivateItem() { AdjustItem(1.f, true); }
+   // Moves the selection in the grid of tiles it is in (src/steamframe/vrui/LegacyTiles.cpp)
+   bool StepTileGrid(int dx, int dy);
+   int m_tileColumns = 1; // Columns of the grid of tiles, as last drawn by the view
+#endif
 
    InGameUIItem* GetItem(const string& label) const;
    const InGameUIItem* GetSelectedItem() const { return (m_selectedItem >= 0 && m_selectedItem < (int)m_items.size()) ? m_items[m_selectedItem].get() : nullptr; }

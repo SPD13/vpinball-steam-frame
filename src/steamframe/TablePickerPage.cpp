@@ -267,11 +267,38 @@ void TablePickerPage::SetSearch(const string& search)
    RequestRebuild();
 }
 
+// In the grid view, the buttons move from tile to tile: up/down a row, left/right a column, and OK opens the table
+void TablePickerPage::SelectNextItem()
+{
+   if (!StepTileGrid(0, 1))
+      InGameUIPage::SelectNextItem();
+}
+
+void TablePickerPage::SelectPrevItem()
+{
+   if (!StepTileGrid(0, -1))
+      InGameUIPage::SelectPrevItem();
+}
+
+void TablePickerPage::ActivateItem()
+{
+   if (const InGameUIItem* item = GetSelectedItem(); item && item->m_tileImage)
+      InGameUIPage::AdjustItem(1.f, true);
+   else
+      AdjustItem(1.f, true);
+}
+
 void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
 {
    // Actions of this page must not repeat while the button is held
    if (!isInitialPress)
       return;
+
+   if (const InGameUIItem* item = GetSelectedItem(); item && item->m_tileImage)
+   {
+      StepTileGrid(direction < 0.f ? -1 : 1, 0);
+      return;
+   }
 
    // Items which use the direction, or are custom rendered (the base page does not know what to do with these)
    if (const InGameUIItem* item = GetSelectedItem(); item)

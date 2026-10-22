@@ -49,6 +49,15 @@ namespace
       return std::format("{:02d}-{}{}.png", ++g_shotCount, g_pplayer->m_isLobby ? "lobby-" : "table-", fileName);
    }
 
+   int FirstTable(const InGameUIPage& tables)
+   {
+      const auto& items = InGameUIPageView::GetItems(tables);
+      for (int i = 0; i < static_cast<int>(items.size()); i++)
+         if (items[i]->m_type == InGameUIItem::Type::Navigation && items[i]->m_path.starts_with("tables/"))
+            return i;
+      return -1;
+   }
+
    void Capture(Player* player, const string& name, Step next)
    {
       const std::filesystem::path path = std::filesystem::path(GetFolder()) / FileName(name);
@@ -225,28 +234,51 @@ void Update(InGameUIPage& page, float renderMs)
       case 22:
          if (InGameUIPage* const tables = menu->GetContent(); tables)
          {
-            const InGameUIItem* last = nullptr;
-            for (const auto& item : InGameUIPageView::GetItems(*tables))
-               if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
-                  last = item.get();
-            for (size_t i = 0; last && i < InGameUIPageView::GetItems(*tables).size() && tables->GetSelectedItem() != last; i++)
-               ui.OnUIDownAction();
+            const auto& items = InGameUIPageView::GetItems(*tables);
+            int first = -1, last = -1;
+            for (int i = 0; i < static_cast<int>(items.size()); i++)
+               if (items[i]->m_type == InGameUIItem::Type::Navigation && items[i]->m_path.starts_with("tables/"))
+               {
+                  first = first < 0 ? i : first;
+                  last = i;
+               }
+            // Down the list, or the rows of the grid then right along its last row (down from the last row leaves the grid)
+            const int columns = max(tables->m_tileColumns, 1);
+            for (size_t i = 0; last >= 0 && i < items.size() && InGameUIPageView::GetSelectedIndex(*tables) != last; i++)
+            {
+               const int selected = InGameUIPageView::GetSelectedIndex(*tables);
+               if (items[last]->m_tileImage && selected >= first && (selected - first) / columns == (last - first) / columns)
+                  ui.OnUIRightAction();
+               else
+                  ui.OnUIDownAction();
+            }
          }
          break;
       case 23: break; // Scrolled to it, images loading
       case 24: break;
       case 25: Capture(player, "list-end"s, Step::DPad); break;
-      // The page of a table (play, favorite, rename, scores...), opened from the Tables screen
-      case 26: menu->SetScreen(Screen::Tables); break;
-      case 27:
+      // From the first tile of the grid, down a row then right a column
+      case 26:
          if (InGameUIPage* const tables = menu->GetContent(); tables)
-            for (const auto& item : InGameUIPageView::GetItems(*tables))
-               if (item->m_type == InGameUIItem::Type::Navigation && item->m_path.starts_with("tables/"))
-               {
-                  ui.Navigate(item->m_path);
-                  g_dpadStep = 100; // Captured below, as the menu is no longer the active page
-                  break;
-               }
+            if (const int first = FirstTable(*tables); first >= 0)
+            {
+               InGameUIPageView::SetSelectedIndex(*tables, first);
+               ui.OnUIDownAction();
+               ui.OnUIRightAction();
+               PLOGI << "VRUI self-test: grid of " << tables->m_tileColumns << " columns, down and right from item " << first << " to item "
+                     << InGameUIPageView::GetSelectedIndex(*tables);
+            }
+         break;
+      case 27: Capture(player, "grid-step"s, Step::DPad); break;
+      // The page of a table (play, favorite, rename, scores...), opened from the Tables screen with OK
+      case 28:
+         if (InGameUIPage* const tables = menu->GetContent(); tables)
+            if (const int first = FirstTable(*tables); first >= 0)
+            {
+               InGameUIPageView::SetSelectedIndex(*tables, first);
+               ui.OnUIConfirm();
+               g_dpadStep = 100; // Captured below, as the menu is no longer the active page
+            }
          break;
       default: g_step = Step::SubPage; break;
       }

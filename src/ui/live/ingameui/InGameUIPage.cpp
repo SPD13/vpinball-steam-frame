@@ -661,6 +661,7 @@ void InGameUIPage::Render(float elapsedS)
 #if defined(VPX_STEAM_FRAME)
    // Consecutive tiles are laid out as a grid, which still is navigated as a list (Steam Frame Edition, see src/steamframe/vrui/LegacyTiles.cpp)
    const int tileColumns = clamp(static_cast<int>((itemEndScreenX - rowStartScreenX) / (11.f * ImGui::GetFontSize())), 1, 6);
+   m_tileColumns = tileColumns;
    const float tileWidth = (itemEndScreenX - rowStartScreenX) / static_cast<float>(tileColumns);
    const ImVec2 tileSize(tileWidth, (tileWidth - 2.f * itemPadding.x) * 0.625f + ImGui::GetTextLineHeight() + 3.f * itemPadding.y);
    int tileColumn = 0;
@@ -1036,6 +1037,17 @@ void InGameUIPage::Render(float elapsedS)
    ImGui::BeginChild("Info", ImVec2(), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
    if (hoveredItem && std::ranges::find_if(m_items, [hoveredItem](auto& item) { return item.get() == hoveredItem; }) != m_items.end() && !hoveredItem->m_tooltip.empty())
       ImGui::TextWrapped("%s", hoveredItem->m_tooltip.c_str());
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: in the menu, the Start and Credit buttons are OK and Back (see InputManager::CreateInputActions)
+   else if (undoHovered)
+      ImGui::TextWrapped("Undo changes");
+   else if (defaultHovered)
+      ImGui::TextWrapped("Reset page to defaults\n[Input shortcut: Launch Button]");
+   else if (saveHovered)
+      ImGui::TextWrapped("Save changes");
+   else if (backHovered)
+      ImGui::TextWrapped("Get back\n[Input shortcut: Credit or Quit Button]");
+#else
    else if (undoHovered)
       ImGui::TextWrapped("Undo changes\n[Input shortcut: Credit Button]");
    else if (defaultHovered)
@@ -1044,6 +1056,7 @@ void InGameUIPage::Render(float elapsedS)
       ImGui::TextWrapped("Save changes\n[Input shortcut: Start Button]");
    else if (backHovered)
       ImGui::TextWrapped("Get back\n[Input shortcut: Quit Button]");
+#endif
    else if (!m_info.empty())
       ImGui::TextWrapped("%s", m_info.c_str());
    ImGui::EndChild();

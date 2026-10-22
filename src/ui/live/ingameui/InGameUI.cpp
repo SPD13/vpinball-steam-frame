@@ -311,6 +311,18 @@ void InGameUI::OnUISaveChanges()
    GetActivePage()->Save();
 }
 
+#if defined(VPX_STEAM_FRAME)
+void InGameUI::OnUIConfirm()
+{
+   if (ImGui::IsAnyItemActive())
+      return;
+
+   if (!UseButtonNav()) // The first press only shows the selected item, as the directions do
+      return;
+   GetActivePage()->ActivateItem();
+}
+#endif
+
 void InGameUI::OnUINavigateBack()
 {
    if (ImGui::IsAnyItemActive())
