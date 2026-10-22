@@ -30,6 +30,7 @@ public:
    void SelectNextItem() override;
    void SelectPrevItem() override;
    void AdjustItem(float direction, bool isInitialPress) override;
+   void ActivateItem() override;
    bool IsDefaults() const override;
    bool IsModified() const override;
    void Save() override;

@@ -57,7 +57,12 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 - Pointer (VR controller, mouse): click the rail, the items, the Back/Close and Defaults/Undo/Save buttons.
 - Buttons (d-pad, or thumbsticks as in upstream's mapping: left stick up/down, right stick left/right): on the rail, up/down change the
   screen and right enters it; in a screen, up/down select an item and left/right adjust it, left on an item which does not use it (link,
-  action, text) gets back to the rail.
+  action, text) gets back to the rail. OK (Start button, A on a VR controller) activates the selected item: enters the screen from the rail,
+  opens a link or a table, runs an action, flips a switch. Back (Credit button, B; also the Quit and menu buttons) gets back. Save and Undo
+  have no button shortcut any more: they are items of the page (at the end of its list) and buttons of its footer.
+- In the grid of tables, the buttons move from tile to tile (up/down a row, left/right a column; left from the first column gets back to the
+  rail, up from the first row to the letter filter and search) and OK opens the table. The views give the number of columns they draw
+  (`InGameUIPage::m_tileColumns`, navigation in `InGameUIPage::StepTileGrid`), so this works in the classic view too.
 - In VR, the menu opens in pointer navigation (hovered items are highlighted). Any button of the UI (d-pad, sticks, Save, Undo, Defaults,
   Back) switches to button navigation, the selected item being highlighted: the first press of a direction only shows it. A trigger press
   switches back without clicking (the next one clicks); aiming or scrolling does not. The thumbstick of the pointing controller scrolls in pointer navigation only,

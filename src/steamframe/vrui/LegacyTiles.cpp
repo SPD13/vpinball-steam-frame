@@ -101,10 +101,63 @@ void InGameUIPage::RenderTile(int index, const ImVec2& pos, const ImVec2& size, 
       if (isToggleHovered)
          item->m_tileToggleAction();
       else
-         AdjustItem(1.f, true);
+         ActivateItem();
    }
 
    ImGui::SetCursorScreenPos(nextRowPos);
+}
+
+// Consecutive tiles are laid out by the views as a grid of m_tileColumns columns, from the first tile. Returns false when the selected item
+// is not a tile, or when the move leaves the grid: left from the first column, up from the first row and down from the last one (the
+// selection is then put on the first or last tile, for the list navigation to go on from there). Right never leaves it.
+bool InGameUIPage::StepTileGrid(int dx, int dy)
+{
+   const auto isTile = [this](int index)
+   {
+      const InGameUIItem* const item = m_items[index].get();
+      return item->m_tileImage && (item->m_type == InGameUIItem::Type::Navigation || item->m_type == InGameUIItem::Type::Runnable);
+   };
+   const int nItems = static_cast<int>(m_items.size());
+   if (m_selectedItem < 0 || m_selectedItem >= nItems || !isTile(m_selectedItem))
+      return false;
+   int first = m_selectedItem, last = m_selectedItem;
+   while (first > 0 && isTile(first - 1))
+      first--;
+   while (last + 1 < nItems && isTile(last + 1))
+      last++;
+   const int columns = max(m_tileColumns, 1);
+   const int position = m_selectedItem - first;
+   if (dx < 0)
+   {
+      if (position % columns == 0)
+         return false;
+      m_selectedItem--;
+   }
+   else if (dx > 0)
+   {
+      if (position % columns < columns - 1 && m_selectedItem < last)
+         m_selectedItem++;
+   }
+   else if (dy < 0)
+   {
+      if (position < columns)
+      {
+         m_selectedItem = first;
+         return false;
+      }
+      m_selectedItem -= columns;
+   }
+   else if (dy > 0)
+   {
+      if (position / columns == (last - first) / columns)
+      {
+         m_selectedItem = last;
+         return false;
+      }
+      m_selectedItem = min(m_selectedItem + columns, last); // Below an incomplete last row: its last tile
+   }
+   m_pressedItemScroll = 0.f;
+   return true;
 }
 
 }

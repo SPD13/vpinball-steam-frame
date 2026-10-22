@@ -115,6 +115,9 @@ void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
       m_railFocus = true;
       return;
    }
+   // Tiles move in their grid, left from its first column getting back to the rail
+   if (isInitialPress && content->StepTileGrid(direction < 0.f ? -1 : 1, 0))
+      return;
    // Left gets back to the rail, except on the items which use it (values, input mappings, and the custom items of the pages, like tabs)
    if (direction < 0.f && isInitialPress)
    {
@@ -127,6 +130,16 @@ void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
       }
    }
    content->AdjustItem(direction, isInitialPress);
+}
+
+void MainMenuPage::ActivateItem()
+{
+   if (m_railFocus)
+      m_railFocus = false; // OK enters the screen
+   else if (InGameUIPage* const content = GetContent(); content)
+      content->ActivateItem();
+   else
+      m_railFocus = true;
 }
 
 bool MainMenuPage::IsDefaults() const

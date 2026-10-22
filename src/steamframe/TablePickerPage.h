@@ -41,7 +41,10 @@ public:
 
    void Open(bool isBackwardAnimation) override;
    void Render(float elapsedS) override;
+   void SelectNextItem() override;
+   void SelectPrevItem() override;
    void AdjustItem(float direction, bool isInitialPress) override;
+   void ActivateItem() override;
 
    // New VR menu: opens its keyboard on the search field (as clicking it does)
    void OpenSearchKeyboard();

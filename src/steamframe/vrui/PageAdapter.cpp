@@ -153,8 +153,8 @@ const char* InGameUIPageView::RenderActions(InGameUIPage& page, float right, flo
    const bool canSave = page.m_saveMode != InGameUIPage::SaveMode::None;
    const Action actions[] = {
       { ResetToDefaults, ICON_FK_HEART, "Defaults", "Reset this page to its default values\n[Input shortcut: Launch Button]", !page.IsDefaults() },
-      { ResetToStoredValues, ICON_FK_UNDO, "Undo", "Undo the changes\n[Input shortcut: Credit Button]", page.IsModified() },
-      { SaveChanges, ICON_FK_FLOPPY_O, "Save", "Save the changes\n[Input shortcut: Start Button]", canSave && page.IsModified() },
+      { ResetToStoredValues, ICON_FK_UNDO, "Undo", "Undo the changes", page.IsModified() },
+      { SaveChanges, ICON_FK_FLOPPY_O, "Save", "Save the changes", canSave && page.IsModified() },
    };
    const float spacing = Theme::Px(0.6f);
    float width = 0.f;
@@ -206,6 +206,8 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
 
    // Consecutive tiles are laid out as a grid, which still is navigated as a list
    const int tileColumns = clamp(static_cast<int>(width / Theme::Px(Theme::kTileWidth)), 2, 6);
+   if (filter == nullptr)
+      page.m_tileColumns = tileColumns; // For the button navigation in the grid (InGameUIPage::StepTileGrid)
    const float tileWidth = floorf(width / static_cast<float>(tileColumns));
    const float tileGap = Theme::Px(0.5f);
    const float tileImageHeight = (tileWidth - tileGap - 2.f * pad) * 0.625f;
@@ -299,7 +301,7 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
             if (toggleHovered)
                item->m_tileToggleAction();
             else
-               page.AdjustItem(1.f, true);
+               page.ActivateItem();
          }
          // Cursor below the tile: next row of tiles, or the items following the grid
          ImGui::SetCursorScreenPos(ImVec2(x0, pos.y + tileSize.y + tileGap));
@@ -382,7 +384,7 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          if (clicked)
          {
             page.m_selectedItem = i;
-            page.AdjustItem(1.f, true);
+            page.ActivateItem();
          }
          ImGui::SetCursorScreenPos(ImVec2(rowMin.x, rowMin.y + rowHeight));
          ImGui::Dummy(ImVec2(0.f, 0.f));

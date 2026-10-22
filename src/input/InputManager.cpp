@@ -704,10 +704,18 @@ void InputManager::CreateInputActions()
                   // Somewhat hacky direct UI action mapping (inherited from legacy POV adjustment mode, could benefit from some additional cleanups)
                   else if (action.GetActionId() == m_launchBallActionId)
                      m_player->m_liveUI->m_inGameUI.OnUIResetToDefaults();
+#if defined(VPX_STEAM_FRAME)
+                  // Steam Frame Edition: OK and Back, as on a gamepad (A and B of a VR controller), Save and Undo being buttons of the page
+                  else if (action.GetActionId() == m_addCreditActionId[0])
+                     m_player->m_liveUI->m_inGameUI.OnUINavigateBack();
+                  else if (action.GetActionId() == m_startActionId)
+                     m_player->m_liveUI->m_inGameUI.OnUIConfirm();
+#else
                   else if (action.GetActionId() == m_addCreditActionId[0])
                      m_player->m_liveUI->m_inGameUI.OnUICancelChanges();
                   else if (action.GetActionId() == m_startActionId)
                      m_player->m_liveUI->m_inGameUI.OnUISaveChanges();
+#endif
                }
             }
             else
