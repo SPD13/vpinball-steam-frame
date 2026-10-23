@@ -890,7 +890,7 @@ void TablePickerPage::RenderSearchNewView()
    if (Keyboard::IsUsed())
    {
       static const string owner = "tables/search"s;
-      Keyboard::KeepOpen(owner);
+      Keyboard::KeepOpen(owner, pos, pos + ImVec2(width - clearWidth, height));
       // Buttons: the keyboard opens when the field gets the focus, and closes when it loses it (not when the pointer is used)
       const InGameUIItem* const selectedItem = GetSelectedItem();
       const bool selected = selectedItem != nullptr && selectedItem->m_label == SEARCH_ITEM;
@@ -1118,10 +1118,10 @@ void TextEntryPage::BuildPage()
             namespace Theme = VPX::VRUI::Theme;
             namespace Keyboard = VPX::VRUI::Keyboard;
             const string owner = GetKeyboardOwner();
-            Keyboard::KeepOpen(owner);
             const float height = ImGui::GetFrameHeight();
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const ImVec2 size(ImGui::GetContentRegionAvail().x, height);
+            Keyboard::KeepOpen(owner, pos, pos + size);
             if (ImGui::InvisibleButton("##field", size) || !m_keyboardOpened)
             {
                m_keyboardOpened = true;

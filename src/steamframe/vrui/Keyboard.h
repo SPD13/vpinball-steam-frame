@@ -7,8 +7,8 @@
 #include <functional>
 
 // Keyboard of the new VR UI, for VR where there is no keyboard. It edits a text of its own (not an ImGui text field, which would lose the
-// focus when a key is clicked) and reports each change, so the edited value or list updates while typing. The shell draws it at the bottom
-// of the menu while it is opened.
+// focus when a key is clicked) and reports each change, so the edited value or list updates while typing. The shell draws it over the
+// menu, below the edited field, while it is opened: Done closes it.
 namespace VPX::VRUI::Keyboard
 {
 
@@ -30,8 +30,10 @@ void Focus();
 bool HasFocus();
 bool HandleButton(Button button); // Called for each button of the menu: true when the keyboard has the focus and used it
 
-// The field being edited is shown: keeps the keyboard opened (it closes at the end of a frame where its field was not shown)
-void KeepOpen(const string& owner);
+// The field being edited is shown, at this position on the screen: keeps the keyboard opened (it closes at the end of a frame where its field
+// was not shown), below that field
+void KeepOpen(const string& owner, const ImVec2& fieldMin, const ImVec2& fieldMax);
+float GetFieldBottom();
 void EndFrame();
 
 // Types as if the keys were clicked (screenshot self-test), after clearing the text with 'clear'
