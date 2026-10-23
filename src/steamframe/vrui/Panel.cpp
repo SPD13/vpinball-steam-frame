@@ -129,7 +129,7 @@ bool VRDevice::GetUIPointerRayTransforms(Matrix3D (&quadToClip)[2]) const
    if (!m_uiPointerValid)
       return false;
    // A flat ribbon from the controller to the pointed position, turned towards the head so that it is seen from its wide side
-   constexpr float thickness = 0.004f; // meters
+   constexpr float thickness = 0.006f; // meters, faded to the edges (Pointer.cpp)
    const vec3 along = m_uiPointerRayEnd - m_uiPointerRayStart;
    vec3 across = CrossProduct(along, m_uiHeadPos - m_uiPointerRayStart);
    if (across.LengthSquared() < 1e-10f)
