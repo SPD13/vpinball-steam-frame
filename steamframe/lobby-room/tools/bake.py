@@ -20,6 +20,7 @@ scene = bpy.context.scene
 # the scene lists its own; the groups that only emit light (a backdrop) skip the lighting passes
 SIZES = json.loads(scene["bake_sizes"]) if "bake_sizes" in scene else {"floor": 4096, "walls": 4096, "ceiling": 2048, "feature": 2048, "furniture": 4096}
 EMIT_ONLY = set(json.loads(scene["bake_emit_only"])) if "bake_emit_only" in scene else set()
+HIDE_WHEN_LIGHTING = set(json.loads(scene["bake_hide_when_lighting"])) if "bake_hide_when_lighting" in scene else set()
 scene.render.engine = "CYCLES"
 prefs = bpy.context.preferences.addons["cycles"].preferences
 prefs.compute_device_type = "METAL"
@@ -144,6 +145,8 @@ for g in groups:
     image = bpy.data.images.new(f"bake_{g}", size, size, float_buffer=True)
     image.colorspace_settings.name = "Linear Rec.709"
     t0 = time.time()
+    for other in HIDE_WHEN_LIGHTING:
+        objects[other].hide_render = g not in EMIT_ONLY and other != g
     emit = bake_pass(obj, image, "EMIT", set(), 4)
     if g in EMIT_ONLY:
         result = emit
