@@ -73,7 +73,7 @@ Iterate with previews before any bake: `render_views.py <blend> -- <dir> 32 fron
 (1.65 m) and from a corner in about 30 s per view at 32 samples; look at them, fix, rebuild. The previews use AgX like VPX, so the
 mood carries over; glossy reflections do not (the bake is view independent), so judge the floor's shine in VPX, not in the previews.
 
-### 2.4 A view outside (the game room's window)
+### 2.4 A view outside (the windows of the game room and the studio)
 
 The city is a Poly Haven HDRI. It lights the room as the world (the 4k file) and is seen through the window on a **backdrop**: a
 cylinder 70 m away whose emission looks the panorama up along the direction from the player's eye, baked once (emit only, the 8k file).
@@ -81,6 +81,16 @@ From 70 m the parallax error of a moving head is negligible. The rotation of the
 the window view at three angles. Ground-level panoramas show the street right below the horizon: the backdrop looks the panorama
 up 5° higher than the real direction (`HORIZON_LIFT`), which sinks the crowd along the river below a 1.15 m parapet and makes the view
 read as a high floor. A terrace floor and the parapet (bake group `exterior`) fill the space between the window and the backdrop.
+
+Both are `roomkit.world_environment` and `roomkit.backdrop(facing_deg=...)`. The backdrop is **seen by the camera only** (its ray
+visibility is off for diffuse, glossy and shadow rays): the light of the room comes from the world, where Cycles samples the sun of
+the panorama as a light. On a mesh the sun would only be found by chance, and the sunlit studio came out dark.
+
+**Sunlight** (the studio): find the sun of the panorama (its brightest pixel) and turn the panorama so that the sun stands outside the
+windows. Blender's equirectangular mapping is `u = 0.5 − atan2(y, x) / 2π`, `v = 0.5 + elevation / π` (rows of `image.pixels` from
+the bottom), so the sun's azimuth in the image is `a = (0.5 − u) · 2π`, and the Mapping node (Point, rotation θ around Z) gives it the
+azimuth `a − θ` in the room: θ = a − the azimuth wanted. Getting the sign of `u` wrong put the sun outside the wall without windows.
+A low sun (26° in `garden_nook`) throws long sunbeams across the floor with the shadows of the window crosses, as in a photo.
 
 ### 2.5 Bake
 
@@ -154,6 +164,9 @@ sits around the player, its scale (ceiling, distance of the walls), the view thr
 - The Mac build may need `platforms/macos-arm64/external.sh` after an upstream sync adds a dependency.
 - The `cargo` in `/usr/local` is x86 and cannot run: vpxtool comes from its macOS aarch64 release (`~/.local/bin/vpxtool`).
 - The thumbnails of rooms are screenshots of the real lobby: retake them when a room changes.
+- Wall objects of Poly Haven (the dartboard) face −Y with their back at the origin, unlike the furniture, which faces +Y: check
+  the facing of each model in a preview (the dartboard of the game room first faced its wall). Some models are built sideways (the
+  display shelves).
 
 ## 4. Ideas for next rooms
 

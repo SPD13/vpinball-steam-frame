@@ -205,6 +205,44 @@ def prism(name, profile, x0, x1, side_material, cap_material, group, cap_uv=None
     obj = new_object(name, bm, [side_material, cap_material], group)
     return obj
 
+def wall_with_openings(name, u0, u1, to_point, openings, toward, material, group, height):
+    """A wall as quads around rectangular openings (u0, u1, v0, v1): `to_point` maps (u, v) to a point, the wall spans u0..u1 x 0..height."""
+    bm = bmesh.new()
+    cuts = sorted(openings)
+    # Columns between and around the openings, full height, and the parts above and below each opening
+    edges = [u0] + [c for o in cuts for c in (o[0], o[1])] + [u1]
+    for i in range(0, len(edges), 2):
+        a, b = edges[i], edges[i + 1]
+        if b - a > 1e-4:
+            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, 0), (b, 0), (b, height), (a, height))])
+    for (a, b, v0, v1) in cuts:
+        if v1 < height:
+            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, v1), (b, v1), (b, height), (a, height))])
+        if v0 > 0:
+            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, 0), (b, 0), (b, v0), (a, v0))])
+    face_toward(bm, toward)
+    box_uv(bm)
+    return new_object(name, bm, material, group)
+
+def soft_box(name, lo, hi, material, group, radius=0.03):
+    """A box with rounded edges, for cushions."""
+    obj = box(name, lo, hi, material, group)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.bevel(bm, geom=list(bm.edges), offset=radius, segments=2, affect="EDGES")
+    box_uv(bm)
+    bm.to_mesh(obj.data)
+    bm.free()
+    return obj
+
+def rod(name, a, b, radius, material, group, segments=8):
+    """A cylinder from point a to point b (legs of a tripod, a lamp arm)."""
+    a, b = Vector(a), Vector(b)
+    obj = cylinder(name, (0, 0, 0), radius, (b - a).length, material, group, segments=segments)
+    rot = (b - a).normalized().to_track_quat("Z", "Y").to_matrix().to_4x4()
+    obj.data.transform(Matrix.Translation((a + b) / 2) @ rot)
+    return obj
+
 def cylinder(name, center, radius, depth, material, group, segments=24, radius_top=None, axis="z"):
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=radius, radius2=radius if radius_top is None else radius_top, depth=depth)
@@ -277,6 +315,82 @@ def tint_material(mat, tint):
     mix.inputs["B"].default_value = (*tint, 1.0)
     links.new(src, mix.inputs["A"])
     links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
+
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# A view outside: an HDRI lights the room as the world, and is seen through the windows on a distant backdrop
+
+def environment_nodes(tree, vector_socket, path, rotation):
+    """Environment texture looked up along a direction, turned around Z (the same mapping for the world and the backdrop)."""
+    mapping = tree.nodes.new("ShaderNodeMapping")
+    mapping.inputs["Rotation"].default_value = (0, 0, rotation)
+    tree.links.new(vector_socket, mapping.inputs["Vector"])
+    env = tree.nodes.new("ShaderNodeTexEnvironment")
+    env.image = bpy.data.images.load(path, check_existing=True)
+    tree.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
+    return env
+
+def world_environment(scene, path, rotation, strength, name="World"):
+    world = bpy.data.worlds.new(name)
+    world.use_nodes = True
+    wt = world.node_tree
+    env = environment_nodes(wt, wt.nodes.new("ShaderNodeTexCoord").outputs["Generated"], path, rotation)
+    wt.links.new(env.outputs["Color"], wt.nodes["Background"].inputs["Color"])
+    wt.nodes["Background"].inputs["Strength"].default_value = strength
+    scene.world = world
+    return world
+
+def backdrop(path, rotation, strength, eye, facing_deg=0.0, span_deg=160.0, radius=70.0, z0=-30.0, z1=45.0, lift_deg=0.0, group="backdrop"):
+    """An emissive cylinder `radius` meters away, around the direction `facing_deg` (0 is +Y, 90 is +X), showing from the player's eye
+    what the world shows in each direction. `lift_deg` looks the panorama up higher than the real direction (it sinks what is right
+    below the horizon, for a panorama taken at ground level). Baked as emission only, from the 8k file."""
+    mat = bpy.data.materials.new("Backdrop")
+    mat.use_nodes = True
+    bt = mat.node_tree
+    bsdf = bt.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
+    geo = bt.nodes.new("ShaderNodeNewGeometry")
+    sub = bt.nodes.new("ShaderNodeVectorMath")
+    sub.operation = "SUBTRACT"
+    sub.inputs[1].default_value = eye
+    bt.links.new(geo.outputs["Position"], sub.inputs[0])
+    sep = bt.nodes.new("ShaderNodeSeparateXYZ")
+    bt.links.new(sub.outputs["Vector"], sep.inputs[0])
+    flat = bt.nodes.new("ShaderNodeCombineXYZ")
+    bt.links.new(sep.outputs["X"], flat.inputs["X"])
+    bt.links.new(sep.outputs["Y"], flat.inputs["Y"])
+    horizontal = bt.nodes.new("ShaderNodeVectorMath")
+    horizontal.operation = "LENGTH"
+    bt.links.new(flat.outputs["Vector"], horizontal.inputs[0])
+    lift = bt.nodes.new("ShaderNodeMath")
+    lift.operation = "MULTIPLY_ADD"
+    lift.inputs[1].default_value = math.tan(math.radians(lift_deg))
+    bt.links.new(horizontal.outputs["Value"], lift.inputs[0])
+    bt.links.new(sep.outputs["Z"], lift.inputs[2])
+    lifted = bt.nodes.new("ShaderNodeCombineXYZ")
+    bt.links.new(sep.outputs["X"], lifted.inputs["X"])
+    bt.links.new(sep.outputs["Y"], lifted.inputs["Y"])
+    bt.links.new(lift.outputs["Value"], lifted.inputs["Z"])
+    norm = bt.nodes.new("ShaderNodeVectorMath")
+    norm.operation = "NORMALIZE"
+    bt.links.new(lifted.outputs["Vector"], norm.inputs[0])
+    env = environment_nodes(bt, norm.outputs["Vector"], path, rotation)
+    bt.links.new(env.outputs["Color"], bsdf.inputs["Emission Color"])
+    bsdf.inputs["Emission Strength"].default_value = strength
+    segments = 40
+    bm = bmesh.new()
+    angles = [math.radians(facing_deg - span_deg / 2 + span_deg * i / segments) for i in range(segments + 1)]
+    ring = [(eye.x + radius * math.sin(a), eye.y + radius * math.cos(a)) for a in angles]
+    for i in range(segments):
+        (xa, ya), (xb, yb) = ring[i], ring[i + 1]
+        bm.faces.new([bm.verts.new(p) for p in ((xa, ya, z0), (xb, yb, z0), (xb, yb, z1), (xa, ya, z1))])
+    face_toward(bm, eye)
+    box_uv(bm)
+    obj = new_object("Backdrop", bm, mat, group)
+    # Seen by the camera only: the light of the room comes from the world, where Cycles samples the sun of the panorama as a light (on a
+    # mesh, it would only be found by chance)
+    obj.visible_diffuse = obj.visible_glossy = obj.visible_transmission = obj.visible_volume_scatter = obj.visible_shadow = False
+    return obj
 
 
 # ---------------------------------------------------------------------------------------------------------------------------

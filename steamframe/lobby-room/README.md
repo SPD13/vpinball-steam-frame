@@ -8,6 +8,7 @@ frame.
 |---|---|---|
 | Modern room: oak slat wall, cove light, sofa and lounge chair | `src/assets/lobby.vpx` | `tools/build_room.py` |
 | Game room: a night lounge with arcade cabinets, a pinball machine and a city view | `src/assets/lobby-gameroom.vpx` | `tools/build_gameroom.py` (with `roomkit.py`, `gameroom_art.py`) |
+| Sunlit studio: a bright room for work and play, sunbeams from a garden through three tall windows, dartboards, a desk | `src/assets/lobby-studio.vpx` | `tools/build_studio.py` (with `roomkit.py`, `studio_art.py`) |
 
 The player chooses the room in the menu (`Standalone.LobbyRoom`); "Empty room" is the previous lobby, the blank table emptied and
 given a tiled floor (see `BuildLobby` in `src/steamframe/Launcher.cpp`). The game room is the default.
@@ -28,11 +29,13 @@ T=<vpinball>/steamframe/lobby-room/tools
 python3 -I $T/fetch_polyhaven.py downloads texture:laminate_floor_02 texture:plastered_wall_04 texture:oak_veneer_01 \
   texture:poly_wool_herringbone model:sofa_02 model:modern_coffee_table_01 model:potted_plant_04 model:mid_century_lounge_chair \
   model:side_table_01 model:modern_ceiling_lamp_01 model:calathea_orbifolia_01
-python3 -I $T/fetch_polyhaven.py downloads hdri:shanghai_bund:8k texture:herringbone_parquet texture:dark_wooden_planks \
-  texture:quatrefoil_jacquard_fabric texture:leather_red_02 texture:jersey_melange model:throw_pillows_01 model:anthurium_botany_01 \
-  model:dartboard
+python3 -I $T/fetch_polyhaven.py downloads hdri:shanghai_bund:8k hdri:shanghai_bund:4k texture:herringbone_parquet \
+  texture:dark_wooden_planks texture:quatrefoil_jacquard_fabric texture:leather_red_02 texture:jersey_melange model:throw_pillows_01 \
+  model:anthurium_botany_01 model:dartboard
+python3 -I $T/fetch_polyhaven.py downloads hdri:garden_nook:8k hdri:garden_nook:4k texture:old_wooden_floor_03 texture:leather_white \
+  model:desk_lamp_arm_01 model:wooden_display_shelves_01
 # 2. Scene, and previews from the player's place (front, left, right, back, corner)
-$B -b --factory-startup --python $T/build_gameroom.py -- downloads build/gameroom.blend      # or build_room.py, build/lobby.blend
+$B -b --factory-startup --python $T/build_gameroom.py -- downloads build/gameroom.blend      # or build_room.py, build_studio.py
 $B -b build/gameroom.blend --python $T/render_views.py -- build/preview_game 64
 # 3. Bake: one texture per group (the scene lists its groups and their sizes), linear EXR
 $B -b build/gameroom.blend --python $T/bake.py -- build/bake_game 128
