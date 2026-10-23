@@ -7,6 +7,7 @@
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
+#include "steamframe/TablePickerPage.h"
 #include "steamframe/vrui/VRUI.h"
 #include "parts/Collection.h"
 #include "parts/Material.h"
@@ -133,41 +134,73 @@ void Launcher::SetupSharedPinMAMEFolder()
    m_isSharedPinMAMEFolderApplied = true;
 }
 
-// The rooms of the lobby, in the order of the values of Standalone.LobbyRoom
-static constexpr std::pair<const char*, const char*> LOBBY_ROOMS[] = { { "Modern room", "lobby.vpx" }, { "Game room", "lobby-gameroom.vpx" } };
-
-static int GetLobbyRoomIndex()
+// The rooms of the lobby, in the order of the room chooser, with their value of Standalone.LobbyRoom. The empty room has no file of its
+// own: it is the blank table, emptied and given a floor (see BuildLobby).
+struct LobbyRoomFile
 {
-   return clamp(g_settingsService.GetAppSettings().GetStandalone_LobbyRoom(), 0, static_cast<int>(std::size(LOBBY_ROOMS)) - 1);
+   int value;
+   const char* name;
+   const char* table;
+   const char* thumbnail; // In assets/lobby-rooms
+};
+static constexpr LobbyRoomFile LOBBY_ROOMS[] = {
+   { 2, "Empty room", nullptr, "empty.jpg" },
+   { 0, "Modern room", "lobby.vpx", "modern.jpg" },
+   { 1, "Game room", "lobby-gameroom.vpx", "game.jpg" },
+};
+
+static const LobbyRoomFile* FindLobbyRoom(int value)
+{
+   const auto it = std::ranges::find(LOBBY_ROOMS, value, &LobbyRoomFile::value);
+   return it != std::end(LOBBY_ROOMS) ? &*it : nullptr;
+}
+
+static std::filesystem::path GetLobbyRoomTable(const LobbyRoomFile& room)
+{
+   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, room.table ? room.table : "blankTable.vpx");
 }
 
 std::filesystem::path Launcher::GetLobbyTablePath() const
 {
-   // The room of the lobby, a table holding only a room baked in Blender (steamframe/lobby-room): the chosen one, or the first one. Without
-   // any, the blank table, which is then emptied and given a floor (see BuildLobby).
-   for (const int index : { GetLobbyRoomIndex(), 0 })
-   {
-      const std::filesystem::path lobbyRoom = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, LOBBY_ROOMS[index].second);
-      if (FileExists(lobbyRoom))
-         return lobbyRoom;
-   }
+   // The chosen room, a table holding only a room baked in Blender (steamframe/lobby-room), or the blank table for the empty room, which is
+   // also used when the file of the chosen room is missing
+   const LobbyRoomFile* const room = FindLobbyRoom(GetLobbyRoomChoice());
+   if (room && room->table && FileExists(GetLobbyRoomTable(*room)))
+      return GetLobbyRoomTable(*room);
    return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpx");
 }
 
 bool Launcher::IsLobbyRoomFile(const std::filesystem::path& tablePath)
 {
-   return std::ranges::any_of(LOBBY_ROOMS, [&tablePath](const auto& room) { return tablePath.filename() == room.second; });
+   return std::ranges::any_of(LOBBY_ROOMS, [&tablePath](const LobbyRoomFile& room) { return room.table && tablePath.filename() == room.table; });
 }
 
-string Launcher::GetLobbyRoomLabel()
+vector<Launcher::LobbyRoomChoice> Launcher::GetLobbyRoomChoices()
 {
-   return "Lobby room: "s + LOBBY_ROOMS[GetLobbyRoomIndex()].first;
+   vector<LobbyRoomChoice> choices;
+   for (const LobbyRoomFile& room : LOBBY_ROOMS)
+      if (room.table == nullptr || FileExists(GetLobbyRoomTable(room)))
+         choices.push_back({ room.value, room.name, g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "lobby-rooms/"s + room.thumbnail) });
+   return choices;
 }
 
-void Launcher::NextLobbyRoom()
+int Launcher::GetLobbyRoomChoice()
 {
-   g_settingsService.GetAppSettings().SetStandalone_LobbyRoom((GetLobbyRoomIndex() + 1) % static_cast<int>(std::size(LOBBY_ROOMS)), false);
+   const int value = g_settingsService.GetAppSettings().GetStandalone_LobbyRoom();
+   return FindLobbyRoom(value) ? value : 0;
+}
+
+string Launcher::GetLobbyRoomName()
+{
+   return FindLobbyRoom(GetLobbyRoomChoice())->name;
+}
+
+void Launcher::SetLobbyRoomChoice(int value)
+{
+   g_settingsService.GetAppSettings().SetStandalone_LobbyRoom(value, false);
    g_settingsService.GetAppSettings().Save();
+   // A room chosen explicitly replaces the room of a table
+   ResetLobbyRoom();
 }
 
 // The parts of the VR room of a table:
@@ -428,7 +461,7 @@ static Primitive* CreateQuad(PinTable* table, const string& name, float left, fl
 }
 
 // The lobby is what is displayed behind the table picker of the launcher mode: a lobby room (see LOBBY_ROOMS), a table holding only a
-// room made in Blender (see steamframe/lobby-room), whose parts are kept as they are. Without such a file, the lobby is made from the blank
+// room made in Blender (see steamframe/lobby-room), whose parts are kept as they are. For the empty room, the lobby is made from the blank
 // table shipped with the application, by removing everything it contains (parts, script, playfield) and adding a floor. The room of a
 // table can be used instead (see Launcher::GetLobbyRoom): then the lobby is made from that table, keeping only the parts of its room.
 static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool isLobbyRoom)
@@ -562,6 +595,7 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
 void Launcher::OnPlayerCreated(Player* player, bool isLobby)
 {
    VPX::VRUI::OnPlayerCreated(player, isLobby);
+   player->m_liveUI->m_inGameUI.AddPage("lobby/rooms"s, []() { return VPX::InGameUI::CreateLobbyRoomsPage(); });
    if (!isLobby)
       return;
    player->m_liveUI->OpenInGameUI("tables/picker"s);
