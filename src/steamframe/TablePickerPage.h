@@ -74,6 +74,7 @@ private:
 
    void SetTab(int tab);
    void StepTab(int direction);
+   void ActivateTabIcon(int icon);
    void StepFilter(int direction);
    void SetSearch(const string& search);
    void RenderTabs();
@@ -85,6 +86,7 @@ private:
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    const bool m_newView;
    bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard opens when the buttons select it)
+   int m_tabIcon = -1; // New view: the icon button of the tab row focused with the buttons (TabIcon), -1 when on the tabs
 
    uint64_t m_revision = 0;
    uint64_t m_scoresRevision = 0; // Of the profiles and scores, shown by the player item and the Scores tab

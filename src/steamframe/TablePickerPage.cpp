@@ -38,6 +38,8 @@ static PickerTab s_tab = PickerTab::All;
 // Tabs of the new VR menu, in order: its Scores and System screens replace the last two tabs
 static constexpr PickerTab NEW_VIEW_TABS[] = { PickerTab::All, PickerTab::Recent, PickerTab::Favorites, PickerTab::MostPlayed, PickerTab::NewlyAdded };
 static constexpr const char* NEW_VIEW_TAB_NAMES[] = { "All", "Recent", "Favorites", "Most played", "Newly added" };
+// Icon buttons at the right end of the tab row of the new VR menu, from left to right: the buttons reach them after the last tab
+enum TabIcon { TAB_ICON_REFRESH, TAB_ICON_VIEW, TAB_ICON_SORT, TAB_ICON_COUNT };
 static string s_search;
 static char s_filterInitial = 0; // 'All' tab: 0 for all tables, '#' for names which do not start with a letter
 
@@ -239,12 +241,43 @@ void TablePickerPage::StepTab(int direction)
       SetTab(static_cast<int>(s_tab) + direction);
       return;
    }
+   // The tabs, then the icon buttons, then back to the first tab
    const int nTabs = static_cast<int>(std::size(NEW_VIEW_TABS));
-   int index = 0;
-   for (int i = 0; i < nTabs; i++)
-      if (NEW_VIEW_TABS[i] == s_tab)
-         index = i;
-   SetTab(static_cast<int>(NEW_VIEW_TABS[(index + direction + nTabs) % nTabs]));
+   const int nStops = nTabs + TAB_ICON_COUNT;
+   int index = nTabs + m_tabIcon;
+   if (m_tabIcon < 0)
+      for (int i = 0; i < nTabs; i++)
+         if (NEW_VIEW_TABS[i] == s_tab)
+            index = i;
+   index = (index + direction + nStops) % nStops;
+   if (index >= nTabs)
+   {
+      m_tabIcon = index - nTabs;
+      return;
+   }
+   m_tabIcon = -1;
+   SetTab(static_cast<int>(NEW_VIEW_TABS[index]));
+}
+
+void TablePickerPage::ActivateTabIcon(int icon)
+{
+   switch (icon)
+   {
+   case TAB_ICON_REFRESH:
+      // Tables added to the tables folder while the list is shown (copied or uploaded) appear after a rescan
+      if (!g_launcher->GetTableLibrary().IsScanning())
+         g_launcher->GetTableLibrary().RescanAsync();
+      break;
+   case TAB_ICON_VIEW:
+      g_settingsService.GetAppSettings().SetStandalone_TablePickerGridView(!g_settingsService.GetAppSettings().GetStandalone_TablePickerGridView(), false);
+      RequestRebuild();
+      break;
+   case TAB_ICON_SORT:
+      g_settingsService.GetAppSettings().SetStandalone_TablePickerSortAscending(!g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending(), false);
+      RequestRebuild();
+      break;
+   default: break;
+   }
 }
 
 // Previous/next initial, going through 'All'
@@ -291,6 +324,8 @@ void TablePickerPage::ActivateItem()
          OpenSearchKeyboard();
       VPX::VRUI::Keyboard::Focus();
    }
+   else if (item && item->m_label == TABS_ITEM && m_newView && m_tabIcon >= 0)
+      ActivateTabIcon(m_tabIcon);
    else
       AdjustItem(1.f, true);
 }
@@ -539,7 +574,7 @@ void TablePickerPage::BuildPage()
    // All the tables are listed: the views only draw the ones on screen, and the images are loaded as they get displayed (see GetThumbnail)
    const size_t matchCount = tables.size();
 
-   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
+   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, m_newView ? "Left/Right: previous/next list, then the buttons to rescan the tables folder, change the view and the sort order (OK)"s : "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
       .m_customHighlight = true;
    if (s_tab == PickerTab::Menu)
    {
@@ -822,7 +857,8 @@ void AddQuitItem(InGameUIPage& page)
       }));
 }
 
-// New VR menu: the tabs as pills, then the rescan of the tables folder, the view (grid or list) and sort order as icon buttons on the right
+// New VR menu: the tabs as pills, then the rescan of the tables folder, the view (grid or list) and sort order as icon buttons on the right.
+// With the buttons, left/right go through the tabs then the icon buttons (StepTab), and OK uses the focused icon button.
 void TablePickerPage::RenderTabsNewView()
 {
    namespace Theme = VPX::VRUI::Theme;
@@ -834,13 +870,15 @@ void TablePickerPage::RenderTabsNewView()
    const float y = ImGui::GetCursorScreenPos().y;
    const InGameUIItem* const selectedItem = GetSelectedItem();
    const bool hasFocus = m_player->m_liveUI->m_inGameUI.IsFlipperNav() && selectedItem != nullptr && selectedItem->m_label == TABS_ITEM;
+   if (!hasFocus)
+      m_tabIcon = -1; // Back on the tabs when the row is selected again
    ImGui::PushID(TABS_ITEM);
    float x = left;
    for (int i = 0; i < static_cast<int>(std::size(NEW_VIEW_TABS)); i++)
    {
       const bool isActive = s_tab == NEW_VIEW_TABS[i];
       ImGui::SetCursorScreenPos(ImVec2(x, y));
-      if (Widgets::Pill(NEW_VIEW_TAB_NAMES[i], nullptr, NEW_VIEW_TAB_NAMES[i], height, true, hasFocus && isActive, isActive))
+      if (Widgets::Pill(NEW_VIEW_TAB_NAMES[i], nullptr, NEW_VIEW_TAB_NAMES[i], height, true, hasFocus && isActive && m_tabIcon < 0, isActive))
          SetTab(static_cast<int>(NEW_VIEW_TABS[i]));
       x += Widgets::PillWidth(nullptr, NEW_VIEW_TAB_NAMES[i], height) + gap;
    }
@@ -851,28 +889,20 @@ void TablePickerPage::RenderTabsNewView()
    const float sortWidth = Widgets::PillWidth(sortIcon, nullptr, height);
    const float viewWidth = Widgets::PillWidth(viewIcon, nullptr, height);
    ImGui::SetCursorScreenPos(ImVec2(right - sortWidth, y));
-   if (Widgets::Pill("##sort", sortIcon, nullptr, height, true, false))
-   {
-      g_settingsService.GetAppSettings().SetStandalone_TablePickerSortAscending(!sortAscending, false);
-      RequestRebuild();
-   }
+   if (Widgets::Pill("##sort", sortIcon, nullptr, height, true, hasFocus && m_tabIcon == TAB_ICON_SORT))
+      ActivateTabIcon(TAB_ICON_SORT);
    if (ImGui::IsItemHovered())
       ImGui::SetTooltip(sortAscending ? "Sort from Z to A" : "Sort from A to Z");
    ImGui::SetCursorScreenPos(ImVec2(right - sortWidth - gap - viewWidth, y));
-   if (Widgets::Pill("##view", viewIcon, nullptr, height, true, false))
-   {
-      g_settingsService.GetAppSettings().SetStandalone_TablePickerGridView(!gridView, false);
-      RequestRebuild();
-   }
+   if (Widgets::Pill("##view", viewIcon, nullptr, height, true, hasFocus && m_tabIcon == TAB_ICON_VIEW))
+      ActivateTabIcon(TAB_ICON_VIEW);
    if (ImGui::IsItemHovered())
       ImGui::SetTooltip(gridView ? "Show a list of names" : "Show a grid of table images");
-   // Tables added to the tables folder while the list is shown (copied or uploaded) appear after a rescan
-   TableLibrary& library = g_launcher->GetTableLibrary();
-   const bool scanning = library.IsScanning();
+   const bool scanning = g_launcher->GetTableLibrary().IsScanning();
    const float refreshWidth = Widgets::PillWidth(ICON_FK_REFRESH, nullptr, height);
    ImGui::SetCursorScreenPos(ImVec2(right - sortWidth - viewWidth - refreshWidth - 2.f * gap, y));
-   if (Widgets::Pill("##refresh", ICON_FK_REFRESH, nullptr, height, !scanning, false))
-      library.RescanAsync();
+   if (Widgets::Pill("##refresh", ICON_FK_REFRESH, nullptr, height, !scanning, hasFocus && m_tabIcon == TAB_ICON_REFRESH))
+      ActivateTabIcon(TAB_ICON_REFRESH);
    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       ImGui::SetTooltip(scanning ? "Looking for tables..." : "Look for tables added to, or removed from, the tables folder");
    ImGui::PopID();
