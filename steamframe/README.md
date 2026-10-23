@@ -105,8 +105,9 @@ The workspace folder holds, side by side:
    Frame: `coredumpctl list` (no VPX crash) and `~/.local/share/VPinballX/10.8/vpinball.log` (`Startup done` and `Table switch` for each
    table, no `OnScriptError`). `Doc/steam-frame-build/frame-run.py` starts and stops the game without the headset on.
 9. **Publish, with the owner's approval**: `git push --force-with-lease=master:<fork master before> fork steamframe-squash:master`, then,
-   in `vpinball/` if its tree is clean, `git fetch fork && git reset --hard fork/master`. A release for users (`frame-<date>`) is a
-   separate decision (`Doc/steam-frame-build/make-release.sh`).
+   in `vpinball/` if its tree is clean, `git fetch fork && git reset --hard fork/master`. A release for users is a separate decision
+   (`Doc/steam-frame-build/make-release.sh <major.minor.patch>`): numbered since 0.5.0 (the minor number for new features, the patch number
+   for fixes only), tagged `v<version>` and titled "Visual Pinball X: Steam Frame Edition <version>" on GitHub.
 
 ### When upstream builds what the fork has
 
