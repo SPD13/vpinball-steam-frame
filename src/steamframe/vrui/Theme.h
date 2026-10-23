@@ -51,6 +51,7 @@ inline constexpr ImU32 kTextDisabled = IM_COL32(95, 104, 120, 255);
 inline constexpr ImU32 kError = IM_COL32(255, 96, 96, 255);
 inline constexpr ImU32 kModified = IM_COL32(255, 176, 32, 255);
 inline constexpr ImU32 kWarning = IM_COL32(250, 204, 21, 255); // Update badge
+inline constexpr ImU32 kWarningHover = IM_COL32(253, 224, 71, 255);
 inline constexpr ImU32 kOnWarning = IM_COL32(28, 24, 4, 255);
 inline constexpr ImU32 kDivider = IM_COL32(255, 255, 255, 22);
 inline constexpr ImU32 kTrack = IM_COL32(60, 68, 86, 255);

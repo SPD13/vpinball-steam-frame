@@ -84,6 +84,13 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   compares the dates of the two versions (another release of the same day is newer too). The request uses the libcurl of the system,
   loaded with `dlopen` (the Steam Linux Runtime has one): no check without it, nor offline, nor for development builds, which have no
   `VERSION` file. `VPX_UPDATE_CHECK_VERSION=<version>` replaces the installed version, to test. The result is in the log ("Update check").
+- On the Frame (`VPX_STEAM_FRAME_HEADSET`), the badge reads "New version available, Click here to install". A click downloads the release's
+  `.tar.gz` next to the game folder (`<game>.update`, 1.5 GB free needed), checks it against the SHA-256 GitHub gives, unpacks it with `tar`
+  (in the Steam Linux Runtime) and replaces the game folder with its `game/` (the running one becomes `<game>.old`, deleted at the next
+  start, as Linux keeps the files of the running game open). The badge shows the progress, or the reason of a failure with a retry; once done,
+  a message over the menu says the game will exit, and its OK button quits. The Steam shortcut, its name and the library artwork are not
+  changed (the installer app sets them), nor the user data, which is outside the game folder. `VPX_UPDATE_INSTALL_DIR=<folder>` allows the
+  install on any system and replaces that folder instead, to test (with `VPX_UPDATE_CHECK_VERSION`). The log lines start with "Update:".
 
 ## Screens made of several pages
 
