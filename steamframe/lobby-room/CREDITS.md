@@ -1,13 +1,16 @@
 # Lobby rooms: credits
 
-The lobby rooms (`src/assets/lobby.vpx`, the modern room, and `src/assets/lobby-gameroom.vpx`, the game room) are built in Blender
+The lobby rooms (`src/assets/lobby.vpx`, the modern room, `src/assets/lobby-gameroom.vpx`, the game room, and
+`src/assets/lobby-studio.vpx`, the sunlit studio) are built in Blender
 by the scripts of this folder. Everything in them is either made by those scripts or comes from [Poly Haven](https://polyhaven.com),
 whose assets are all released under **CC0 1.0** (public domain, no attribution required). The authors are credited here anyway.
 
 Made by the scripts (no outside asset): the rooms themselves, the slat wall, the cabinets, benches, planters, the procedural
 paintings of the modern room, and, in the game room, the arcade cabinets, the pinball machine, all their artwork (attract screens,
 marquees with invented titles, side art, playfield, backglass, display: `tools/gameroom_art.py`), the sofa, the coffee table, the
-stools, the track lights and the neon sign. The neon sign uses Liberation Sans, shipped with Visual Pinball
+stools, the track lights and the neon sign; in the sunlit studio, the windows and radiators, the sofa, the tripod lights, the
+desk, monitor, laptop and office chair, the cabinet of drawers, the speakers, and the artwork of the rugs, the poster and the
+screens (`tools/studio_art.py`). The neon sign uses Liberation Sans, shipped with Visual Pinball
 (`src/assets/LiberationSans-Regular.ttf`, SIL Open Font License 1.1).
 
 ## Modern room
@@ -43,3 +46,20 @@ stools, the track lights and the neon sign. The neon sign uses Liberation Sans, 
 | [Potted Plant 04](https://polyhaven.com/a/potted_plant_04) | Plant on the coffee table | James Ray Cock | CC0 1.0 |
 | [Anthurium Botany 01](https://polyhaven.com/a/anthurium_botany_01) | Large plants | Rob Tuytel, Rico Cilliers | CC0 1.0 |
 | [Dartboard](https://polyhaven.com/a/dartboard) | Dartboard | Satyaki Mandal | CC0 1.0 |
+
+## Sunlit studio
+
+| Asset | Used for | Authors | License |
+|---|---|---|---|
+| [Garden Nook](https://polyhaven.com/a/garden_nook) (HDRI) | Garden seen through the windows, sun and sky light | Dimitrios Savva, Jarod Guest | CC0 1.0 |
+| [Old Wooden Floor 03](https://polyhaven.com/a/old_wooden_floor_03) | Floor | Jenelle van Heerden, Charlotte Baglioni | CC0 1.0 |
+| [Plastered Wall 04](https://polyhaven.com/a/plastered_wall_04) | Walls | Rob Tuytel | CC0 1.0 |
+| [Oak Veneer 01](https://polyhaven.com/a/oak_veneer_01) | Desk, door, sofa legs | Jenelle van Heerden | CC0 1.0 |
+| [Leather White](https://polyhaven.com/a/leather_white) | Sofa (tinted tan) | Rob Tuytel | CC0 1.0 |
+| [Throw Pillows 01](https://polyhaven.com/a/throw_pillows_01) | Pillows on the sofa | Serhii Khromov | CC0 1.0 |
+| [Desk Lamp Arm 01](https://polyhaven.com/a/desk_lamp_arm_01) | Desk lamp | Yann Kervran, Kuutti Siitonen | CC0 1.0 |
+| [Wooden Display Shelves 01](https://polyhaven.com/a/wooden_display_shelves_01) | Shelves by the door | James Ray Cock | CC0 1.0 |
+| [Dartboard](https://polyhaven.com/a/dartboard) | Two dartboards | Satyaki Mandal | CC0 1.0 |
+| [Potted Plant 04](https://polyhaven.com/a/potted_plant_04) | Small plants | James Ray Cock | CC0 1.0 |
+| [Anthurium Botany 01](https://polyhaven.com/a/anthurium_botany_01) | Large plants | Rob Tuytel, Rico Cilliers | CC0 1.0 |
+| [Calathea Orbifolia 01](https://polyhaven.com/a/calathea_orbifolia_01) | Plant on the cabinet | Rob Tuytel, Rico Cilliers | CC0 1.0 |

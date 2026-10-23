@@ -63,24 +63,7 @@ M_SOFA = rk.pbr_material("SofaFabric", "jersey_melange", scale=(0.4, 0.4), tint=
 rk.quad("Floor", [(X0, Y0, 0), (X1, Y0, 0), (X1, Y1, 0), (X0, Y1, 0)], M_FLOOR, "floor", uv_scale=1.0, toward=INSIDE)
 
 def wall_with_openings(name, plane, openings, toward):
-    """A wall as a set of quads around rectangular openings: `plane` maps (u, v) to a point, the wall spans u0..u1 x 0..H."""
-    u0, u1, to_point = plane
-    bm = bmesh.new()
-    cuts = sorted(openings)
-    # Columns between and around the openings, full height, and the parts above and below each opening
-    edges = [u0] + [c for o in cuts for c in (o[0], o[1])] + [u1]
-    for i in range(0, len(edges), 2):
-        a, b = edges[i], edges[i + 1]
-        if b - a > 1e-4:
-            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, 0), (b, 0), (b, H), (a, H))])
-    for (a, b, v0, v1) in cuts:
-        if v1 < H:
-            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, v1), (b, v1), (b, H), (a, H))])
-        if v0 > 0:
-            bm.faces.new([bm.verts.new(to_point(u, v)) for u, v in ((a, 0), (b, 0), (b, v0), (a, v0))])
-    rk.face_toward(bm, toward)
-    rk.box_uv(bm)
-    return rk.new_object(name, bm, M_WALL, "walls")
+    return rk.wall_with_openings(name, *plane, openings, toward, M_WALL, "walls", H)
 
 wall_with_openings("WallFront", (X0, X1, lambda u, v: (u, Y1, v)), [(WX0, WX1, 0.0, WZ1)], INSIDE)
 DOOR_X, DOOR_W, DOOR_H = 2.6, 1.0, 2.2
@@ -131,71 +114,10 @@ HDRI_LIGHT = os.path.join(rk.DL, "shanghai_bund", "shanghai_bund_4k.hdr")  # Lig
 HDRI_ROTATION = math.radians(215)  # Turns the skyline of the panorama to face the window
 HDRI_STRENGTH = 0.5
 
-def environment_nodes(tree, vector_socket, path=HDRI):
-    """Environment texture of the city, looked up along a direction (the same mapping for the world and the backdrop)."""
-    mapping = tree.nodes.new("ShaderNodeMapping")
-    mapping.inputs["Rotation"].default_value = (0, 0, HDRI_ROTATION)
-    tree.links.new(vector_socket, mapping.inputs["Vector"])
-    env = tree.nodes.new("ShaderNodeTexEnvironment")
-    env.image = bpy.data.images.load(path, check_existing=True)
-    tree.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
-    return env
-
-world = bpy.data.worlds.new("City")
-world.use_nodes = True
-wt = world.node_tree
-env = environment_nodes(wt, wt.nodes.new("ShaderNodeTexCoord").outputs["Generated"], HDRI_LIGHT)
-wt.links.new(env.outputs["Color"], wt.nodes["Background"].inputs["Color"])
-wt.nodes["Background"].inputs["Strength"].default_value = HDRI_STRENGTH
-scene.world = world
-
-# The backdrop shows, from the player's eye, what the world shows in each direction: an emissive cylinder 70 m away
-backdrop = bpy.data.materials.new("Backdrop")
-backdrop.use_nodes = True
-bt = backdrop.node_tree
-bsdf = bt.nodes["Principled BSDF"]
-bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
-geo = bt.nodes.new("ShaderNodeNewGeometry")
-sub = bt.nodes.new("ShaderNodeVectorMath")
-sub.operation = "SUBTRACT"
-sub.inputs[1].default_value = EYE
-bt.links.new(geo.outputs["Position"], sub.inputs[0])
-# The panorama was taken at ground level, with a crowd along the river in front of the skyline: the backdrop looks it up a few
-# degrees higher than the real direction, which sinks the crowd below the parapet and keeps the towers
-HORIZON_LIFT = math.tan(math.radians(5))
-sep = bt.nodes.new("ShaderNodeSeparateXYZ")
-bt.links.new(sub.outputs["Vector"], sep.inputs[0])
-flat = bt.nodes.new("ShaderNodeCombineXYZ")
-bt.links.new(sep.outputs["X"], flat.inputs["X"])
-bt.links.new(sep.outputs["Y"], flat.inputs["Y"])
-horizontal = bt.nodes.new("ShaderNodeVectorMath")
-horizontal.operation = "LENGTH"
-bt.links.new(flat.outputs["Vector"], horizontal.inputs[0])
-lift = bt.nodes.new("ShaderNodeMath")
-lift.operation = "MULTIPLY_ADD"
-lift.inputs[1].default_value = HORIZON_LIFT
-bt.links.new(horizontal.outputs["Value"], lift.inputs[0])
-bt.links.new(sep.outputs["Z"], lift.inputs[2])
-lifted = bt.nodes.new("ShaderNodeCombineXYZ")
-bt.links.new(sep.outputs["X"], lifted.inputs["X"])
-bt.links.new(sep.outputs["Y"], lifted.inputs["Y"])
-bt.links.new(lift.outputs["Value"], lifted.inputs["Z"])
-norm = bt.nodes.new("ShaderNodeVectorMath")
-norm.operation = "NORMALIZE"
-bt.links.new(lifted.outputs["Vector"], norm.inputs[0])
-env = environment_nodes(bt, norm.outputs["Vector"])
-bt.links.new(env.outputs["Color"], bsdf.inputs["Emission Color"])
-bsdf.inputs["Emission Strength"].default_value = HDRI_STRENGTH
-R, SEG = 70.0, 40
-bm = bmesh.new()
-angles = [math.radians(-80 + 160 * i / SEG) for i in range(SEG + 1)]
-ring = [(EYE.x + R * math.sin(a), EYE.y + R * math.cos(a)) for a in angles]
-for i in range(SEG):
-    (xa, ya), (xb, yb) = ring[i], ring[i + 1]
-    bm.faces.new([bm.verts.new(p) for p in ((xa, ya, -30), (xb, yb, -30), (xb, yb, 45), (xa, ya, 45))])
-rk.face_toward(bm, EYE)
-rk.box_uv(bm)
-rk.new_object("Backdrop", bm, backdrop, "backdrop")
+rk.world_environment(scene, HDRI_LIGHT, HDRI_ROTATION, HDRI_STRENGTH, "City")
+# The panorama was taken at ground level, with a crowd along the river in front of the skyline: the backdrop looks it up a few degrees
+# higher than the real direction, which sinks the crowd below the parapet and keeps the towers
+rk.backdrop(HDRI, HDRI_ROTATION, HDRI_STRENGTH, EYE, facing_deg=0, lift_deg=5)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
@@ -295,16 +217,7 @@ def pinball(x_center, y_center):
 pinball(X1 - 0.06 - 0.66, 4.0)
 
 # Lounge: a grey sofa against the wall, two leather lounge chairs, an oak coffee table on a rug
-def soft_box(name, lo, hi, material, group, radius=0.03):
-    """A box with rounded edges, for cushions."""
-    obj = rk.box(name, lo, hi, material, group)
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bmesh.ops.bevel(bm, geom=list(bm.edges), offset=radius, segments=2, affect="EDGES")
-    rk.box_uv(bm)
-    bm.to_mesh(obj.data)
-    bm.free()
-    return obj
+soft_box = rk.soft_box
 
 SY0, SY1, SX = 0.15, 2.35, X1 - 0.04  # Sofa: along the right wall, facing the room
 SM = (SY0 + SY1) / 2
@@ -359,7 +272,7 @@ for i, (x, y, pick, scale) in enumerate(((X0 + 0.5, Y1 - 0.55, 0, 2.4), (WX0 - 0
     rk.import_prop("anthurium_botany_01", (x, y, planter(f"Planter{i}", x, y)), rot_z_deg=50 * i, scale=scale, pick=pick)
 
 # Back wall: a dartboard
-rk.import_prop("dartboard", (-1.4, Y0 + 0.02, 1.55), rot_z_deg=0)
+rk.import_prop("dartboard", (-1.4, Y0 + 0.005, 1.73), rot_z_deg=180)  # The board faces -Y, its back at the origin
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
