@@ -187,7 +187,7 @@ vector<Launcher::LobbyRoomChoice> Launcher::GetLobbyRoomChoices()
 int Launcher::GetLobbyRoomChoice()
 {
    const int value = g_settingsService.GetAppSettings().GetStandalone_LobbyRoom();
-   return FindLobbyRoom(value) ? value : 0;
+   return FindLobbyRoom(value) ? value : 1; // The game room, the default of the setting
 }
 
 string Launcher::GetLobbyRoomName()
