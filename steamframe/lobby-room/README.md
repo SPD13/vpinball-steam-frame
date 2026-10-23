@@ -10,7 +10,10 @@ frame.
 | Game room: a night lounge with arcade cabinets, a pinball machine and a city view | `src/assets/lobby-gameroom.vpx` | `tools/build_gameroom.py` (with `roomkit.py`, `gameroom_art.py`) |
 
 The player chooses the room in the menu (`Standalone.LobbyRoom`); "Empty room" is the previous lobby, the blank table emptied and
-given a tiled floor (see `BuildLobby` in `src/steamframe/Launcher.cpp`).
+given a tiled floor (see `BuildLobby` in `src/steamframe/Launcher.cpp`). The game room is the default.
+
+**To design a new room**, read `DESIGNING-ROOMS.md`: the process from the brief to the headset, the licensing rules, the design
+guidelines for VR, the bake and export details and the traps already met.
 
 ## Pipeline
 
