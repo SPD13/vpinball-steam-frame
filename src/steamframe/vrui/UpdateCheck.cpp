@@ -466,6 +466,12 @@ void StartInstall()
    std::thread(Install).detach();
 }
 
+bool IsInstalling()
+{
+   const InstallPhase phase = g_state->installPhase;
+   return phase == InstallPhase::Downloading || phase == InstallPhase::Installing || phase == InstallPhase::Done;
+}
+
 InstallStatus GetInstallStatus()
 {
    InstallStatus status { g_state->installPhase, g_state->downloadProgress, {} };
