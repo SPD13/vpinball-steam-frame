@@ -217,6 +217,29 @@ void Update(InGameUIPage& page, float renderMs)
             PLOGI << "VRUI self-test: OK again then right, sort ascending " << sortAscending();
             break;
          case 107: Capture(player, "tab-icon-back-to-tabs"s, Step::DPad); break;
+         // The button clearing the search, reached with right from the field (its keyboard opened, not focused), used with OK
+         case 108:
+            if (auto* picker = dynamic_cast<TablePickerPage*>(tables); picker && Keyboard::IsUsed())
+            {
+               picker->OpenSearchKeyboard();
+               Keyboard::TypeForTest("po"s);
+               Keyboard::Close();
+               const auto& items = InGameUIPageView::GetItems(*tables);
+               for (int i = 0; i < static_cast<int>(items.size()); i++)
+                  if (items[i]->m_label == "##search"s)
+                     InGameUIPageView::SetSelectedIndex(*tables, i);
+            }
+            break;
+         case 109:
+            ui.OnUIRightAction();
+            PLOGI << "VRUI self-test: right on the search field, keyboard opened " << Keyboard::IsEditing("tables/search"s) << ", focused " << Keyboard::HasFocus();
+            break;
+         case 110: Capture(player, "search-clear-focused"s, Step::DPad); break;
+         case 111:
+            ui.OnUIConfirm();
+            PLOGI << "VRUI self-test: OK on the clear button, keyboard opened " << Keyboard::IsEditing("tables/search"s);
+            break;
+         case 112: Capture(player, "search-cleared"s, Step::DPad); break;
          default: g_dpadStep = 200; break;
          }
          return;
