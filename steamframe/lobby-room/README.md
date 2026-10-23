@@ -8,7 +8,7 @@ frame.
 |---|---|---|
 | Modern room: oak slat wall, cove light, sofa and lounge chair | `src/assets/lobby.vpx` | `tools/build_room.py` |
 | Game room: a night lounge with arcade cabinets, a pinball machine and a city view | `src/assets/lobby-gameroom.vpx` | `tools/build_gameroom.py` (with `roomkit.py`, `gameroom_art.py`) |
-| Sunlit studio: a bright room for work and play, sunbeams from a garden through three tall windows, dartboards, a desk | `src/assets/lobby-studio.vpx` | `tools/build_studio.py` (with `roomkit.py`, `studio_art.py`) |
+| Sunlit studio: a bright, long room for work and play, sunbeams from a garden through two tall windows, dartboards, telescopes, a desk with a computer and an office chair, a reading corner, books | `src/assets/lobby-studio.vpx` | `tools/build_studio.py` (with `roomkit.py`, `studio_art.py`) |
 
 The player chooses the room in the menu (`Standalone.LobbyRoom`); "Empty room" is the previous lobby, the blank table emptied and
 given a tiled floor (see `BuildLobby` in `src/steamframe/Launcher.cpp`). The game room is the default.
@@ -33,10 +33,12 @@ python3 -I $T/fetch_polyhaven.py downloads hdri:shanghai_bund:8k hdri:shanghai_b
   texture:dark_wooden_planks texture:quatrefoil_jacquard_fabric texture:leather_red_02 texture:jersey_melange model:throw_pillows_01 \
   model:anthurium_botany_01 model:dartboard
 python3 -I $T/fetch_polyhaven.py downloads hdri:garden_nook:8k hdri:garden_nook:4k texture:old_wooden_floor_03 texture:leather_white \
-  model:desk_lamp_arm_01 model:wooden_display_shelves_01
+  model:desk_lamp_arm_01 model:wooden_display_shelves_01 model:modern_arm_chair_01 model:Ottoman_01 model:drawer_cabinet \
+  model:stationery_supplies model:office_notepads model:binder_notebook model:alarm_clock_01 model:Camera_01 model:ceramic_vase_01 \
+  model:boombox model:potted_plant_02 model:pachira_aquatica_01
 # 2. Scene, and previews from the player's place (front, left, right, back, corner)
 $B -b --factory-startup --python $T/build_gameroom.py -- downloads build/gameroom.blend      # or build_room.py, build_studio.py
-$B -b build/gameroom.blend --python $T/render_views.py -- build/preview_game 64
+$B -b build/gameroom.blend --python $T/render_views.py -- build/preview_game 64    # views: front left ... or x,y,z,pitch,yaw
 # 3. Bake: one texture per group (the scene lists its groups and their sizes), linear EXR
 $B -b build/gameroom.blend --python $T/bake.py -- build/bake_game 128
 # 4. VPX table, from the blank table of the application extracted with vpxtool

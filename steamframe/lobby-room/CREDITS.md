@@ -8,9 +8,9 @@ whose assets are all released under **CC0 1.0** (public domain, no attribution r
 Made by the scripts (no outside asset): the rooms themselves, the slat wall, the cabinets, benches, planters, the procedural
 paintings of the modern room, and, in the game room, the arcade cabinets, the pinball machine, all their artwork (attract screens,
 marquees with invented titles, side art, playfield, backglass, display: `tools/gameroom_art.py`), the sofa, the coffee table, the
-stools, the track lights and the neon sign; in the sunlit studio, the windows and radiators, the sofa, the tripod lights, the
-desk, monitor, laptop and office chair, the cabinet of drawers, the speakers, and the artwork of the rugs, the poster and the
-screens (`tools/studio_art.py`). The neon sign uses Liberation Sans, shipped with Visual Pinball
+stools, the track lights and the neon sign; in the sunlit studio, the windows and radiators, the sofa, the two telescopes and
+their tripods, the desk, the monitor, keyboard, mouse and mug, the office chair, the cabinet of drawers, the speakers, the
+books, and the artwork of the rugs, the poster, the monitor's desktop, the keyboard and the mesh of the chair (`tools/studio_art.py`). The neon sign uses Liberation Sans, shipped with Visual Pinball
 (`src/assets/LiberationSans-Regular.ttf`, SIL Open Font License 1.1).
 
 ## Modern room
@@ -58,8 +58,20 @@ screens (`tools/studio_art.py`). The neon sign uses Liberation Sans, shipped wit
 | [Leather White](https://polyhaven.com/a/leather_white) | Sofa (tinted tan) | Rob Tuytel | CC0 1.0 |
 | [Throw Pillows 01](https://polyhaven.com/a/throw_pillows_01) | Pillows on the sofa | Serhii Khromov | CC0 1.0 |
 | [Desk Lamp Arm 01](https://polyhaven.com/a/desk_lamp_arm_01) | Desk lamp | Yann Kervran, Kuutti Siitonen | CC0 1.0 |
-| [Wooden Display Shelves 01](https://polyhaven.com/a/wooden_display_shelves_01) | Shelves by the door | James Ray Cock | CC0 1.0 |
+| [Stationery Supplies](https://polyhaven.com/a/stationery_supplies) | Pens and their cup on the desk | Mateusz Sadek | CC0 1.0 |
+| [Office Notepads](https://polyhaven.com/a/office_notepads) | Sticky notes on the desk | Ulan Cabanilla | CC0 1.0 |
+| [Modern Arm Chair 01](https://polyhaven.com/a/modern_arm_chair_01) | Reading armchair | Vibrant Nordic | CC0 1.0 |
+| [Ottoman 01](https://polyhaven.com/a/Ottoman_01) | Ottoman | Caspian Fortune | CC0 1.0 |
+| [Drawer Cabinet](https://polyhaven.com/a/drawer_cabinet) | Shelf unit with drawers by the desk | Ulan Cabanilla | CC0 1.0 |
+| [Wooden Display Shelves 01](https://polyhaven.com/a/wooden_display_shelves_01) | Bookcase | James Ray Cock | CC0 1.0 |
+| [Binder Notebook](https://polyhaven.com/a/binder_notebook) | Notebook in the bookcase | DaDrood | CC0 1.0 |
+| [Alarm Clock 01](https://polyhaven.com/a/alarm_clock_01) | Clock on the shelf unit | Yann Kervran, James Ray Cock | CC0 1.0 |
+| [Camera 01](https://polyhaven.com/a/Camera_01) | Cameras on the shelves | Rajil Jose Macatangay | CC0 1.0 |
+| [Ceramic Vase 01](https://polyhaven.com/a/ceramic_vase_01) | Vases | James Ray Cock | CC0 1.0 |
+| [Boombox](https://polyhaven.com/a/boombox) | Boombox on the cabinet | Thomas Paul Mouilleron | CC0 1.0 |
 | [Dartboard](https://polyhaven.com/a/dartboard) | Two dartboards | Satyaki Mandal | CC0 1.0 |
 | [Potted Plant 04](https://polyhaven.com/a/potted_plant_04) | Small plants | James Ray Cock | CC0 1.0 |
 | [Anthurium Botany 01](https://polyhaven.com/a/anthurium_botany_01) | Large plants | Rob Tuytel, Rico Cilliers | CC0 1.0 |
 | [Calathea Orbifolia 01](https://polyhaven.com/a/calathea_orbifolia_01) | Plant on the cabinet | Rob Tuytel, Rico Cilliers | CC0 1.0 |
+| [Potted Plant 02](https://polyhaven.com/a/potted_plant_02) | Plant in a terracotta pot | Rico Cilliers | CC0 1.0 |
+| [Pachira Aquatica 01](https://polyhaven.com/a/pachira_aquatica_01) | Tall plant in the corner | Rob Tuytel, Rico Cilliers | CC0 1.0 |

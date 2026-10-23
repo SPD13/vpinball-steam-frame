@@ -259,9 +259,10 @@ def transform(objects, matrix):
     for o in objects:
         o.data.transform(matrix)
 
-def import_prop(asset, location, rot_z_deg=0.0, scale=1.0, pick=None, group="furniture", tint=None):
-    """A Poly Haven glTF model. `pick` keeps one variant of a file holding several side by side (0 = the tallest); `tint`
-    multiplies its base color."""
+def import_prop(asset, location, rot_z_deg=0.0, scale=1.0, pick=None, group="furniture", tint=None, variant=None, max_tris=None):
+    """A Poly Haven glTF model. `pick` keeps one variant of a file holding several side by side (0 = the tallest), `variant` the
+    meshes whose names end with it (a plant split in bark and leaves: "_d"); `tint` multiplies its base color; `max_tris`
+    decimates each of its meshes above that count (small props are scanned in far more detail than a baked room shows)."""
     folder = os.path.join(DL, asset)
     path = next(os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".gltf"))
     before = set(bpy.data.objects)
@@ -271,22 +272,25 @@ def import_prop(asset, location, rot_z_deg=0.0, scale=1.0, pick=None, group="fur
     others = [o for o in new if o.type != "MESH"]
     if pick is not None:
         size = lambda o: max(Vector(v).z for v in o.bound_box) - min(Vector(v).z for v in o.bound_box)
-        keep = sorted(meshes, key=size, reverse=True)[pick]
+        keep = [sorted(meshes, key=size, reverse=True)[pick]]
+    elif variant is not None:
+        keep = [o for o in meshes if o.name.endswith(variant)]
+    if pick is not None or variant is not None:
         for o in meshes:
-            if o is not keep:
+            if o not in keep:
                 bpy.data.objects.remove(o)
-        meshes = [keep]
-    for o in meshes:
-        mw = o.matrix_world.copy()
-        o.parent = None
-        if pick is not None:
-            # Center the kept variant on its own footprint
-            o.data.transform(mw)
-            co = [v.co for v in o.data.vertices]
-            lo = Vector((min(c.x for c in co), min(c.y for c in co), min(c.z for c in co)))
-            hi = Vector((max(c.x for c in co), max(c.y for c in co), max(c.z for c in co)))
+        meshes = keep
+        # Center the kept variant on its own footprint
+        for o in meshes:
+            o.data.transform(o.matrix_world)
+        co = [v.co for o in meshes for v in o.data.vertices]
+        lo = Vector((min(c.x for c in co), min(c.y for c in co), min(c.z for c in co)))
+        hi = Vector((max(c.x for c in co), max(c.y for c in co), max(c.z for c in co)))
+        for o in meshes:
             o.data.transform(Matrix.Translation((-(lo.x + hi.x) / 2, -(lo.y + hi.y) / 2, -lo.z)))
-            mw = Matrix.Identity(4)
+    for o in meshes:
+        mw = o.matrix_world.copy() if pick is None and variant is None else Matrix.Identity(4)
+        o.parent = None
         o.matrix_world = Matrix.Translation(location) @ Matrix.Rotation(math.radians(rot_z_deg), 4, "Z") @ Matrix.Diagonal((scale,) * 3 + (1,)) @ mw
         o["bake_group"] = group
         for m in o.data.materials:
@@ -297,6 +301,15 @@ def import_prop(asset, location, rot_z_deg=0.0, scale=1.0, pick=None, group="fur
                 tint_material(m, tint)
     for o in others:
         bpy.data.objects.remove(o)
+    if max_tris:
+        for o in meshes:
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            if tris > max_tris:
+                dec = o.modifiers.new("Decimate", "DECIMATE")
+                dec.ratio = max_tris / tris
+                mesh = bpy.data.meshes.new_from_object(o.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+                o.modifiers.clear()
+                o.data = mesh
     return meshes
 
 def tint_material(mat, tint):

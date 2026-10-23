@@ -2,7 +2,8 @@
 #
 #   Blender -b <lobby.blend> --python render_views.py -- <output dir> [samples] [views...]
 #
-# Views: front, left, right, back (yaw around the player), and corner (from the back left corner, a whole view of the room).
+# Views: front, left, right, back (yaw around the player), corner (from the back left corner, a whole view of the room), or a
+# camera of one's own as x,y,z,pitch,yaw (meters and degrees, pitch 90 is level, yaw 0 looks toward +Y): view_<x,y,z,pitch,yaw>.png
 import bpy, math, os, sys
 
 args = sys.argv[sys.argv.index("--") + 1:]
@@ -20,7 +21,11 @@ scene.cycles.device = "GPU"
 cam = scene.camera
 yaws = {"front": 0, "left": 60, "right": -60, "back": 180}
 for view in views:
-    if view == "corner":
+    if "," in view:
+        x, y, z, pitch, yaw = map(float, view.split(","))
+        cam.location = (x, y, z)
+        cam.rotation_euler = (math.radians(pitch), 0, math.radians(yaw))
+    elif view == "corner":
         cam.location = (-3.6, -2.6, 1.75)
         cam.rotation_euler = (math.radians(84), 0, math.radians(-38))
     else:

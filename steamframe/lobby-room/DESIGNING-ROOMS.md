@@ -45,8 +45,17 @@ so the license must allow redistributing the raw files.
   `https://cdn.polyhaven.com/asset_img/primary/<id>.png?width=800`. Some textures have no diffuse map but color variants (`coll1`):
   handled by the fetch tool. `tools/inspect_props.py downloads` prints the size and triangle count of each model: check before
   using one (some "plants" are millions of triangles, some sofas are 2.7 m long, some models hold several variants side by side, see
-  `import_prop(pick=)`).
-- Other CC0 sources worth a look: ambientCG (textures), Kenney and Quaternius (stylized low-poly kits).
+  `import_prop(pick=)`, or split in parts, like a plant in bark and leaves: `import_prop(variant="_d")`). Small props are often scanned
+  in great detail (the dirt of a potted plant: 54k triangles, a camera: 27k): `import_prop(max_tris=4000)` decimates them, which the
+  baked texture hides; the studio went from 384k to 260k triangles this way. A few models come without
+  glTF (the book sets: only .blend and .fbx), which the fetch tool does not handle.
+- Other CC0 sources worth a look: ambientCG (textures), Kenney and Quaternius (stylized low-poly kits). The Smithsonian open access 3D
+  models are CC0 but museum pieces (no telescope among them).
+- **Not usable**: ShareTextures (a "custom CC0" that forbids redistributing the assets and automated downloads, although it has office
+  chairs, desks and a telescope), sites that sell "royalty free" models (RenderHub, iMeshh, 3dcadbrowser).
+- Poly Haven has no modern office chair, computer, keyboard or telescope: the studio makes them from simple shapes (the mesh back and
+  headrest of the chair are curved grids, thickened and smoothed by modifiers that are then applied, `curved_panel()` in
+  `build_studio.py`; give such a mesh UVs, or the bake stops).
 - **Never**: NC or ND licenses, Sketchfab "Standard/Editorial", store assets (Unity, Unreal, marketplaces), models ripped from games,
   VPX community VR rooms (no license, reused models).
 - **Made by the scripts** when nothing fits: the arcade cabinets, the pinball, the sofa, stools, track lights, neon sign of the game room
@@ -134,7 +143,9 @@ python3 steamframe/lobby-room/tools/lobby-shot-hooks.py remove    # before commi
 ```
 
 Stop VPX by its process id only (other sessions run their own instances). The desktop view is a level camera at the height of the
-playfield (`BuildLobby`, `mViewZ = 0`, FOV 60°). The thumbnail is that screenshot cropped away from the pause icon and scaled:
+playfield (`BuildLobby`, `mViewZ = 0`, FOV 60°): it sees about 45° on each side of straight ahead, so what should show in the
+thumbnail and on the desktop (the desk and the window of the studio) stands further than the side walls are wide, and what stands
+beside the player stays out of it (a piece cut by the edge of the picture looks like a mistake). The thumbnail is that screenshot cropped away from the pause icon and scaled:
 `ffmpeg -i room.png -vf "crop=1360:765:40:45,scale=640:360" -q:v 3 src/assets/lobby-rooms/<name>.jpg`.
 
 ### 2.8 Register the room
