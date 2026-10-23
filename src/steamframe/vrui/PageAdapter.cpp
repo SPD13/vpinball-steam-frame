@@ -569,9 +569,9 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
             {
                // No keyboard in VR: the field opens the keyboard of the menu, which changes the value at each key
                const string owner = GetKeyboardOwner(page, *item);
-               Keyboard::KeepOpen(owner);
-               const bool editing = Keyboard::IsEditing(owner);
                const ImVec2 fieldSize(widgetWidth, frameHeight);
+               Keyboard::KeepOpen(owner, widgetPos, widgetPos + fieldSize);
+               const bool editing = Keyboard::IsEditing(owner);
                const bool clicked = ImGui::InvisibleButton("##value", fieldSize);
                const bool hovered = ImGui::IsItemHovered();
                const float rounding = Theme::Px(0.45f);

@@ -17,6 +17,7 @@ namespace
 {
    string g_owner;
    bool g_ownerShown = false;
+   float g_fieldBottom = 0.f;
    string g_title;
    string g_text;
    size_t g_maxLength = 64;
@@ -129,11 +130,16 @@ bool HandleButton(Button button)
    return true;
 }
 
-void KeepOpen(const string& owner)
+void KeepOpen(const string& owner, const ImVec2& fieldMin, const ImVec2& fieldMax)
 {
    if (IsEditing(owner))
+   {
       g_ownerShown = true;
+      g_fieldBottom = fieldMax.y;
+   }
 }
+
+float GetFieldBottom() { return g_fieldBottom; }
 
 void EndFrame()
 {

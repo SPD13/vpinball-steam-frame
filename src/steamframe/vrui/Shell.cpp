@@ -12,6 +12,7 @@
 #include "Widgets.h"
 
 #include "fonts/IconsForkAwesome.h"
+#include "imgui/imgui_internal.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
 #include "ui/live/LiveUI.h"
@@ -214,11 +215,8 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
 
    // Content: the items of the page, or of the screen of the menu
    const float footerHeight = Theme::Px(Theme::kFooterHeight);
-   // The keyboard takes the bottom of the menu on the desktop; in VR, where the panel is much larger than the menu, it stands below it
-   const bool keyboardInside = Keyboard::IsOpen() && !Theme::IsVR();
-   const float keyboardHeight = keyboardInside ? Keyboard::GetHeight(contentWidth) + Theme::Px(0.6f) : 0.f;
    const ImVec2 contentPos(contentX, pos.y + headerHeight + Theme::Px(0.5f));
-   const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f) - keyboardHeight);
+   const ImVec2 contentSize(contentWidth, size.y - headerHeight - footerHeight - Theme::Px(0.5f));
    const InGameUIItem* hoveredItem = nullptr;
    ImGui::SetCursorScreenPos(contentPos);
    const string contentKey = menu ? "screen/" + std::to_string(static_cast<int>(menu->GetScreen())) : std::format("page/{}", static_cast<const void*>(&page));
@@ -248,10 +246,6 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    const bool contentHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
    Widgets::EndRegion();
 
-   // Keyboard, between the content and the footer (desktop)
-   if (keyboardInside)
-      Keyboard::Render(ImVec2(contentX, contentPos.y + contentSize.y + Theme::Px(0.6f)), contentWidth);
-
    // Footer: description of the hovered item (or of the page), and the Defaults/Undo/Save buttons of the page
    {
       const float y = pos.y + size.y - footerHeight;
@@ -278,22 +272,27 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    InGameUIPageView::SetWindowOutputs(page, pos, size, contentHovered || ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
    ImGui::End();
 
-   // Keyboard, below the menu (VR)
+   // Keyboard, just below the edited field, over the rest of the menu (it stays on top, opaque), until Done closes it. It stays on the
+   // display when the field is near its bottom, or scrolled out of the content.
    float belowMenuY = pos.y + size.y;
-   if (Keyboard::IsOpen() && !keyboardInside)
+   if (Keyboard::IsOpen())
    {
-      const float gap = Theme::Px(1.f);
+      const float gap = Theme::Px(0.4f);
       const float keyboardPad = Theme::Px(0.8f);
-      const ImVec2 keyboardPos(contentX - keyboardPad, pos.y + size.y + gap);
       const ImVec2 keyboardSize(contentWidth + 2.f * keyboardPad, Keyboard::GetHeight(contentWidth) + 2.f * keyboardPad);
+      const float keyboardY = max(contentPos.y, min(Keyboard::GetFieldBottom() + gap, io.DisplaySize.y - keyboardSize.y));
+      const ImVec2 keyboardPos(contentX - keyboardPad, keyboardY);
       ImGui::SetNextWindowPos(keyboardPos);
       ImGui::SetNextWindowSize(keyboardSize);
       ImGui::Begin("##VRUIKeyboard", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+      ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // Over the menu, even after the menu was clicked
       Theme::ApplyPixelDensity();
-      ImGui::GetWindowDrawList()->AddRectFilled(keyboardPos, keyboardPos + keyboardSize, panelBg, rounding);
+      ImDrawList* const keyboardDrawList = ImGui::GetWindowDrawList();
+      keyboardDrawList->AddRectFilled(keyboardPos, keyboardPos + keyboardSize, Theme::kPanelBg | IM_COL32_A_MASK, rounding);
+      keyboardDrawList->AddRect(keyboardPos, keyboardPos + keyboardSize, Theme::kDivider, rounding, ImDrawFlags_None, Theme::Px(0.1f));
       Keyboard::Render(keyboardPos + ImVec2(keyboardPad, keyboardPad), contentWidth);
       ImGui::End();
-      belowMenuY = keyboardPos.y + keyboardSize.y;
+      belowMenuY = max(belowMenuY, keyboardPos.y + keyboardSize.y);
    }
    Keyboard::EndFrame();
 

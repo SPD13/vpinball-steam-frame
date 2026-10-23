@@ -70,11 +70,11 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   and not until it gets back to its center after a navigation, so that the sticks do not fight the buttons.
 - Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
   the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
-- Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): below the menu, it edits the clicked field (search of the Tables
+- Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): just below the clicked field, over the rest of the menu until Done closes it, it edits the clicked field (search of the Tables
   screen, text settings, names) and updates it at each key. With the buttons, OK (A) on the field gives the focus to the keyboard
   (`Keyboard::Focus`): the directions then select a key, OK presses it and Back (B) gives the focus back to the menu, the keyboard staying
   opened. `InGameUI` sends each button to the keyboard first (`Keyboard::HandleButton`); a trigger press (pointer) drops the focus.
-- Below the menu (and the keyboard), a badge gives the address and pairing code of the Wi-Fi upload, or that it is off; clicking it opens
+- Below the menu (and the keyboard when it reaches lower), a badge gives the address and pairing code of the Wi-Fi upload, or that it is off; clicking it opens
   the Wi-Fi upload screen.
 - Above the menu, a yellow badge "Update Available - Use the installer" appears when GitHub has a newer release than the one running
   (`UpdateCheck.cpp`). The check runs once per launch, on a worker thread, when the menu is first shown: it reads the `VERSION` file next to
