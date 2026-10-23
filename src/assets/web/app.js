@@ -499,17 +499,27 @@ function renderMissingRoms(missingRoms) {
   DOMCache.get('missing-roms').hidden = missingRoms.length === 0 || !isRomsFolder(_directory);
 }
 
-// The shared ROM folder, in the tables folder: a direct link to it, as it gets lost in a long list of tables
+// The shared ROM folder, in the tables folder: a tab of its own next to the tables folder, as it gets lost in a long list of tables
 const ROMS_FOLDER = 'pinmame/roms';
 
-function updateRomsFolderLink(directory) {
-  const link = DOMCache.get('roms-folder-link');
-  if (link) // A page cached from before the link existed
-    link.hidden = (directory || '').toLowerCase() === ROMS_FOLDER;
+function updateFolderSwitch(directory) {
+  const tables = DOMCache.get('folder-switch-tables');
+  const roms = DOMCache.get('folder-switch-roms');
+  if (!tables || !roms) // A page cached from before the switch existed
+    return;
+  const path = (directory || '').toLowerCase();
+  const inRoms = path === ROMS_FOLDER || path.startsWith(ROMS_FOLDER + '/');
+  tables.classList.toggle('current', !inRoms);
+  roms.classList.toggle('current', inRoms);
+  tables.setAttribute('aria-selected', String(!inRoms));
+  roms.setAttribute('aria-selected', String(inRoms));
 }
 
 function updateMissingRoms(directory) {
-  updateRomsFolderLink(directory);
+  updateFolderSwitch(directory);
+  const help = DOMCache.get('roms-help');
+  if (help)
+    help.hidden = !isRomsFolder(directory);
   const panel = DOMCache.get('missing-roms');
   if (!panel) // A page cached from before the panel existed
     return;

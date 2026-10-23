@@ -32,6 +32,27 @@
     </header>
 
     <main id="main" class="main-container">
+      <!-- The two folders the user uploads to: the tables folder, and the shared ROM folder that gets lost in a long list of tables -->
+      <div id="folder-switch" class="folder-switch" role="tablist">
+        <button type="button" id="folder-switch-tables" class="folder-switch-item" role="tab" onclick="navigateToPath('')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Tables
+        </button>
+        <button type="button" id="folder-switch-roms" class="folder-switch-item" role="tab" onclick="navigateToPath(ROMS_FOLDER)">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            <rect x="9" y="9" width="6" height="6"></rect>
+            <line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line>
+            <line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line>
+            <line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line>
+            <line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>
+          </svg>
+          ROMs
+        </button>
+      </div>
+
       <div class="path-buttons">
         <button type="button" class="btn btn-secondary" onclick="uploadFile()">
           <span class="btn-icon">
@@ -115,15 +136,9 @@
         </div>
       </div>
 
-      <div id="quick-links" class="quick-links">
-        <a href="#" id="roms-folder-link" onclick="event.preventDefault(); navigateToPath(ROMS_FOLDER); return false;">
-          <span class="file-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </span>
-          PinMAME ROMs (pinmame/roms)
-        </a>
+      <div id="roms-help" class="roms-help" hidden>
+        Play a table first. If its ROM is missing, it is registered: come back to this page and the missing ROMs are displayed
+        below, with the folder to upload each zip file to.
       </div>
 
       <div id="missing-roms" class="missing-roms" hidden>
