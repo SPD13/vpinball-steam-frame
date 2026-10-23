@@ -831,6 +831,9 @@ private:
             }));
          item.m_tileImage = [this, image = room.image.get()]() { return image ? m_player->m_renderer->m_renderDevice->m_texMan.LoadTexture(image, false) : nullptr; };
       }
+      // Below the tiles: the room of a table can be used too, from the menu of that table (see Launcher.cpp)
+      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+         "The VR room of any table can also be used as the lobby room: open the table, then select \"Use this VR room in the lobby\" in its menu."s));
    }
 
    struct Room
