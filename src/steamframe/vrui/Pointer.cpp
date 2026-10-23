@@ -87,34 +87,50 @@ void LiveUI::RenderVRPointerRay(bool onVRPanel, int depthSort)
    const ImGuiIO& io = ImGui::GetIO();
    if (Matrix3D rayToClip[2]; onVRPanel && m_vrPointerVisible && !m_inGameUI.IsFlipperNav() && io.Fonts->TexRef.GetTexID() && m_player->m_vrDevice->GetUIPointerRayTransforms(rayToClip))
    {
+      // A ribbon of segments along the ray, in two strips across it, as the pointer of SteamVR: most opaque at the controller and fading
+      // towards the tip, with soft edges, narrowing towards the tip
+      constexpr unsigned int segments = 8, rows = 3, nVertices = (segments + 1) * rows, nIndices = segments * (rows - 1) * 6;
       if (m_vrPointerRayMesh == nullptr)
       {
-         auto ib = std::make_shared<IndexBuffer>(m_rd, 6, true, IndexBuffer::Format::FMT_INDEX32);
-         auto vb = std::make_shared<VertexBuffer>(m_rd, 4, nullptr, true);
+         auto ib = std::make_shared<IndexBuffer>(m_rd, nIndices, true, IndexBuffer::Format::FMT_INDEX32);
+         auto vb = std::make_shared<VertexBuffer>(m_rd, nVertices, nullptr, true);
          m_vrPointerRayMesh = std::make_shared<MeshBuffer>("VRPointerRay"s, vb, ib, false);
          uint32_t* indices;
          m_vrPointerRayMesh->m_ib->Lock(indices);
-         constexpr uint32_t quad[] = { 0, 1, 2, 2, 1, 3 };
-         memcpy(indices, quad, sizeof(quad));
+         for (unsigned int c = 0; c < segments; c++)
+            for (unsigned int r = 0; r < rows - 1; r++)
+            {
+               const uint32_t v = c * rows + r;
+               const uint32_t quad[] = { v, v + rows, v + 1, v + 1, v + rows, v + rows + 1 };
+               memcpy(indices, quad, sizeof(quad));
+               indices += 6;
+            }
          m_vrPointerRayMesh->m_ib->Unlock();
       }
-      // The white pixel moves when the atlas is rebuilt, so the vertices are updated each frame. The ray fades in from the controller.
+      // The white pixel moves when the atlas is rebuilt, so the vertices are updated each frame
       Vertex3D_NoTex2* vertices;
       m_vrPointerRayMesh->m_vb->Lock(vertices);
-      for (unsigned int i = 0; i < 4; i++)
+      for (unsigned int c = 0; c <= segments; c++)
       {
-         vertices[i].x = static_cast<float>(i & 1);
-         vertices[i].y = static_cast<float>(i >> 1);
-         vertices[i].z = (i & 1) ? 0.8f : 0.1f; // alpha
-         vertices[i].nx = vertices[i].ny = vertices[i].nz = 1.f; // white
-         vertices[i].tu = io.Fonts->TexUvWhitePixel.x;
-         vertices[i].tv = io.Fonts->TexUvWhitePixel.y;
+         const float t = static_cast<float>(c) / static_cast<float>(segments); // 0 at the controller, 1 at the pointed position
+         const float alpha = 0.05f + 0.6f * (1.f - t) * (1.f - t);
+         const float width = 1.f - 0.6f * t;
+         for (unsigned int r = 0; r < rows; r++, vertices++)
+         {
+            const float across = static_cast<float>(r) / static_cast<float>(rows - 1) - 0.5f; // -0.5 to 0.5
+            vertices->x = t;
+            vertices->y = 0.5f + across * width;
+            vertices->z = across == 0.f ? alpha : 0.f; // alpha
+            vertices->nx = vertices->ny = vertices->nz = 1.f; // white
+            vertices->tu = io.Fonts->TexUvWhitePixel.x;
+            vertices->tv = io.Fonts->TexUvWhitePixel.y;
+         }
       }
       m_vrPointerRayMesh->m_vb->Unlock();
       m_rd->m_uiShader->SetMatrix(ShaderUniform::matWorldView, &rayToClip[0], 2);
       m_rd->m_uiShader->SetVector(ShaderUniform::clip_plane, -1.f, -1.f, 2.f, 2.f); // No clipping
       m_rd->m_uiShader->SetTexture(ShaderUniform::tex_base_color, io.Fonts->TexRef.GetTexID());
-      m_rd->DrawMesh(m_rd->m_uiShader, true, Vertex3Ds(0.f, 0.f, 0.f), static_cast<float>(depthSort), m_vrPointerRayMesh, RenderDevice::TRIANGLELIST, 0, 6);
+      m_rd->DrawMesh(m_rd->m_uiShader, true, Vertex3Ds(0.f, 0.f, 0.f), static_cast<float>(depthSort), m_vrPointerRayMesh, RenderDevice::TRIANGLELIST, 0, nIndices);
    }
 }
 
