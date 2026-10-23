@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <SDL3/SDL_process.h>
 
+#include <array>
 #include <regex>
 #include <thread>
 
@@ -148,10 +149,32 @@ namespace
       return body;
    }
 
-   // Versions are "<yyyymmdd>-<commit>" (development builds may add a suffix): a release of a later day is newer, and so is another
-   // release of the same day (made again from a newer commit)
+   // "<major>.<minor>.<patch>" (an optional 'v' before, a suffix after), the numbering of the releases since 0.5.0
+   std::optional<std::array<int, 3>> ParseVersionNumber(const string& version)
+   {
+      std::array<int, 3> number {};
+      size_t pos = version.starts_with('v') ? 1 : 0;
+      for (int i = 0; i < 3; i++)
+      {
+         if (i > 0 && (pos >= version.size() || version[pos++] != '.'))
+            return std::nullopt;
+         const size_t start = pos;
+         while (pos < version.size() && std::isdigit(static_cast<unsigned char>(version[pos])) && pos - start < 6)
+            number[i] = number[i] * 10 + (version[pos++] - '0');
+         if (pos == start)
+            return std::nullopt;
+      }
+      return number;
+   }
+
+   // Releases are numbered "<major>.<minor>.<patch>" since 0.5.0; before, they were "<yyyymmdd>-<commit>" (development builds may add a
+   // suffix). Two numbered versions compare by their numbers, and a numbered one is newer than a dated one. Two dated ones: a release of a
+   // later day is newer, and so is another release of the same day (made again from a newer commit). Anything else is newer when different.
    bool IsNewer(const string& latest, const string& installed)
    {
+      const std::optional<std::array<int, 3>> latestNumber = ParseVersionNumber(latest), installedNumber = ParseVersionNumber(installed);
+      if (latestNumber || installedNumber)
+         return latestNumber && (!installedNumber || *latestNumber > *installedNumber);
       const auto date = [](const string& version) { return version.size() >= 8 && std::all_of(version.begin(), version.begin() + 8, ::isdigit) ? version.substr(0, 8) : string(); };
       const string latestDate = date(latest), installedDate = date(installed);
       if (latestDate.empty() || installedDate.empty())
