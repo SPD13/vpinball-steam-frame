@@ -300,6 +300,14 @@ void TablePickerPage::SetSearch(const string& search)
    RequestRebuild();
 }
 
+void TablePickerPage::ClearSearch()
+{
+   SetSearch(string());
+   m_clearFocus = false;
+   if (VPX::VRUI::Keyboard::IsEditing("tables/search"s))
+      VPX::VRUI::Keyboard::Close();
+}
+
 // In the grid view, the buttons move from tile to tile: up/down a row, left/right a column, and OK opens the table
 void TablePickerPage::SelectNextItem()
 {
@@ -317,6 +325,8 @@ void TablePickerPage::ActivateItem()
 {
    if (const InGameUIItem* item = GetSelectedItem(); item && item->m_tileImage)
       InGameUIPage::AdjustItem(1.f, true);
+   else if (item && item->m_label == SEARCH_ITEM && m_newView && m_clearFocus)
+      ClearSearch();
    else if (item && item->m_label == SEARCH_ITEM && m_newView && VPX::VRUI::Keyboard::IsUsed())
    {
       // The keyboard of the new VR menu gets the focus, to type with the buttons
@@ -356,6 +366,15 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
 #endif
       if (item->m_label == SEARCH_ITEM)
       {
+         // New view: right gets to the button clearing the search, left back to the field
+         if (m_newView && (m_clearFocus || (direction > 0.f && !s_search.empty())))
+         {
+            m_clearFocus = direction > 0.f;
+            return;
+         }
+         // The keyboard of the new VR menu opens with the field
+         if (m_newView && VPX::VRUI::Keyboard::IsUsed())
+            return;
          // Without a keyboard, the search text is entered with the navigation buttons
          m_player->m_liveUI->m_inGameUI.AddPage("tables/search"s,
             []() { return std::make_unique<TextEntryPage>("Search tables"s, s_search, [](const string& search) { s_search = search; }, true); });
@@ -591,7 +610,7 @@ void TablePickerPage::BuildPage()
       BuildLeaderboardList(*this);
       return;
    }
-   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
+   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, m_newView && VPX::VRUI::Keyboard::IsUsed() ? "Type a few letters of the name of a table. OK: type with the buttons, Right: the button clearing the search."s : "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header,
       m_scanning                   ? "Scanning tables folder..."s
@@ -925,14 +944,17 @@ void TablePickerPage::RenderSearchNewView()
    const float iconWidth = ImGui::CalcTextSize(ICON_FK_SEARCH).x;
    const float pad = Theme::Px(0.7f);
    const float textY = pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f;
+   const InGameUIItem* const selectedItem = GetSelectedItem();
+   const bool selected = selectedItem != nullptr && selectedItem->m_label == SEARCH_ITEM;
+   const bool hasFocus = selected && m_player->m_liveUI->m_inGameUI.IsFlipperNav();
+   if (!hasFocus || s_search.empty())
+      m_clearFocus = false; // On the field when the row is selected again
    ImGui::PushID(SEARCH_ITEM);
    if (Keyboard::IsUsed())
    {
       static const string owner = "tables/search"s;
       Keyboard::KeepOpen(owner, pos, pos + ImVec2(width - clearWidth, height));
       // Buttons: the keyboard opens when the field gets the focus, and closes when it loses it (not when the pointer is used)
-      const InGameUIItem* const selectedItem = GetSelectedItem();
-      const bool selected = selectedItem != nullptr && selectedItem->m_label == SEARCH_ITEM;
       if (selected != m_searchSelected)
       {
          m_searchSelected = selected;
@@ -972,12 +994,8 @@ void TablePickerPage::RenderSearchNewView()
    if (!s_search.empty())
    {
       ImGui::SetCursorScreenPos(ImVec2(pos.x + width - clearWidth + Theme::Px(0.4f), pos.y));
-      if (Widgets::Pill("##clear", ICON_FK_TIMES, nullptr, height, true, false))
-      {
-         SetSearch(string());
-         if (Keyboard::IsEditing("tables/search"s))
-            Keyboard::Close();
-      }
+      if (Widgets::Pill("##clear", ICON_FK_TIMES, nullptr, height, true, hasFocus && m_clearFocus))
+         ClearSearch();
    }
    ImGui::PopID();
    ImGui::SetCursorScreenPos(pos);

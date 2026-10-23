@@ -77,6 +77,7 @@ private:
    void ActivateTabIcon(int icon);
    void StepFilter(int direction);
    void SetSearch(const string& search);
+   void ClearSearch();
    void RenderTabs();
    void RenderTabsNewView();
    void RenderSearchNewView();
@@ -86,6 +87,7 @@ private:
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    const bool m_newView;
    bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard opens when the buttons select it)
+   bool m_clearFocus = false; // New view: the button clearing the search is focused with the buttons, not the field
    int m_tabIcon = -1; // New view: the icon button of the tab row focused with the buttons (TabIcon), -1 when on the tabs
 
    uint64_t m_revision = 0;
