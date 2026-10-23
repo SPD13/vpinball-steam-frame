@@ -23,6 +23,7 @@ bool RenderVirtualKeyboard(string& text, size_t maxLength, bool capitalizeWords,
 void AddLibraryItems(InGameUIPage& page); // View, image focus, menu distance, sort, rescan, tables folder
 void AddMenuDistanceItem(InGameUIPage& page); // VR only
 void AddLobbyRoomItems(InGameUIPage& page); // Launcher mode only
+std::unique_ptr<InGameUIPage> CreateLobbyRoomsPage(); // The room chooser, page 'lobby/rooms'
 void AddQuitItem(InGameUIPage& page);
 #ifdef VPX_TABLE_WEBSERVER
 void AddWebServerItems(InGameUIPage& page); // Wi-Fi upload

@@ -727,41 +727,88 @@ void AddMenuDistanceItem(InGameUIPage& page)
       }));
 }
 
-// The lobby may use the room of a table, chosen from the menu of that table while it is played
+// A new room for the lobby applies when it is loaded again: at once from the lobby, otherwise when the table is closed
+static void ApplyLobbyRoomChange(InGameUIPage& page)
+{
+   if (page.m_player->m_isLobby)
+   {
+      g_launcher->m_reloadLobby = true;
+      page.m_player->SetCloseState(Player::CS_CLOSE_APP);
+   }
+   else
+      page.RequestRebuild();
+}
+
+namespace
+{
+
+// The rooms of the lobby as tiles with their image, to choose one
+class LobbyRoomsPage final : public InGameUIPage
+{
+public:
+   LobbyRoomsPage()
+      : InGameUIPage("Lobby room"s, "The room shown behind the table picker, also at the next start"s, SaveMode::None)
+   {
+      for (const Launcher::LobbyRoomChoice& room : Launcher::GetLobbyRoomChoices())
+         m_rooms.push_back({ room, BaseTexture::CreateFromFile(room.thumbnail, 512) });
+   }
+
+   ~LobbyRoomsPage() override
+   {
+      for (const Room& room : m_rooms)
+         if (room.image)
+            m_player->m_renderer->m_renderDevice->m_texMan.UnloadTexture(room.image.get());
+   }
+
+private:
+   void BuildPage() override
+   {
+      const bool tableRoom = g_launcher->GetLobbyRoom().has_value();
+      const int current = Launcher::GetLobbyRoomChoice();
+      for (const Room& room : m_rooms)
+      {
+         const bool isCurrent = !tableRoom && room.choice.value == current;
+         InGameUIItem& item = AddItem(std::make_unique<InGameUIItem>(isCurrent ? ICON_FK_CHECK " "s + room.choice.name : room.choice.name,
+            isCurrent ? "The room of the lobby"s : "Use this room for the lobby"s,
+            [this, value = room.choice.value]()
+            {
+               g_launcher->SetLobbyRoomChoice(value);
+               ApplyLobbyRoomChange(*this);
+            }));
+         item.m_tileImage = [this, image = room.image.get()]() { return image ? m_player->m_renderer->m_renderDevice->m_texMan.LoadTexture(image, false) : nullptr; };
+      }
+   }
+
+   struct Room
+   {
+      Launcher::LobbyRoomChoice choice;
+      std::shared_ptr<BaseTexture> image;
+   };
+   vector<Room> m_rooms;
+};
+
+}
+
+std::unique_ptr<InGameUIPage> CreateLobbyRoomsPage()
+{
+   return std::make_unique<LobbyRoomsPage>();
+}
+
+// The room of the lobby: one of the rooms shipped with the application, or the room of a table, chosen from the menu of that table while it
+// is played
 void AddLobbyRoomItems(InGameUIPage& page)
 {
    if (!g_launcher->m_launcherMode)
       return;
-   if (const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom(); room)
-   {
-      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Lobby room: the room of " + room->tableName));
-      page.AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the default room again"s,
+   const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom();
+   page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, room ? "Lobby room: the room of " + room->tableName : "Lobby room: " + Launcher::GetLobbyRoomName()));
+   page.AddItem(std::make_unique<InGameUIItem>("Choose a lobby room"s, "Pick the room of the lobby among the rooms of Visual Pinball. The room of a table can also be used, from the menu of that table."s, "lobby/rooms"s));
+   if (room)
+      page.AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the room chosen for the lobby again"s,
          [&page]()
          {
             g_launcher->ResetLobbyRoom();
-            if (page.m_player->m_isLobby)
-            {
-               // Load the lobby again, with the default room
-               g_launcher->m_reloadLobby = true;
-               page.m_player->SetCloseState(Player::CS_CLOSE_APP);
-            }
-            else
-               page.RequestRebuild();
-         }));
-   }
-   else
-      page.AddItem(std::make_unique<InGameUIItem>(Launcher::GetLobbyRoomLabel(), "Change the room of the lobby. The room of a table can also be used, from the menu of that table."s,
-         [&page]()
-         {
-            Launcher::NextLobbyRoom();
-            if (page.m_player->m_isLobby)
-            {
-               // Load the lobby again, in the new room
-               g_launcher->m_reloadLobby = true;
-               page.m_player->SetCloseState(Player::CS_CLOSE_APP);
-            }
-            else
-               page.RequestRebuild();
+            ApplyLobbyRoomChange(page);
          }));
 }
 

@@ -59,10 +59,19 @@ public:
    // and gets back to it when a table is closed, until the user quits from the lobby or the picker
    bool m_launcherMode = false;
    std::filesystem::path GetLobbyTablePath() const;
-   // The rooms shipped for the lobby (tables holding only a room, made in Blender, see steamframe/lobby-room), chosen with Standalone.LobbyRoom
+   // The rooms shipped for the lobby (tables holding only a room, made in Blender, see steamframe/lobby-room) and the empty room, chosen with
+   // Standalone.LobbyRoom (remembered: saved as soon as it is chosen)
+   struct LobbyRoomChoice
+   {
+      int value; // Of Standalone.LobbyRoom
+      string name;
+      std::filesystem::path thumbnail;
+   };
+   static vector<LobbyRoomChoice> GetLobbyRoomChoices(); // The rooms available, in the order of the room chooser
+   static int GetLobbyRoomChoice();
+   static string GetLobbyRoomName();
+   void SetLobbyRoomChoice(int value); // Also stops using the room of a table
    static bool IsLobbyRoomFile(const std::filesystem::path& tablePath);
-   static string GetLobbyRoomLabel();
-   static void NextLobbyRoom();
 
    // The VR room of a table can replace the default room of the lobby: the lobby then loads that table, and only keeps the parts of its room
    // which were visible when it was chosen (kept in lobby-room.json). Without that table, the lobby gets back to the default room.
