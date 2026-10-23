@@ -147,6 +147,7 @@ static constexpr LobbyRoomFile LOBBY_ROOMS[] = {
    { 2, "Empty room", nullptr, "empty.jpg" },
    { 0, "Modern room", "lobby.vpx", "modern.jpg" },
    { 1, "Game room", "lobby-gameroom.vpx", "game.jpg" },
+   { 3, "Sunlit studio", "lobby-studio.vpx", "studio.jpg" },
 };
 
 static const LobbyRoomFile* FindLobbyRoom(int value)
