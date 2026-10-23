@@ -822,7 +822,7 @@ void AddQuitItem(InGameUIPage& page)
       }));
 }
 
-// New VR menu: the tabs as pills, then the view (grid or list) and sort order as icon buttons on the right
+// New VR menu: the tabs as pills, then the rescan of the tables folder, the view (grid or list) and sort order as icon buttons on the right
 void TablePickerPage::RenderTabsNewView()
 {
    namespace Theme = VPX::VRUI::Theme;
@@ -866,6 +866,15 @@ void TablePickerPage::RenderTabsNewView()
    }
    if (ImGui::IsItemHovered())
       ImGui::SetTooltip(gridView ? "Show a list of names" : "Show a grid of table images");
+   // Tables added to the tables folder while the list is shown (copied or uploaded) appear after a rescan
+   TableLibrary& library = g_launcher->GetTableLibrary();
+   const bool scanning = library.IsScanning();
+   const float refreshWidth = Widgets::PillWidth(ICON_FK_REFRESH, nullptr, height);
+   ImGui::SetCursorScreenPos(ImVec2(right - sortWidth - viewWidth - refreshWidth - 2.f * gap, y));
+   if (Widgets::Pill("##refresh", ICON_FK_REFRESH, nullptr, height, !scanning, false))
+      library.RescanAsync();
+   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+      ImGui::SetTooltip(scanning ? "Looking for tables..." : "Look for tables added to, or removed from, the tables folder");
    ImGui::PopID();
    ImGui::SetCursorScreenPos(ImVec2(left, y));
    ImGui::Dummy(ImVec2(right - left, height));
