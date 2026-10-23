@@ -95,6 +95,7 @@ New files: `src/steamframe/TablePickerPage.h/.cpp`. Registered as `tables/picker
 - Per-table page: Play / Restart, Add to / Remove from favorites, Rename, Reset table settings (if an `.ini` exists), Delete with confirmation. Reset and Delete are not offered for the running table. Actions fire once per press (the stock menu repeats an action every frame while a button is held).
 - `TextEntryPage`: text entry with four buttons (left/right pick a character, then "Add"), used for rename and for search when there is no keyboard.
 - Library section: view mode, sort, rescan, tables folder, ROM folder hint, and in launcher mode "Settings" (opens the menu's home page) and "Quit Visual Pinball".
+- New VR menu: the tab row ends with three icon buttons, rescan the tables folder (for tables copied while the list is shown; greyed during a scan), grid or list view, and sort order.
 - Inputs: with a mouse or pointer, tabs, stars and the search box are clicked directly. With buttons, left/right on the tab row or the letter filter changes them, activating the search row opens the text entry page, and favorites are toggled from the table's page.
 
 New settings (`src/core/Settings_properties.inl`): `Standalone/TablesPath` (empty = `VPinballX/Tables` in the user's documents folder), `Standalone/TablePickerGridView`, `Standalone/TablePickerSortAscending`. The current tab, search text and page are kept for the session only.
