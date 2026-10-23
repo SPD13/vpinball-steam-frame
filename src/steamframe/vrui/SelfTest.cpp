@@ -179,6 +179,48 @@ void Update(InGameUIPage& page, float renderMs)
          g_stepStart = now;
          return;
       }
+      if (g_dpadStep >= 102 && g_dpadStep < 200)
+      {
+         // The icon buttons of the tab row, reached with the buttons: left from the first tab wraps to the sort order, OK changes it,
+         // OK again restores it, and right gets back to the first tab
+         MainMenuPage* const tablesMenu = dynamic_cast<MainMenuPage*>(ui.GetActivePage());
+         if (tablesMenu == nullptr || now - g_stepStart < 800)
+            return;
+         g_stepStart = now;
+         InGameUIPage* const tables = tablesMenu->GetContent();
+         const auto sortAscending = []() { return g_settingsService.GetAppSettings().GetStandalone_TablePickerSortAscending(); };
+         switch (g_dpadStep++)
+         {
+         case 102:
+            if (tables)
+            {
+               const auto& items = InGameUIPageView::GetItems(*tables);
+               for (int i = 0; i < static_cast<int>(items.size()); i++)
+                  if (items[i]->m_label == "##tabs"s)
+                     InGameUIPageView::SetSelectedIndex(*tables, i);
+               ui.UseButtonNav();
+               ui.OnUILeftAction();
+            }
+            break;
+         case 103: Capture(player, "tab-icon-focused"s, Step::DPad); break;
+         case 104:
+         {
+            const bool before = sortAscending();
+            ui.OnUIConfirm();
+            PLOGI << "VRUI self-test: OK on the sort icon button, sort ascending " << before << " -> " << sortAscending();
+            break;
+         }
+         case 105: Capture(player, "tab-icon-sort-changed"s, Step::DPad); break;
+         case 106:
+            ui.OnUIConfirm();
+            ui.OnUIRightAction();
+            PLOGI << "VRUI self-test: OK again then right, sort ascending " << sortAscending();
+            break;
+         case 107: Capture(player, "tab-icon-back-to-tabs"s, Step::DPad); break;
+         default: g_dpadStep = 200; break;
+         }
+         return;
+      }
       MainMenuPage* const menu = dynamic_cast<MainMenuPage*>(ui.GetActivePage());
       if (menu == nullptr || now - g_stepStart < 800)
          return;
