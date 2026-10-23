@@ -65,6 +65,8 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   (`InGameUIPage::m_tileColumns`, navigation in `InGameUIPage::StepTileGrid`), so this works in the classic view too.
 - On the tab row of the Tables screen, left/right go through the tabs, then the icon buttons at its right end (rescan the tables folder,
   grid or list view, sort order), then back to the first tab; OK uses the focused icon button (`TablePickerPage::StepTab`).
+- On the search field, right gets to the button clearing the search (when there is text), left back to the field, and OK on it clears
+  the search and closes the keyboard (`TablePickerPage::m_clearFocus`).
 - In VR, the menu opens in pointer navigation (hovered items are highlighted). Any button of the UI (d-pad, sticks, Save, Undo, Defaults,
   Back) switches to button navigation, the selected item being highlighted: the first press of a direction only shows it. A trigger press
   switches back without clicking (the next one clicks); aiming or scrolling does not. The ray and the dot of the pointer are hidden in
