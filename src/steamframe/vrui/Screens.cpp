@@ -229,6 +229,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Room:
       return {
+         Section { "Menu and lobby"s, kMenuAndLobby, {}, true },
          Section { "Position"s, kVR, { Prop(Settings::m_propPlayerVR_Orientation), Prop(Settings::m_propPlayerVR_TableX), Prop(Settings::m_propPlayerVR_TableY), Prop(Settings::m_propPlayerVR_TableZ) } },
          Section { "Cabinet"s, kVR,
             { Prop(Settings::m_propPlayer_LockbarWidth), Prop(Settings::m_propPlayer_LockbarHeight), Prop(Settings::m_propPlayer_ScreenPlayerX), Prop(Settings::m_propPlayer_ScreenPlayerY),
@@ -236,7 +237,6 @@ static vector<Section> GetSections(Screen screen)
          Section { "Room"s, kVR,
             { Prop(Settings::m_propPlayerVR_UsePassthroughColor), Prop(Settings::m_propPlayerVR_LockFeetToGround), Prop(Settings::m_propPlayerVR_AddBackglass),
                Prop(Settings::m_propPlayerVR_ShowControllers) } },
-         Section { "Menu and lobby"s, kMenuAndLobby, {}, true },
          Section { "More"s, kVR, {}, true },
       };
 
