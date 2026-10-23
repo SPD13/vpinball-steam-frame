@@ -27,6 +27,9 @@ INSIDE = (0.0, 1.0, 1.5)
 scene["bake_sizes"] = json.dumps({"floor": 4096, "walls": 4096, "ceiling": 2048, "arcades": 4096, "pinball": 2048, "furniture": 4096,
                                   "exterior": 2048, "backdrop": 4096})
 scene["bake_emit_only"] = json.dumps(["backdrop"])
+# The backdrop holds the 8k panorama: hidden while the lighting of the other groups is baked, which the world lights the same way with the 4k
+# one (less memory, as the Mac also runs the build VM)
+scene["bake_hide_when_lighting"] = json.dumps(["backdrop"])
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
@@ -123,24 +126,25 @@ for name, lo, hi in (("SkirtLeft", (X0, Y0, 0), (X0 + 0.012, Y1, 0.08)), ("Skirt
 rk.quad("Terrace", [(WX0 - 3, Y1, -0.02), (WX1 + 3, Y1, -0.02), (WX1 + 3, Y1 + 3.2, -0.02), (WX0 - 3, Y1 + 3.2, -0.02)], M_TERRACE, "exterior")
 rk.box("Parapet", (WX0 - 3, Y1 + 3.2, -0.02), (WX1 + 3, Y1 + 3.4, 1.15), M_PARAPET, "exterior", skip=("-z", "+y"))
 
-HDRI = os.path.join(rk.DL, "shanghai_bund", "shanghai_bund_8k.hdr")
+HDRI = os.path.join(rk.DL, "shanghai_bund", "shanghai_bund_8k.hdr")  # Seen through the window
+HDRI_LIGHT = os.path.join(rk.DL, "shanghai_bund", "shanghai_bund_4k.hdr")  # Light of the world
 HDRI_ROTATION = math.radians(215)  # Turns the skyline of the panorama to face the window
 HDRI_STRENGTH = 0.5
 
-def environment_nodes(tree, vector_socket):
+def environment_nodes(tree, vector_socket, path=HDRI):
     """Environment texture of the city, looked up along a direction (the same mapping for the world and the backdrop)."""
     mapping = tree.nodes.new("ShaderNodeMapping")
     mapping.inputs["Rotation"].default_value = (0, 0, HDRI_ROTATION)
     tree.links.new(vector_socket, mapping.inputs["Vector"])
     env = tree.nodes.new("ShaderNodeTexEnvironment")
-    env.image = bpy.data.images.load(HDRI, check_existing=True)
+    env.image = bpy.data.images.load(path, check_existing=True)
     tree.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
     return env
 
 world = bpy.data.worlds.new("City")
 world.use_nodes = True
 wt = world.node_tree
-env = environment_nodes(wt, wt.nodes.new("ShaderNodeTexCoord").outputs["Generated"])
+env = environment_nodes(wt, wt.nodes.new("ShaderNodeTexCoord").outputs["Generated"], HDRI_LIGHT)
 wt.links.new(env.outputs["Color"], wt.nodes["Background"].inputs["Color"])
 wt.nodes["Background"].inputs["Strength"].default_value = HDRI_STRENGTH
 scene.world = world
