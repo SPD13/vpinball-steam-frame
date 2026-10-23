@@ -296,10 +296,22 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
    }
    Keyboard::EndFrame();
 
-   // Yellow badge above the menu when a newer release is published: it is installed with the installer app, from a computer
-   if (UpdateCheck::IsUpdateAvailable())
+   // Yellow badge above the menu when a newer release is published. On the Frame, a click on it downloads and installs the release, the
+   // badge showing the progress, then a message asks to start the game again (see UpdateCheck.h). Elsewhere, the release is installed with
+   // the installer app, from a computer.
+   const UpdateCheck::InstallStatus update = UpdateCheck::GetInstallStatus();
+   if (UpdateCheck::IsUpdateAvailable() && update.phase != UpdateCheck::InstallPhase::Done)
    {
-      static constexpr const char* label = "Update Available - Use the installer";
+      const bool canInstall = UpdateCheck::CanInstall();
+      const bool clickable = canInstall && (update.phase == UpdateCheck::InstallPhase::None || update.phase == UpdateCheck::InstallPhase::Failed);
+      string label;
+      switch (update.phase)
+      {
+      case UpdateCheck::InstallPhase::Downloading: label = std::format("Downloading update... {}%", static_cast<int>(update.progress * 100.f)); break;
+      case UpdateCheck::InstallPhase::Installing: label = "Installing update..."s; break;
+      case UpdateCheck::InstallPhase::Failed: label = "Update failed: " + update.message + " - Click to retry"; break;
+      default: label = canInstall ? "New version available, Click here to install"s : "Update Available - Use the installer"s; break;
+      }
       ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kSmallTextSize));
       const float badgeHeight = Theme::Px(Theme::kBadgeHeight);
       const float badgePad = badgeHeight * 0.45f;
@@ -307,17 +319,22 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
       ImFont* const iconFont = Theme::Font();
       const float fontSize = ImGui::GetFontSize();
       const float iconWidth = iconFont->CalcTextSizeA(fontSize, FLT_MAX, 0.f, ICON_FK_ARROW_CIRCLE_UP).x + badgeHeight * 0.25f;
-      const ImVec2 badgeSize(floorf(2.f * badgePad + iconWidth + ImGui::CalcTextSize(label).x), badgeHeight);
+      const ImVec2 badgeSize(floorf(2.f * badgePad + iconWidth + ImGui::CalcTextSize(label.c_str()).x), badgeHeight);
       const ImVec2 badgePos(floorf(pos.x + (size.x - badgeSize.x) * 0.5f), pos.y - Theme::Px(Theme::kBadgeGap) - badgeHeight);
       ImGui::SetNextWindowPos(badgePos);
       ImGui::SetNextWindowSize(badgeSize);
-      ImGui::Begin("##VRUIUpdateBadge", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+      ImGui::Begin("##VRUIUpdateBadge", nullptr,
+         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | (clickable ? 0 : ImGuiWindowFlags_NoInputs));
       Theme::ApplyPixelDensity();
+      ImGui::SetCursorScreenPos(badgePos);
+      if (ImGui::InvisibleButton("##update", badgeSize) && clickable)
+         UpdateCheck::StartInstall();
+      const bool hovered = clickable && ImGui::IsItemHovered();
       ImDrawList* const badgeDrawList = ImGui::GetWindowDrawList();
-      badgeDrawList->AddRectFilled(badgePos, badgePos + badgeSize, Theme::kWarning, badgeHeight * 0.5f);
+      badgeDrawList->AddRectFilled(badgePos, badgePos + badgeSize, hovered ? Theme::kWarningHover : Theme::kWarning, badgeHeight * 0.5f);
       const float textY = badgePos.y + (badgeHeight - ImGui::GetTextLineHeight()) * 0.5f;
       badgeDrawList->AddText(iconFont, fontSize, ImVec2(badgePos.x + badgePad, textY), Theme::kOnWarning, ICON_FK_ARROW_CIRCLE_UP);
-      badgeDrawList->AddText(ImVec2(badgePos.x + badgePad + iconWidth, textY), Theme::kOnWarning, label);
+      badgeDrawList->AddText(ImVec2(badgePos.x + badgePad + iconWidth, textY), Theme::kOnWarning, label.c_str());
       ImGui::End();
       ImGui::PopFont();
    }
@@ -361,6 +378,49 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
       ImGui::PopFont();
    }
 #endif
+
+   // Once the update is installed: a message over the menu, which it covers, until OK quits the application (the new version runs from the
+   // next start)
+   if (update.phase == UpdateCheck::InstallPhase::Done)
+   {
+      const string text = "Visual Pinball was updated to version " + UpdateCheck::GetLatestVersion()
+         + ". It will now exit: start it again from the Steam library.";
+      const float boxPad = Theme::Px(1.6f);
+      const float boxWidth = floorf(size.x * 0.5f);
+      const float textWidth = boxWidth - 2.f * boxPad;
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kTitleSize));
+      const float titleHeight = ImGui::GetTextLineHeight();
+      ImGui::PopFont();
+      const float textHeight = ImGui::CalcTextSize(text.c_str(), nullptr, false, textWidth).y;
+      const ImVec2 boxSize(boxWidth, floorf(2.f * boxPad + titleHeight + pad + textHeight + pad + pillHeight));
+      const ImVec2 boxPos(floorf(pos.x + (size.x - boxSize.x) * 0.5f), floorf(pos.y + (size.y - boxSize.y) * 0.5f));
+      ImGui::SetNextWindowPos(pos);
+      ImGui::SetNextWindowSize(size);
+      ImGui::Begin("##VRUIUpdateDone", nullptr,
+         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+      ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+      Theme::ApplyPixelDensity();
+      ImDrawList* const messageDrawList = ImGui::GetWindowDrawList();
+      messageDrawList->AddRectFilled(pos, pos + size, IM_COL32(0, 0, 0, 150), rounding);
+      messageDrawList->AddRectFilled(boxPos, boxPos + boxSize, Theme::kPanelBg | IM_COL32_A_MASK, rounding);
+      messageDrawList->AddRect(boxPos, boxPos + boxSize, Theme::kDivider, rounding, ImDrawFlags_None, Theme::Px(0.1f));
+      float y = boxPos.y + boxPad;
+      ImGui::PushFont(Theme::BoldFont(), Theme::Px(Theme::kTitleSize));
+      messageDrawList->AddText(ImVec2(boxPos.x + boxPad, y), Theme::kText, "Update installed");
+      ImGui::PopFont();
+      y += titleHeight + pad;
+      ImGui::SetCursorScreenPos(ImVec2(boxPos.x + boxPad, y));
+      Widgets::WrappedText(text.c_str(), Theme::kText, textWidth);
+      y += textHeight + pad;
+      const float okWidth = Widgets::PillWidth(ICON_FK_CHECK, "OK", pillHeight);
+      ImGui::SetCursorScreenPos(ImVec2(boxPos.x + boxSize.x - boxPad - okWidth, y));
+      if (Widgets::Pill("##updateok", ICON_FK_CHECK, "OK", pillHeight, true, flipperNav, true))
+      {
+         g_launcher->m_launcherMode = false;
+         player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+      }
+      ImGui::End();
+   }
 
    // Popups of the page (input mapping), with the padding of a window (the menu has none)
    if (content)
