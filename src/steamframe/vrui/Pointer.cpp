@@ -19,7 +19,7 @@
 // In VR, a controller is used as a pointer when the in-game UI is opened: move the mouse where it points to, its trigger being the left button.
 // Pointer navigation is the default (see InGameUI::Open): a button of the UI switches to button navigation (InGameUI::UseButtonNav), a trigger
 // press switches back, without clicking: what was hovered may not be what the player looked at, the selected item. Moving the pointer or
-// scrolling does not switch, as a held controller is never still.
+// scrolling does not switch, as a held controller is never still. In button navigation the pointer hovers nothing.
 void LiveUI::UpdateVRPointer()
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -30,12 +30,16 @@ void LiveUI::UpdateVRPointer()
       const bool pointing = m_player->m_vrDevice->GetUIPointer(x, y, pressed, scroll);
       if (pointing)
       {
-         io.AddMousePosEvent(x * io.DisplaySize.x, y * io.DisplaySize.y);
          if (pressed && !m_vrPointerPressed && m_inGameUI.IsFlipperNav())
          {
             m_inGameUI.UsePointerNav(); // Items are then highlighted when hovered
             m_vrPointerClickSwallowed = true;
          }
+         // In button navigation, the pointer (hidden) must not hover anything: ImGui gets no mouse, as if it had left the panel
+         if (m_inGameUI.IsFlipperNav())
+            io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+         else
+            io.AddMousePosEvent(x * io.DisplaySize.x, y * io.DisplaySize.y);
          // The thumbstick of the pointing controller scrolls what it points at, as a mouse wheel (up to 12 notches per second), in pointer
          // navigation only: the thumbsticks also navigate with buttons (default mapping: left stick up/down selects, right stick left/right
          // adjusts, see XRInputHandler), and button navigation keeps scrolling back to the selected item anyway. After a UI navigation action,
