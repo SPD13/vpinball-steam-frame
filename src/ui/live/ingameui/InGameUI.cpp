@@ -31,6 +31,7 @@
 #include "steamframe/ScoresPage.h"
 #include "steamframe/TablePickerPage.h"
 #include "steamframe/vrui/Keyboard.h"
+#include "steamframe/vrui/UpdateCheck.h"
 #endif
 #include "parts/ball.h"
 
@@ -373,6 +374,8 @@ void InGameUI::HandlePageInput()
 
 #if defined(VPX_STEAM_FRAME)
    if (VRUI::Keyboard::HasFocus()) // The buttons select the keys of the keyboard of the new VR UI, one per press
+      return;
+   if (VRUI::UpdateCheck::IsInstalling()) // The menu shows only the progress of the update, its items stay as they are
       return;
 #endif
 

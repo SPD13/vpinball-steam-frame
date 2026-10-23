@@ -89,8 +89,10 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 - On the Frame (`VPX_STEAM_FRAME_HEADSET`), the badge reads "New version available, Click here to install". A click downloads the release's
   `.tar.gz` next to the game folder (`<game>.update`, 1.5 GB free needed), checks it against the SHA-256 GitHub gives, unpacks it with `tar`
   (in the Steam Linux Runtime) and replaces the game folder with its `game/` (the running one becomes `<game>.old`, deleted at the next
-  start, as Linux keeps the files of the running game open). The badge shows the progress, or the reason of a failure with a retry; once done,
-  a message over the menu says the game will exit, and its OK button quits. The Steam shortcut, its name and the library artwork are not
+  start, as Linux keeps the files of the running game open). Meanwhile the install is modal (`UpdateCheck::IsInstalling`): the menu is
+  replaced by a box "Update in progress..." with the progress, and every button action is ignored (`InputManager::OnInputActionStateChanged`,
+  and the held buttons in `InGameUI::HandlePageInput`), so that no table can be started nor the menu closed. Once done, the box says the game
+  will exit, and its OK button (pointer only) quits. After a failure, the menu comes back and the badge gives the reason, with a retry. The Steam shortcut, its name and the library artwork are not
   changed (the installer app sets them), nor the user data, which is outside the game folder. `VPX_UPDATE_INSTALL_DIR=<folder>` allows the
   install on any system and replaces that folder instead, to test (with `VPX_UPDATE_CHECK_VERSION`). The log lines start with "Update:".
 

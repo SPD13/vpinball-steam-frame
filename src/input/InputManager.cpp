@@ -14,6 +14,7 @@
 #include "ui/live/LiveUI.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
+#include "steamframe/vrui/UpdateCheck.h"
 #endif
 
 #include "ScanCodes.h"
@@ -1085,6 +1086,11 @@ void InputManager::Unregister(ButtonMapping* mapping)
 // Allow plugins to react to action event, eventually disabling local processing
 bool InputManager::OnInputActionStateChanged(InputAction* action)
 {
+#ifdef VPX_STEAM_FRAME
+   // Steam Frame Edition: while an update is installed, the menu only shows its progress, and no button may close it, quit or start a table
+   if (VPX::VRUI::UpdateCheck::IsInstalling())
+      return false;
+#endif
    VPXActionEvent event { static_cast<VPXAction>(action->GetActionId()), action->IsPressed(), 1 };
    m_player->m_pluginAPI.BroadcastVPXMsg(m_onActionEventMsgId, &event);
    return event.enableVPXProcessing != 0;

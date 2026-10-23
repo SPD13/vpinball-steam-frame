@@ -41,5 +41,8 @@ bool CanInstall();
 // Starts the install on a worker thread, unless one runs or is done
 void StartInstall();
 InstallStatus GetInstallStatus();
+// From the start of the install until the application exits: the menu shows only its progress, then the message that ends it, and the
+// buttons do nothing (no table can be started, nor the menu closed), only the pointer presses its OK
+bool IsInstalling();
 
 }
