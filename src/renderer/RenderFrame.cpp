@@ -201,6 +201,8 @@ bool RenderFrame::Execute(const bool log)
                // Add the pass just before the rendercommand. Warning: this only supports the refraction use scheme where we add a single pass to perform the screen copy
                (*it)->m_dependency->m_sortKey = 1;
                RenderPass* const splitPass = AddPass((*itPass)->m_name + " [Split before " + (*it)->m_dependency->m_name + ']', (*itPass)->m_rt);
+               // Dynamic resolution: the split part keeps the scale of its pass (AddPass takes the scale of the frame being prepared, not the one executed)
+               splitPass->m_renderScale = (*itPass)->m_renderScale;
                splitPass->m_commands.insert(splitPass->m_commands.begin(), (*itPass)->m_commands.begin(), it);
                (*itPass)->m_commands.erase((*itPass)->m_commands.begin(), it);
                it = (*itPass)->m_commands.begin(); // Continue with remaining commands after split
