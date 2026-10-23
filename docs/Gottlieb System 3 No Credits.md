@@ -1,6 +1,6 @@
 # Gottlieb System 3: no credits after inserting coins
 
-Sep 28, 2026 · @Sebastien Bock
+Sep 28, 2026 · @SPD13
 
 ## Summary
 

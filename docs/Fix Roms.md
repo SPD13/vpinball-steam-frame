@@ -1,6 +1,6 @@
 # Fix ROMs
 
-Oct 3, 2026 · @Sebastien Bock
+Oct 3, 2026 · @SPD13
 
 PinMAME tables that load but cannot be played, and how to fix them. Each fix has its own document with the full investigation.
 

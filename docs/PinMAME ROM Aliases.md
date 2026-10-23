@@ -1,6 +1,6 @@
 # PinMAME ROM aliases: table does not start
 
-Oct 3, 2026 · @Sebastien Bock
+Oct 3, 2026 · @SPD13
 
 ## Summary
 
