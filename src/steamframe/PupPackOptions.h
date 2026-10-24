@@ -41,6 +41,10 @@ std::string Apply(const std::filesystem::path& packFolder, const std::string& na
 // Puts back the files saved before the first option was applied
 std::string Restore(const std::filesystem::path& packFolder);
 
+// For a pack just imported: applies its VR option when it has exactly one recommended option (a VR layout) and none was applied yet.
+// Returns the name of the applied option, or an empty string when none was. Failures are reported in 'error'.
+std::string ApplyRecommended(const std::filesystem::path& packFolder, std::string& error);
+
 // A folder holding screens.pup, playlists.pup or triggers.pup
 bool IsPack(const std::filesystem::path& folder);
 

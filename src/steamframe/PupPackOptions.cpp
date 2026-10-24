@@ -419,6 +419,19 @@ string Apply(const fs::path& packFolder, const string& name)
    return {};
 }
 
+string ApplyRecommended(const fs::path& packFolder, string& error)
+{
+   error.clear();
+   if (!GetApplied(packFolder).empty())
+      return {};
+   const vector<Option> options = List(packFolder);
+   if (std::count_if(options.begin(), options.end(), [](const Option& o) { return o.recommended; }) != 1)
+      return {};
+   const auto option = std::find_if(options.begin(), options.end(), [](const Option& o) { return o.recommended; });
+   error = Apply(packFolder, option->name);
+   return error.empty() ? option->name : string();
+}
+
 string Restore(const fs::path& packFolder)
 {
    const fs::path backup = packFolder / BACKUP_FOLDER;
