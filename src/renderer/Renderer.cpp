@@ -3604,6 +3604,12 @@ void Renderer::Render3DScene()
       g_pplayer->m_liveUI->RenderUI();
    }
 
+   #ifdef VPX_XR_SIM
+   // Steam Frame Edition: the desktop display of the simulated headset of the macOS build shows the eye with the UI panel drawn in it (src/steamframe/xrsim)
+   if (m_stereo3D == STEREO_VR)
+      RenderXRSimMirror(renderedRT);
+   #endif
+
    // The last rendered render target must be the output back buffer
    assert(renderedRT == m_renderDevice->GetOutputBackBuffer());
 

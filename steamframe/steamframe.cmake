@@ -115,3 +115,20 @@ elseif(PLATFORM STREQUAL "linux")
       )
    endif()
 endif()
+
+# Simulated OpenXR runtime of the macOS build (src/steamframe/xrsim/XRSim.h): the VR code runs on a Mac without a headset, with poses and
+# inputs set by the application (VPX_XRSIM=1 in the environment). Off by default.
+if(PLATFORM STREQUAL "macos" AND RENDERER STREQUAL "BGFX")
+   option(VPX_XR_SIM "Simulated OpenXR runtime (macOS)" OFF)
+   if(VPX_XR_SIM)
+      target_sources(vpinball PRIVATE
+         src/steamframe/xrsim/XRSim.h
+         src/steamframe/xrsim/XRSim.cpp
+         src/steamframe/xrsim/XRSimBackend.h
+         src/steamframe/xrsim/XRSimMirror.cpp
+         src/steamframe/xrsim/XRSimScript.cpp
+      )
+      target_compile_definitions(vpinball PRIVATE ENABLE_XR VPX_XR_SIM)
+      target_link_libraries(vpinball PUBLIC "-framework Metal") # MTLCreateSystemDefaultDevice, see XRSimBackend.h
+   endif()
+endif()

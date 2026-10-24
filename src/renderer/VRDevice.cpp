@@ -118,6 +118,10 @@ inline static void XrPosef_ToMatrix3D(Matrix3D* result, const XrPosef* pose)
 #include "XRVulkanBackend.h"
 #endif
 
+#ifdef VPX_XR_SIM
+#include "steamframe/xrsim/XRSimBackend.h" // Steam Frame Edition: simulated runtime of the macOS build
+#endif
+
 #endif
 
 
@@ -144,6 +148,8 @@ bgfx::RendererType::Enum VRDevice::SelectRendererType(const Settings& settings)
          return bgfx::RendererType::Enum::Direct3D11; // Default to Direct3D 11
    #elif BX_PLATFORM_ANDROID || BX_PLATFORM_LINUX || BX_PLATFORM_WINDOWS // Standalone MinGW Windows build included, to render like the headsets
       return bgfx::RendererType::Enum::Vulkan;
+   #elif defined(VPX_XR_SIM)
+      return bgfx::RendererType::Enum::Metal;
    #else
       #error "Unsupported platform for OpenXR"
    #endif
@@ -271,6 +277,10 @@ VRDevice::VRDevice(const Settings& settings)
       #endif
       #ifdef XR_USE_GRAPHICS_API_D3D12
          case bgfx::RendererType::Enum::Direct3D12: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_D3D12_ENABLE_EXTENSION_NAME); break;
+      #endif
+      #ifdef VPX_XR_SIM
+         case bgfx::RendererType::Enum::Metal: hasGraphicBackend = EnableExtensionIfSupported("XR_KHR_metal_enable"); break;
+         default: break;
       #endif
       }
       assert(hasGraphicBackend);
@@ -685,6 +695,10 @@ void VRDevice::SetupHMD()
       PLOGI << "Creating DX12 backend for OpenXR (before BGFX initialization)";
       m_backend = std::make_unique<XRD3D12Backend>(m_xrInstance, m_systemID);
    }
+   #endif
+   #ifdef VPX_XR_SIM
+   if (m_rendererType == bgfx::RendererType::Metal)
+      m_backend = std::make_unique<XRSimBackend>();
    #endif
 
    assert(m_backend != nullptr);

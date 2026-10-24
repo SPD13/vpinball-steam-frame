@@ -16,6 +16,9 @@
 #endif
 #include "bx/math.h"
 #include "math/matrix.h"
+#ifdef VPX_XR_SIM
+#include "steamframe/xrsim/XRSim.h"
+#endif
 
 // Same as the helper of VRDevice.cpp
 inline static void XrPosef_ToMatrix3D(Matrix3D* result, const XrPosef* pose)
@@ -87,6 +90,11 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
       m_uiPanelOrigin = center - m_uiPanelRight * 0.5f - m_uiPanelDown * 0.5f;
       m_uiPanelPlaced = true;
       m_uiPanelReplace = false;
+      #ifdef VPX_XR_SIM
+      const float o[3] = { m_uiPanelOrigin.x, m_uiPanelOrigin.y, m_uiPanelOrigin.z }, r[3] = { m_uiPanelRight.x, m_uiPanelRight.y, m_uiPanelRight.z },
+                  d[3] = { m_uiPanelDown.x, m_uiPanelDown.y, m_uiPanelDown.z };
+      XRSim::SetUIPanel(o, r, d);
+      #endif
    }
 
    // Depth is not used (the shader outputs a constant depth, the UI being drawn over the scene), so near and far planes do not matter

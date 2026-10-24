@@ -333,6 +333,9 @@ private:
    // the playfield, the scene is rendered a second time into a dedicated set of render targets, swapped
    // in/out to avoid interfering with the VR render targets
    void RenderDesktopScene(RenderTarget* outputRT);
+   #ifdef VPX_XR_SIM
+   void RenderXRSimMirror(RenderTarget* eyes); // Steam Frame Edition: src/steamframe/xrsim/XRSimMirror.cpp
+   #endif
    void SwapDesktopTargets();
    bool m_desktopScenePass = false; // True while recording the scene render passes for the desktop display
    int m_desktopRenderWidth = 0, m_desktopRenderHeight = 0;
