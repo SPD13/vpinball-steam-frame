@@ -70,6 +70,8 @@ private:
    void ProfileRename(struct mg_connection *c, struct mg_http_message* hm);
    void ProfileDelete(struct mg_connection *c, struct mg_http_message* hm);
    void ProfileActive(struct mg_connection *c, struct mg_http_message* hm);
+   // Options of a PinUP Player pack (its layout batch files, see PupPackOptions): list, apply, restore
+   void PupOptions(struct mg_connection *c, struct mg_http_message* hm);
 #endif
 
    void AddLogEntry(const string& formattedLog);
