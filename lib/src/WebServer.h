@@ -51,6 +51,8 @@ private:
    // Steam Frame Edition, implemented in steamframe/WebServerLibrary.cpp
    using RouteHandler = void (WebServer::*)(struct mg_connection *c, struct mg_http_message* hm);
    static RouteHandler GetLibraryRoute(struct mg_http_message* hm);
+   // The version shown by the pages: "Steam Frame Edition v<release> - vpinball v<version> Beta"
+   static string GetVersionLabel();
    // The ROMs that tables need and could not find
    void MissingRoms(struct mg_connection *c, struct mg_http_message* hm);
    // The table library, for the tables page: list, image, favorite, display name and deletion (desktop builds, the mobile launchers own their library)

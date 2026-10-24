@@ -426,6 +426,9 @@ void WebServer::Info(struct mg_connection *c, struct mg_http_message* hm)
 #endif
    json j = {{"version", VP_VERSION_STRING_FULL_LITERAL}, {"extractableExtensions", ZipUtils::GetExtractableExtensions()}, {"tableLibrary", hasTableLibrary},
       {"scores", hasTableLibrary}}; // Leaderboards of the tables of the library
+#ifdef VPX_STEAM_FRAME
+   j["version"] = GetVersionLabel();
+#endif
    string response = j.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }

@@ -8,10 +8,12 @@
 
 #include "core/player.h"
 #include "core/VPApp.h"
+#include "core/vpversion.h"
 #include "parts/pintable.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
+#include "steamframe/vrui/UpdateCheck.h"
 
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -35,6 +37,15 @@ namespace {
    constexpr int STATUS_METHOD_NOT_ALLOWED = 405;
    constexpr int STATUS_CONFLICT = 409;
    constexpr int STATUS_INTERNAL_SERVER_ERROR = 500;
+}
+
+string WebServer::GetVersionLabel()
+{
+   // Numbered releases (since 0.5.0) get a "v", the dated ones before them are shown as they are
+   const string installed = VPX::VRUI::UpdateCheck::GetInstalledVersion();
+   const bool numbered = !installed.empty() && std::isdigit(static_cast<unsigned char>(installed[0])) && installed.find('.') != string::npos;
+   const string edition = installed.empty() ? "(development build)"s : (numbered ? "v" : "") + installed;
+   return "Steam Frame Edition " + edition + " - vpinball v" STR(VP_VERSION_MAJOR) "." STR(VP_VERSION_MINOR) "." STR(VP_VERSION_REV) " Beta";
 }
 
 // The handler of a route of the table library or of the leaderboards, nullptr for another route. They all need a paired browser.
