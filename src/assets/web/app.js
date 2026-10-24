@@ -502,21 +502,67 @@ function renderMissingRoms(missingRoms) {
 // The shared ROM folder, in the tables folder: a tab of its own next to the tables folder, as it gets lost in a long list of tables
 const ROMS_FOLDER = 'pinmame/roms';
 
+// The shared folder of the PinUP Player packs, where pack archives are uploaded (the application extracts them, see TableLibrary::MovePupPacks)
+const PUP_FOLDER = 'pinupsystem/pupvideos';
+
+function isPupFolder(directory) {
+  const path = (directory || '').toLowerCase();
+  return path === PUP_FOLDER;
+}
+
 function updateFolderSwitch(directory) {
   const tables = DOMCache.get('folder-switch-tables');
   const roms = DOMCache.get('folder-switch-roms');
+  const pup = DOMCache.get('folder-switch-pup');
   if (!tables || !roms) // A page cached from before the switch existed
     return;
   const path = (directory || '').toLowerCase();
   const inRoms = path === ROMS_FOLDER || path.startsWith(ROMS_FOLDER + '/');
-  tables.classList.toggle('current', !inRoms);
+  const inPup = path === PUP_FOLDER || path.startsWith(PUP_FOLDER + '/');
+  tables.classList.toggle('current', !inRoms && !inPup);
   roms.classList.toggle('current', inRoms);
-  tables.setAttribute('aria-selected', String(!inRoms));
+  tables.setAttribute('aria-selected', String(!inRoms && !inPup));
   roms.setAttribute('aria-selected', String(inRoms));
+  if (pup) {
+    pup.classList.toggle('current', inPup);
+    pup.setAttribute('aria-selected', String(inPup));
+  }
+}
+
+// The tables whose script uses PinUP Player and whose pack is not installed, from the table list of the library
+function updateMissingPups(directory) {
+  const help = DOMCache.get('pup-help');
+  if (help)
+    help.hidden = !isPupFolder(directory);
+  const panel = DOMCache.get('missing-pups');
+  if (!panel)
+    return;
+  if (!isPupFolder(directory)) {
+    panel.hidden = true;
+    return;
+  }
+  fetch('tables')
+    .then((response) => response.json())
+    .then((data) => {
+      const missing = (data.tables || []).filter((table) => table.usesPup && !table.hasPupPack && table.pupPack);
+      const list = DOMCache.get('missing-pups-list');
+      list.replaceChildren(...missing.sort((a, b) => a.name.localeCompare(b.name)).map((table) => {
+        const item = document.createElement('li');
+        const name = document.createElement('span');
+        name.className = 'missing-rom-name';
+        name.textContent = table.pupPack;
+        item.appendChild(name);
+        item.appendChild(document.createTextNode(`: ${table.name}`));
+        return item;
+      }));
+      panel.hidden = missing.length === 0 || !isPupFolder(_directory);
+    })
+    .catch((error) => console.error('Error fetching the tables:', error));
 }
 
 function updateMissingRoms(directory) {
   updateFolderSwitch(directory);
+  updateMissingPups(directory);
   const help = DOMCache.get('roms-help');
   if (help)
     help.hidden = !isRomsFolder(directory);

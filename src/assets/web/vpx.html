@@ -51,6 +51,13 @@
           </svg>
           ROMs
         </button>
+        <button type="button" id="folder-switch-pup" class="folder-switch-item" role="tab" onclick="navigateToPath(PUP_FOLDER)">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <polygon points="10 9 15 12 10 15 10 9"></polygon>
+          </svg>
+          PuP packs
+        </button>
       </div>
 
       <div class="path-buttons">
@@ -139,6 +146,19 @@
       <div id="roms-help" class="roms-help" hidden>
         Play a table first. If its ROM is missing, it is registered: come back to this page and the missing ROMs are displayed
         below, with the folder to upload each zip file to.
+      </div>
+
+      <div id="pup-help" class="roms-help" hidden>
+        Upload the zip file of a PinUP Player pack here, as it was downloaded: it is extracted into a folder of its own, named after the
+        pack (a pack with the same name is replaced). The tables which have their pack get a 'PuP' tag in the table picker.
+      </div>
+
+      <div id="missing-pups" class="missing-roms" hidden>
+        <div class="missing-roms-header">
+          <span class="missing-roms-title">Missing PinUP Player packs</span>
+        </div>
+        <div class="missing-roms-hint">These tables use PinUP Player, and their pack is not installed. The folder of a pack must have the name shown.</div>
+        <ul id="missing-pups-list" class="missing-roms-list"></ul>
       </div>
 
       <div id="missing-roms" class="missing-roms" hidden>
