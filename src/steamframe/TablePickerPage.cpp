@@ -659,6 +659,8 @@ void TablePickerPage::BuildPage()
          label += " (playing)";
       if (!gridView && table.favorite)
          label = ICON_FK_STAR " "s + label;
+      if (!gridView && table.hasPupPack)
+         label += "  [PuP]";
       const string path = "tables/" + table.uuid;
       const string uuid = table.uuid;
       displayedTables.insert(uuid);
@@ -672,6 +674,8 @@ void TablePickerPage::BuildPage()
          item.m_tileToggleIconOff = ICON_FK_STAR_O;
          item.m_tileToggleState = [favorite = table.favorite]() { return favorite; };
          item.m_tileToggleAction = [uuid, favorite = table.favorite]() { g_launcher->GetTableLibrary().SetFavorite(uuid, !favorite); }; // The page is rebuilt as the library changes
+         if (table.hasPupPack)
+            item.m_tileBadge = "PuP"s;
       }
    }
 
@@ -1307,6 +1311,13 @@ void TableActionsPage::BuildPage()
          g_launcher->m_nextTableFilename = tablePath;
          m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
+
+   // PinUP Player pack: installed, or missing (only for the tables whose script uses PinUP Player, a PinMAME game may have none)
+   if (table->hasPupPack)
+      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "PinUP Player pack installed"s));
+   else if (table->usesPup && !table->pupPacks.empty())
+      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+         "PinUP Player pack '" + table->pupPacks.front() + "' not found: add it to the 'pinupsystem/pupvideos' folder of the tables, from 'Add tables from a browser'"));
 
    AddItem(std::make_unique<InGameUIItem>(table->favorite ? ICON_FK_STAR " Remove from favorites"s : ICON_FK_STAR_O " Add to favorites"s, "Favorites have their own list in the table picker"s,
       [this, favorite = table->favorite]()
