@@ -129,6 +129,8 @@ public:
    std::function<void()> m_tileToggleAction;
    string m_tileToggleIconOn;
    string m_tileToggleIconOff;
+   // Optional short text drawn as a tag in the bottom left corner of the image of a tile (for example 'PuP' for the tables which have their PinUP Player pack)
+   string m_tileBadge;
 
    // UI behavior
    bool m_customHighlight = false; // CustomRender items which highlight their own parts (like buttons): the page does not highlight their whole row

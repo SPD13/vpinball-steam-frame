@@ -69,7 +69,8 @@ string NameFromStem(const fs::path& path)
 bool SameTable(const Table& a, const Table& b)
 {
    return a.uuid == b.uuid && a.name == b.name && a.path == b.path && a.image == b.image && a.createdAt == b.createdAt && a.modifiedAt == b.modifiedAt
-      && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite;
+      && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite && a.usesPup == b.usesPup && a.pupPacks == b.pupPacks
+      && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack;
 }
 
 }
@@ -298,6 +299,9 @@ void TableLibrary::LoadJson()
                   table.lastPlayedAt = it->value("lastPlayedAt", int64_t(0));
                   table.playCount = it->value("playCount", 0);
                   table.favorite = it->value("favorite", false);
+                  table.usesPup = it->value("usesPup", false);
+                  table.pupPacks = it->value("pupPacks", std::vector<string>());
+                  table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
                }
             }
          } catch (const std::exception& e) {
@@ -320,8 +324,14 @@ void TableLibrary::SaveJson()
    nlohmann::ordered_json stats = nlohmann::ordered_json::object();
    for (const Table& table : GetTables()) {
       tables.push_back({ { "uuid", table.uuid }, { "name", table.name }, { "path", table.path }, { "image", table.image }, { "createdAt", table.createdAt }, { "modifiedAt", table.modifiedAt } });
-      if (table.lastPlayedAt != 0 || table.playCount != 0 || table.favorite)
+      if (table.lastPlayedAt != 0 || table.playCount != 0 || table.favorite || table.pupScannedAt != 0) {
          stats[table.uuid] = { { "playCount", table.playCount }, { "lastPlayedAt", table.lastPlayedAt }, { "favorite", table.favorite } };
+         if (table.pupScannedAt != 0) {
+            stats[table.uuid]["usesPup"] = table.usesPup;
+            stats[table.uuid]["pupPacks"] = table.pupPacks;
+            stats[table.uuid]["pupScannedAt"] = table.pupScannedAt;
+         }
+      }
    }
    const nlohmann::ordered_json json = { { "tableCount", tables.size() }, { "tables", tables } };
 
@@ -431,10 +441,58 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
       }
    }
 
+   progress(85, "Looking for PinUP Player packs...");
+   UpdatePupPacks(tables);
+
    progress(90, "Finalizing...");
    if (!jsonExists || tables.size() != m_tables.size() || !std::equal(tables.begin(), tables.end(), m_tables.begin(), SameTable))
       Commit(std::move(tables));
    progress(100, "Complete");
+}
+
+// The packs named by the script of the tables, read again when a table changed, then whether they are installed. Packs are folders, named
+// as the pack ignoring case, in the 'pupvideos' folder along the table or in the shared one (the same lookup as the PUP plugin)
+void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
+{
+   if (!m_config.readPupUse)
+      return;
+   const auto lower = [](string s) {
+      std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      return s;
+   };
+   const auto listFolders = [&lower](const fs::path& folder) {
+      std::set<string> names;
+      std::error_code ec;
+      for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+         if (it->is_directory(ec))
+            names.insert(lower(it->path().filename().string()));
+      return names;
+   };
+   const std::set<string> sharedPacks = m_config.sharedPupVideosPath.empty() ? std::set<string>() : listFolders(m_config.sharedPupVideosPath);
+   for (Table& table : tables) {
+      const fs::path tablePath = BuildPath(table.path);
+      if (table.pupScannedAt != table.modifiedAt || table.pupScannedAt == 0) {
+         try {
+            const PupUse use = m_config.readPupUse(tablePath);
+            table.usesPup = use.usesPup;
+            table.pupPacks = use.names;
+         } catch (const std::exception& e) {
+            Log(LogLevel::Warn, "Failed to read the script of " + tablePath.string() + ": " + e.what());
+         }
+         table.pupScannedAt = table.modifiedAt != 0 ? table.modifiedAt : 1;
+      }
+      table.hasPupPack = false;
+      if (table.pupPacks.empty())
+         continue;
+      std::set<string> localPacks;
+      std::error_code ec;
+      for (auto it = fs::directory_iterator(tablePath.parent_path(), ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+         if (it->is_directory(ec) && lower(it->path().filename().string()) == "pupvideos")
+            localPacks = listFolders(it->path());
+      for (const string& name : table.pupPacks)
+         if (localPacks.contains(lower(name)) || sharedPacks.contains(lower(name)))
+            table.hasPupPack = true;
+   }
 }
 
 void TableLibrary::RescanAsync(int settleSeconds)
