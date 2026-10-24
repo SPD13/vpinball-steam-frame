@@ -1256,8 +1256,22 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 }
 
 .table-tile-placeholder[hidden],
-.table-tile-badge[hidden] {
+.table-tile-badge[hidden],
+.table-tile-pup[hidden] {
   display: none;
+}
+
+/* The table has its PinUP Player pack (bottom left, as in the table picker of the application) */
+.table-tile-pup {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: #409cff;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .table-tile-placeholder {
