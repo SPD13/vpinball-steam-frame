@@ -184,6 +184,12 @@ public:
 public:
    void InitShape(const float x, const float y);
 
+#ifdef VPX_STEAM_FRAME // Implemented in steamframe/CabinetDisplays.cpp
+   bool m_cabinetSuppressed = false; // Not rendered: a display of PinUP Player shows in its place on the cabinet
+   bool RenderCabinetDisplay(const Vertex3Ds& pos); // Renders the external renderer mode of the cabinet displays, false for the other flashers
+   void SetCabinetDisplayRect(const Vertex2D& center, float width, float height);
+#endif
+
 private:
    void UploadRenderFrame(const PinballPlugin::ResURIResolver::DisplayState& display);
 

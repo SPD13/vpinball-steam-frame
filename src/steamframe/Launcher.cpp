@@ -4,6 +4,7 @@
 #include "Launcher.h"
 
 #include "core/editablereg.h"
+#include "steamframe/CabinetDisplays.h"
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
@@ -36,6 +37,13 @@ static VPX::Properties::PropertyRegistry::PropId GetPinMAMEPathPropId()
       "Plugin.PinMAME"s, "PinMAMEPath"s, "PinMAME Path"s, "Folder that contains PinMAME subfolders (roms, nvram, ...)"s, false, ""s));
 }
 
+// Same definition as the one of the PinUP Player plugin, which reads its value when it is loaded
+static VPX::Properties::PropertyRegistry::PropId GetPupFolderPropId()
+{
+   return Settings::GetRegistry().Register(std::make_unique<VPX::Properties::StringPropertyDef>(
+      "Plugin.PUP"s, "PUPFolder"s, "PinUp Player Folder"s, ""s, false, ""s, VPX::Properties::StringPropertyDef::PathType::Folder));
+}
+
 Launcher::Launcher()
 {
    assert(g_launcher == nullptr);
@@ -49,6 +57,8 @@ Launcher::~Launcher()
 #endif
    if (m_isSharedPinMAMEFolderApplied)
       g_settingsService.GetAppSettings().Reset(GetPinMAMEPathPropId());
+   if (m_isSharedPupFolderApplied)
+      g_settingsService.GetAppSettings().Reset(GetPupFolderPropId());
    g_launcher = nullptr;
 }
 
@@ -62,6 +72,7 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       const string tablesPath = g_settingsService.GetAppSettings().GetStandalone_TablesPath();
       config.tablesPath = tablesPath.empty() ? g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Tables, std::filesystem::path("VPinballX") / "Tables") : std::filesystem::path(tablesPath);
       config.jsonPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "tables.json");
+      config.excludedPaths.push_back(config.tablesPath / "pinupsystem"); // PinUP Player packs (see SetupSharedPupFolder): thousands of media files, no table
 #ifdef VPX_TABLE_WEBSERVER
       config.zip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Zip(source, dest, callback); };
       config.unzip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Extract(source, dest, callback); };
@@ -132,6 +143,38 @@ void Launcher::SetupSharedPinMAMEFolder()
       PLOGI << "PinMAME folder is not defined, using the one shared by the tables of the table library: " << pinmamePath;
    }
    m_isSharedPinMAMEFolderApplied = true;
+}
+
+std::filesystem::path Launcher::GetSharedPupVideosPath()
+{
+   return GetTableLibrary().GetTablesPath() / "pinupsystem" / "pupvideos";
+}
+
+void Launcher::SetupSharedPupFolder()
+{
+   // The plugin looks for the pack in a 'pupvideos' folder along the table, then in the 'pupvideos' folder of this setting: leave existing setups alone
+   const auto propId = GetPupFolderPropId();
+   const std::filesystem::path pupPath = GetTableLibrary().GetTablesPath() / "pinupsystem";
+   // The default may have been written to the settings file, as settings pages save all the settings: it still is the default
+   const string definedPath = g_settingsService.GetAppSettings().GetString(propId);
+   const bool isDefault = definedPath.empty() || std::filesystem::path(definedPath).lexically_normal() == pupPath.lexically_normal();
+   if (!m_isSharedPupFolderApplied && !isDefault)
+      return;
+
+   std::error_code ec;
+   std::filesystem::create_directories(GetSharedPupVideosPath(), ec);
+   if (ec)
+   {
+      PLOGE << "Failed to create the shared PinUP Player folder " << pupPath << ": " << ec.message();
+      return;
+   }
+   // A default, not a user choice: reset when closing to follow the tables folder (see SetupSharedPinMAMEFolder)
+   g_settingsService.GetAppSettings().Set(propId, pupPath.string(), false);
+   if (!m_isSharedPupFolderApplied)
+   {
+      PLOGI << "PinUP Player folder is not defined, using the one shared by the tables of the table library: " << pupPath;
+   }
+   m_isSharedPupFolderApplied = true;
 }
 
 // The rooms of the lobby, in the order of the room chooser, with their value of Standalone.LobbyRoom. The empty room has no file of its
@@ -428,6 +471,9 @@ void Launcher::AddHomePageTableItems(VPX::InGameUI::InGameUIPage& page)
             const int nParts = g_launcher->UseTableRoomInLobby(page.m_player->m_ptable);
             page.m_player->m_liveUI->PushNotification(nParts > 0 ? "The lobby will use the room of this table"s : "This table has no visible VR room"s, 4000);
          }));
+
+   // Placement of the displays of PinUP Player on the cabinet
+   CabinetDisplays::AddMenuItem(page);
 }
 
 
@@ -576,6 +622,7 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
 void Launcher::OnBeforeLoadTable()
 {
    SetupSharedPinMAMEFolder();
+   SetupSharedPupFolder();
 }
 
 void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby)
@@ -597,6 +644,7 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
 {
    VPX::VRUI::OnPlayerCreated(player, isLobby);
    player->m_liveUI->m_inGameUI.AddPage("lobby/rooms"s, []() { return VPX::InGameUI::CreateLobbyRoomsPage(); });
+   CabinetDisplays::RegisterPage(player);
    if (!isLobby)
       return;
    player->m_liveUI->OpenInGameUI("tables/picker"s);
