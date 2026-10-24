@@ -167,6 +167,7 @@ function createTile(uuid) {
       <span class="table-tile-placeholder"></span>
       <img alt="" loading="lazy" decoding="async">
       <span class="table-tile-badge" hidden>Playing</span>
+      <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>
     <div class="table-tile-footer">
@@ -181,6 +182,7 @@ function createTile(uuid) {
     image: tile.querySelector('img'),
     placeholder: tile.querySelector('.table-tile-placeholder'),
     badge: tile.querySelector('.table-tile-badge'),
+    pup: tile.querySelector('.table-tile-pup'),
     star: tile.querySelector('.table-tile-star'),
     name: tile.querySelector('.table-tile-name'),
     file: tile.querySelector('.table-tile-file'),
@@ -203,6 +205,7 @@ function updateTile(refs, table) {
   refs.tile.title = getStatsText(table);
   refs.placeholder.textContent = (table.name.trim()[0] || '#').toUpperCase();
   refs.badge.hidden = !table.playing;
+  refs.pup.hidden = !table.hasPupPack;
   refs.tile.classList.toggle('playing', table.playing);
 
   refs.star.classList.toggle('on', table.favorite);
