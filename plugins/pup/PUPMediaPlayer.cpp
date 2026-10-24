@@ -33,6 +33,7 @@ namespace PUP {
 #endif
 
 std::atomic<uint32_t> PUPMediaPlayer::m_nextAudioStreamId = 0;
+std::atomic<bool> PUPMediaPlayer::s_hardwareDecoding = false;
 
 PUPMediaPlayer::PUPMediaPlayer(const string& name)
    : m_name(name)
@@ -584,7 +585,23 @@ void PUPMediaPlayer::Run()
                LOGE("Unable to seek video stream. Aborting loop: " + PluginStrings::PathToUTF8(m_filename.filename()));
                break;
             }
-            m_libAv._avcodec_flush_buffers(m_pVideoContext);
+            if (IsHardwareDecoder(m_pVideoContext))
+            {
+               // FFmpeg's V4L2 decoders do not resume after a flush (decoding then blocks): open a new one
+               AVCodecContext* pVideoContext = OpenStream(m_pFormatContext, m_videoStream);
+               {
+                  std::lock_guard lock(m_mutex);
+                  std::swap(m_pVideoContext, pVideoContext);
+               }
+               m_libAv._avcodec_free_context(&pVideoContext); // Closing the device may take a moment: not under the lock
+               if (m_pVideoContext == nullptr)
+               {
+                  LOGE("Unable to reopen video stream. Aborting loop: " + PluginStrings::PathToUTF8(m_filename.filename()));
+                  break;
+               }
+            }
+            else
+               m_libAv._avcodec_flush_buffers(m_pVideoContext);
          }
          if (m_pAudioContext)
          {
@@ -643,9 +660,26 @@ void PUPMediaPlayer::Run()
       }
       else if (pPacket->stream_index == m_videoStream)
       {
-         if (m_libAv._avcodec_send_packet(m_pVideoContext, pPacket) != 0)
+         if (const int ret = m_libAv._avcodec_send_packet(m_pVideoContext, pPacket); ret != 0)
          {
             LOGE("Unable to send video packet"s);
+            if (IsHardwareDecoder(m_pVideoContext) && ret != AVERROR(EAGAIN))
+            {
+               // The hardware decoder does not support this video: continue with a software decoder (from the next key frame)
+               LOGE(std::format("Hardware decoder {} failed, using software decoding: file={}", m_pVideoContext->codec->name, PluginStrings::PathToUTF8(m_filename.filename())));
+               AVCodecContext* pVideoContext = OpenStream(m_pFormatContext, m_videoStream, false);
+               {
+                  std::lock_guard lock(m_mutex);
+                  std::swap(m_pVideoContext, pVideoContext);
+               }
+               m_libAv._avcodec_free_context(&pVideoContext);
+               if (m_pVideoContext == nullptr)
+               {
+                  m_libAv._av_packet_unref(pPacket);
+                  break;
+               }
+               m_libAv._avcodec_send_packet(m_pVideoContext, pPacket);
+            }
          }
       }
       m_libAv._av_packet_unref(pPacket);
@@ -844,8 +878,41 @@ void PUPMediaPlayer::HandleVideoFrame(AVFrame* frame)
    }
 }
 
-AVCodecContext* PUPMediaPlayer::OpenStream(AVFormatContext* pInputFormatContext, int stream)
+bool PUPMediaPlayer::IsHardwareDecoder(const AVCodecContext* pContext)
 {
+   return pContext && pContext->codec && std::string_view(pContext->codec->name).ends_with("_v4l2m2m");
+}
+
+AVCodecContext* PUPMediaPlayer::OpenCodec(AVFormatContext* pInputFormatContext, int stream, const AVCodec* pCodec)
+{
+   AVCodecContext* pContext = m_libAv._avcodec_alloc_context3(NULL);
+   if (pContext && m_libAv._avcodec_parameters_to_context(pContext, pInputFormatContext->streams[stream]->codecpar) >= 0)
+   {
+      pContext->pkt_timebase = pInputFormatContext->streams[stream]->time_base;
+      if (m_libAv._avcodec_open2(pContext, pCodec, NULL) == 0)
+         return pContext;
+   }
+   m_libAv._avcodec_free_context(&pContext);
+   return nullptr;
+}
+
+AVCodecContext* PUPMediaPlayer::OpenStream(AVFormatContext* pInputFormatContext, int stream, bool allowHardware)
+{
+   // Hardware decoders, for the videos large enough to be worth it (opening one takes longer than a software decoder), falling back to
+   // software decoders when there is none (FFmpeg names its V4L2 memory to memory decoders after the codec, like h264_v4l2m2m)
+   const AVCodecParameters* pCodecParameters = pInputFormatContext->streams[stream]->codecpar;
+   if (allowHardware && s_hardwareDecoding && m_libAv._avcodec_find_decoder_by_name && pCodecParameters->codec_type == AVMEDIA_TYPE_VIDEO
+      && pCodecParameters->width * pCodecParameters->height >= 640 * 360)
+   {
+      const string name = m_libAv._avcodec_get_name(pCodecParameters->codec_id) + "_v4l2m2m"s;
+      if (const AVCodec* pHardwareCodec = m_libAv._avcodec_find_decoder_by_name(name.c_str()))
+      {
+         if (AVCodecContext* pContext = OpenCodec(pInputFormatContext, stream, pHardwareCodec))
+            return pContext;
+         LOGD("Unable to open hardware decoder " + name + ", using software decoding");
+      }
+   }
+
    AVCodecContext* pContext = m_libAv._avcodec_alloc_context3(NULL);
    if (!pContext)
       return nullptr;

@@ -16,6 +16,9 @@ public:
 
    void SetGameTime(double gameTime);
 
+   // Decode videos with the hardware decoders of the system when there are (FFmpeg's V4L2 memory to memory decoders, on Linux)
+   static void SetHardwareDecoding(bool enable) { s_hardwareDecoding = enable; }
+
    void Play(const std::filesystem::path& filename, float volume, double startPosition = 0.0);
    double GetPosition() const { return m_position.load(); }
    const std::filesystem::path& GetFilename() const { return m_filename; }
@@ -38,7 +41,10 @@ private:
    void RenderHold(VPXRenderContext2D* const ctx, const SDL_Rect& destRect, float alpha);
    void RenderLastFrame(VPXRenderContext2D* const ctx, const SDL_Rect& destRect, float alpha);
    void Run();
-   AVCodecContext* OpenStream(AVFormatContext* pInputFormatContext, int stream);
+   AVCodecContext* OpenStream(AVFormatContext* pInputFormatContext, int stream, bool allowHardware = true);
+   AVCodecContext* OpenCodec(AVFormatContext* pInputFormatContext, int stream, const AVCodec* pCodec);
+   static bool IsHardwareDecoder(const AVCodecContext* pContext);
+   static std::atomic<bool> s_hardwareDecoding;
    void HandleAudioFrame(AVFrame* pFrame, bool sync);
    void HandleVideoFrame(AVFrame* pFrame);
 

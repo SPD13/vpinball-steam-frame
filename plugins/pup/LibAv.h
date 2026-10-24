@@ -66,6 +66,7 @@ public:
    typedef void(CDECL* fn_av_packet_unref)(AVPacket* pkt);
    typedef AVCodecContext*(CDECL* fn_avcodec_alloc_context3)(const AVCodec* codec);
    typedef const AVCodec*(CDECL* fn_avcodec_find_decoder)(enum AVCodecID id);
+   typedef const AVCodec*(CDECL* fn_avcodec_find_decoder_by_name)(const char* name);
    typedef void(CDECL* fn_avcodec_flush_buffers)(AVCodecContext* avctx);
    typedef void(CDECL* fn_avcodec_free_context)(AVCodecContext** avctx);
    typedef const char*(CDECL* fn_avcodec_get_name)(enum AVCodecID id);
@@ -108,6 +109,7 @@ public:
    fn_av_packet_unref _av_packet_unref = nullptr;
    fn_avcodec_alloc_context3 _avcodec_alloc_context3 = nullptr;
    fn_avcodec_find_decoder _avcodec_find_decoder = nullptr;
+   fn_avcodec_find_decoder_by_name _avcodec_find_decoder_by_name = nullptr; // Optional (hardware decoders)
    fn_avcodec_flush_buffers _avcodec_flush_buffers = nullptr;
    fn_avcodec_free_context _avcodec_free_context = nullptr;
    fn_avcodec_get_name _avcodec_get_name = nullptr;
@@ -178,6 +180,7 @@ private:
          _av_packet_unref = reinterpret_cast<fn_av_packet_unref>(GetProcAddress(hinstLib, "av_packet_unref"));
          _avcodec_alloc_context3 = reinterpret_cast<fn_avcodec_alloc_context3>(GetProcAddress(hinstLib, "avcodec_alloc_context3"));
          _avcodec_find_decoder = reinterpret_cast<fn_avcodec_find_decoder>(GetProcAddress(hinstLib, "avcodec_find_decoder"));
+         _avcodec_find_decoder_by_name = reinterpret_cast<fn_avcodec_find_decoder_by_name>(GetProcAddress(hinstLib, "avcodec_find_decoder_by_name"));
          _avcodec_flush_buffers = reinterpret_cast<fn_avcodec_flush_buffers>(GetProcAddress(hinstLib, "avcodec_flush_buffers"));
          _avcodec_free_context = reinterpret_cast<fn_avcodec_free_context>(GetProcAddress(hinstLib, "avcodec_free_context"));
          _avcodec_get_name = reinterpret_cast<fn_avcodec_get_name>(GetProcAddress(hinstLib, "avcodec_get_name"));
@@ -243,6 +246,7 @@ private:
       _av_packet_unref = &av_packet_unref;
       _avcodec_alloc_context3 = &avcodec_alloc_context3;
       _avcodec_find_decoder = &avcodec_find_decoder;
+      _avcodec_find_decoder_by_name = &avcodec_find_decoder_by_name;
       _avcodec_flush_buffers = &avcodec_flush_buffers;
       _avcodec_free_context = &avcodec_free_context;
       _avcodec_get_name = &avcodec_get_name;
