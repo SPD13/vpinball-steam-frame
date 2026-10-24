@@ -205,7 +205,8 @@ table with a `<table>.vbs` next to them, which VPX loads in place of the embedde
 
 The room is only 12 draws and about 2 000 triangles: its 2.1–2.3 ms are the shading of the walls, floor and ceiling that fill most of the
 view, plus FXAA and bloom over them (FXAA is cheaper on the flat black background). The minimal room still fills the view, so it saves
-only 0.4–0.5 ms. On a pixel-bound table, the room is the largest single cost after the table itself.
+only 0.4–0.5 ms. On a pixel-bound table, the room is the largest single cost after the table itself. The follow-up investigation
+(what the room's cost is made of, the rooms of the library, the options tried) is `VR Rooms on the Steam Frame.md`.
 
 ### 7.3 Draws and triangles per frame
 
@@ -326,7 +327,7 @@ millisecond saved lets dynamic resolution raise the size by about 4–5 % per ax
 | 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
 | 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
-| 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off | Table script option today | To evaluate (section 7.2) |
+| 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
 
 Details:
 
@@ -354,9 +355,11 @@ Details:
    Dynamic resolution also holds on stalled readings and breaks a stall with one missed frame (section 7.5), for other setups. Upstream
    candidate: present the desktop mirror without blocking the headset frame.
 9. **VR room**: on Ghostbusters the full room costs about a fifth of the GPU frame, in pixels rather than geometry, and the table's
-   minimal room saves little of it. Today the room is a constant in each table's script (Ghostbusters `VRRoom`, Addams
-   `VR_Room_Minimal`). Worth checking which room surfaces are expensive to shade (lights, reflections, large textures) before an engine
-   option.
+   minimal room saves little of it. Investigated on 2026-10-23 (`VR Rooms on the Steam Frame.md`): the lighting math is a small share
+   (0.2 ms), the read of the sky texture the largest part that can be cut (0.65 ms), and about 1.3 ms is the cost of covering the pixels.
+   Drawing the room later, leaving FXAA off on far pixels and handing the sky to the runtime (no panorama layer on the Frame) are ruled
+   out; a cheaper read of the sky texture, half-rate shading of sky-like parts and skipping parts outside the view are open. Hidden rooms
+   cost no GPU time.
 
 For sharpness (*Image Quality on the Steam Frame.md*): with the mirror off, heavy tables like Addams reach about the native 2160², and light
 tables like Ghostbusters reach the 2160² ceiling with about 1.7 ms to spare, so a *Render resolution* slightly above 125 % may fit them
