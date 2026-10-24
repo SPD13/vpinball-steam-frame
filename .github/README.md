@@ -27,7 +27,6 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Lists of tables** as tabs: All, Recent, Newly added, Most played, Favorites, plus a MENU tab for the library and application options. The tabs are large buttons, easy to hit with a mouse or a VR pointer.
 - **Thumbnails**: a grid of table images, loaded in the background with a spinner on each tile meanwhile; a list view is also available. A table without an image gets a screenshot when it is closed, and "Replace table image" takes a new one.
 - **Favorites**: a star on each thumbnail, or "Add to favorites" in the table's page; the Favorites tab lists them.
-- **Pagination**: 12 tables per page, with a pager above and below the list, so large libraries stay fast.
 - **Search** as you type (a virtual keyboard in VR), a letter filter and A–Z / Z–A sort in the All tab, and play statistics (added, last played, times played) for the hovered table.
 - **Table actions**: play, restart, rename, reset the table settings, delete, and use the table's VR room in the lobby.
 - **Lobby** in launcher mode, from which tables are started and to which they return, in the room chosen with the lobby room selector.
