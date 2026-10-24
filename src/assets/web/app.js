@@ -560,9 +560,72 @@ function updateMissingPups(directory) {
     .catch((error) => console.error('Error fetching the tables:', error));
 }
 
+// The options of a PinUP Player pack (the layout .bat files at its root), shown inside the folder of a pack
+function renderPupOptions(data) {
+  const panel = DOMCache.get('pup-options');
+  if (!panel)
+    return;
+  if (!data.isPack || !data.options || data.options.length === 0) {
+    panel.hidden = true;
+    return;
+  }
+  const list = DOMCache.get('pup-options-list');
+  list.replaceChildren(...data.options.map((option) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn ' + (option.name === data.applied ? 'btn-primary' : 'btn-secondary') + ' pup-option';
+    button.textContent = option.name + (option.name === data.applied ? ' (applied)' : '') + (option.recommended ? ' \u2605 VR' : '');
+    button.disabled = !option.supported;
+    button.title = option.supported ? (option.recommended ? 'Recommended for the Steam Frame' : 'Apply this layout') : `Not available on this device: it ${option.reason}`;
+    button.onclick = () => applyPupOption(option.name);
+    return button;
+  }));
+  DOMCache.get('pup-options-restore').hidden = !data.applied;
+  panel.hidden = false;
+  if (data.error)
+    showStatusMessage("main-status", data.error, "error");
+}
+
+function updatePupOptions(directory) {
+  const panel = DOMCache.get('pup-options');
+  if (!panel)
+    return;
+  if (!(directory || '').toLowerCase().includes('pupvideos/')) {
+    panel.hidden = true;
+    return;
+  }
+  fetch(`pup-options?q=${encodeURIComponent(directory)}`)
+    .then((response) => response.json())
+    .then(renderPupOptions)
+    .catch((error) => console.error('Error fetching the pack options:', error));
+}
+
+function postPupOptions(query, done) {
+  fetch(`pup-options?q=${encodeURIComponent(_directory)}&${query}`, { method: 'POST' })
+    .then((response) => response.json())
+    .then((data) => {
+      renderPupOptions(data);
+      if (!data.error)
+        showStatusMessage("main-status", done, "success");
+      fetchFiles(_directory);
+    })
+    .catch((error) => showStatusMessage("main-status", `Failed: ${error}`, "error"));
+}
+
+function applyPupOption(name) {
+  postPupOptions(`option=${encodeURIComponent(name)}`, `Option '${name}' applied`);
+}
+
+function restorePupOptions() {
+  if (!confirm('Put back the files of this pack as they were uploaded?'))
+    return;
+  postPupOptions('restore=1', 'Pack restored as uploaded');
+}
+
 function updateMissingRoms(directory) {
   updateFolderSwitch(directory);
   updateMissingPups(directory);
+  updatePupOptions(directory);
   const help = DOMCache.get('roms-help');
   if (help)
     help.hidden = !isRomsFolder(directory);

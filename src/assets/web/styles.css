@@ -415,6 +415,31 @@ body {
   background: var(--card-background);
 }
 
+/* Not an error, unlike the missing ROMs and packs */
+.missing-roms.pup-options {
+  border-color: #409cff;
+}
+
+.missing-roms.pup-options .missing-roms-title {
+  color: inherit;
+}
+
+.btn[hidden] {
+  display: none;
+}
+
+.pup-options-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pup-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .missing-roms[hidden] {
   display: none;
 }
