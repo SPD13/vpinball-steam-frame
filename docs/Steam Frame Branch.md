@@ -2,9 +2,9 @@
 
 This branch of the fork `SPD13/vpinball-steam-frame` prepares Visual Pinball's standalone player for the Valve Steam Frame (SteamOS on ARM64, SteamVR's OpenXR runtime, Vulkan), and adds a table launcher that works from inside the headset. It starts from upstream commit `fd5e18d` (10.8.1 beta).
 
-[![Visual Pinball, Steam Frame Edition: the trailer](img/steam-frame-trailer.jpg)](https://youtu.be/g_C8ryf-UP0)
+[![Visual Pinball, Steam Frame Edition: the trailer](img/steam-frame-trailer.jpg)](https://youtu.be/YvKycmiTYIY)
 
-**▶ [Watch the trailer](https://youtu.be/g_C8ryf-UP0)** (2:35): tables in the headset, the table picker, the web companion, scores and leaderboards, the Frame controllers, performance and eye-tracked foveated rendering.
+**▶ [Watch the trailer](https://youtu.be/YvKycmiTYIY)** (2:11): the VR version, with the VR menu and table search, Steam Frame tuning and eye-tracked foveated rendering, uploading tables over Wi-Fi, player profiles and online scores, the installer and one-click updates.
 
 This document lists everything the branch changes, where, and how far each part has been checked.
 

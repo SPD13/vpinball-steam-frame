@@ -9,9 +9,9 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 > [!CAUTION]
 > **This fork is not endorsed by, affiliated with, or supported by the Visual Pinball team or community.** It is developed with extensive AI-assisted coding, which is why it is kept apart from the official project. Please do **not** ask support questions about it in the Visual Pinball repositories, Discord servers or community forums: report problems and ask questions in [this fork's issues](https://github.com/SPD13/vpinball-steam-frame/issues). The official project is [vpinball/vpinball](https://github.com/vpinball/vpinball).
 
-[![Visual Pinball X, Steam Frame Edition: the trailer](/docs/img/steam-frame-trailer.jpg)](https://youtu.be/g_C8ryf-UP0)
+[![Visual Pinball X, Steam Frame Edition: the trailer](/docs/img/steam-frame-trailer.jpg)](https://youtu.be/YvKycmiTYIY)
 
-**▶ [Watch the trailer](https://youtu.be/g_C8ryf-UP0)** (2:35): tables in the headset, the table picker, the web companion, scores and leaderboards, the Frame controllers, performance and eye-tracked foveated rendering.
+**▶ [Watch the trailer](https://youtu.be/YvKycmiTYIY)** (2:11): the VR version, with the VR menu and table search, Steam Frame tuning and eye-tracked foveated rendering, uploading tables over Wi-Fi, player profiles and online scores, the installer and one-click updates.
 
 ## What the player gets
 
