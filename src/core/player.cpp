@@ -13,6 +13,7 @@
 #include "core/editablereg.h"
 #include "core/VPApp.h"
 #ifdef VPX_STEAM_FRAME
+#include "steamframe/CabinetDisplays.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/ScoreTracker.h"
 #include "steamframe/TableLibrary.h"
@@ -621,6 +622,10 @@ void Player::InitTableSession(const bool isInitial)
          m_implicitVRBackglass->Release();
       }
    }
+#ifdef VPX_STEAM_FRAME
+   // The displays of PinUP Player that the VR room of the table lacks (DMD, topper), before the parts are set up for rendering
+   m_cabinetDisplays = CabinetDisplays::Create(this);
+#endif
 
    // Adjust the implicit playfield reflection probe
    RenderProbe *pf_reflection_probe = m_ptable->GetRenderProbe(RenderProbe::PLAYFIELD_REFLECTION_RENDERPROBE_NAME);
@@ -2627,6 +2632,8 @@ void Player::PrepareFrame()
 #ifdef VPX_STEAM_FRAME
    if (m_scoreTracker)
       m_scoreTracker->Update();
+   if (m_cabinetDisplays)
+      m_cabinetDisplays->Update();
 #endif
 
    m_overall_frames++; // This causes the next VPinMAME <-> VPX sync to update light status which can be heavy since it needs to perform PWM integration of all lights

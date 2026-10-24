@@ -49,6 +49,10 @@ public:
    // so that ROMs can be added like tables, for example from a browser. Must be called before the plugins are loaded.
    void SetupSharedPinMAMEFolder();
    bool IsSharedPinMAMEFolderUsed() const { return m_isSharedPinMAMEFolderApplied; }
+   // Same for PinUP Player packs: when no PinUP Player folder is defined, use a 'pinupsystem' folder inside the tables folder, holding the
+   // packs in its 'pupvideos' sub folder like PinUP Player's own folder on Windows. Must be called before the plugins are loaded.
+   void SetupSharedPupFolder();
+   std::filesystem::path GetSharedPupVideosPath();
 
    // Table to play after the running one is closed, which allows to switch table without leaving the application
    std::filesystem::path m_nextTableFilename;
@@ -115,6 +119,7 @@ private:
    std::unique_ptr<VPinballLib::TableLibrary> m_tableLibrary;
    std::unique_ptr<VPinballLib::ScoreStore> m_scoreStore;
    bool m_isSharedPinMAMEFolderApplied = false;
+   bool m_isSharedPupFolderApplied = false;
 #ifdef VPX_TABLE_WEBSERVER
    std::unique_ptr<WebServer> m_webServer;
 #endif

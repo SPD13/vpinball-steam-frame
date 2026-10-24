@@ -30,6 +30,7 @@ class Renderer;
 class VRDevice;
 class LiveUI;
 class ScoreTracker;
+class CabinetDisplays;
 class BaseTexture;
 class Flasher;
 class HitTimer;
@@ -103,6 +104,7 @@ public:
    bool m_isLobby = false; // The lobby of the launcher mode, which may be loaded from a table of the library (see Launcher::GetLobbyRoom)
 #ifdef VPX_STEAM_FRAME
    std::unique_ptr<ScoreTracker> m_scoreTracker; // Records the scores of the games, when playing a table of the library
+   std::unique_ptr<CabinetDisplays> m_cabinetDisplays; // Displays of PinUP Player on the cabinet, in VR
 #endif
 
    // Request to replace the played table with a new one. The given reference on the table is adopted by
