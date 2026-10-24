@@ -156,8 +156,8 @@ const UploadQueue = {
       this.currentBytes = 0;
       try {
         const file = await job.getFile();
-        const data = new Uint8Array(await file.arrayBuffer());
-        await uploadBytes(job.path, data, (offset) => {
+        // The file itself, read chunk by chunk: PinUP Player packs of several GB do not fit in the memory of a browser
+        await uploadBytes(job.path, file, (offset) => {
           this.currentBytes = offset;
           this.report(file.name);
         });
@@ -1444,24 +1444,30 @@ function splitPath(filePath) {
     : { directory: filePath.substring(0, index), filename: filePath.substring(index + 1) };
 }
 
+// 'data' is a Uint8Array, or a Blob (a File) which is then read one chunk at a time
 async function uploadBytes(filePath, data, onProgress) {
   const { directory, filename } = splitPath(filePath);
+  const isBlob = data instanceof Blob;
+  const length = isBlob ? data.size : data.length;
   let offset = 0;
 
   while (true) {
     if (onProgress) onProgress(offset);
 
-    const chunk = data.subarray(offset, offset + UPLOAD_CHUNK_SIZE);
-    const response = await fetch(`/upload?offset=${offset}&q=${encodeURIComponent(directory)}&file=${encodeURIComponent(filename)}&length=${data.length}`, {
+    const chunk = isBlob ? new Uint8Array(await data.slice(offset, offset + UPLOAD_CHUNK_SIZE).arrayBuffer()) : data.subarray(offset, offset + UPLOAD_CHUNK_SIZE);
+    const response = await fetch(`/upload?offset=${offset}&q=${encodeURIComponent(directory)}&file=${encodeURIComponent(filename)}&length=${length}`, {
       method: "POST",
       body: chunk
     });
     if (!response.ok) {
-      throw new Error(`Upload failed with status ${response.status}`);
+      const message = await response.text().catch(() => '');
+      if (response.status === 507)
+        showStatusMessage("main-status", message || "Not enough free space on the device", "error");
+      throw new Error(`Upload failed with status ${response.status}: ${message}`);
     }
 
     const written = parseInt(await response.text(), 10);
-    if (chunk.length === 0 || (Number.isFinite(written) && written >= data.length)) {
+    if (chunk.length === 0 || (Number.isFinite(written) && written >= length)) {
       return;
     }
     offset += chunk.length;

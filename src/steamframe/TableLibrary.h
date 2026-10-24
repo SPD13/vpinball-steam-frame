@@ -168,7 +168,8 @@ private:
    mutable std::mutex m_missingRomsMutex;
    static std::optional<int> FuzzyWordScore(const std::string& word, const std::string& text);
    std::vector<Table> ImportVPX(const std::filesystem::path& path, const std::vector<Table>& tables);
-   std::vector<Table> ImportArchive(const std::filesystem::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress);
+   std::vector<Table> ImportArchive(const std::filesystem::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks = nullptr);
+   int MovePupPacks(const std::filesystem::path& folder, const std::string& rootName) const;
 
    const Config m_config;
    std::mutex m_operationMutex; // Serializes the operations modifying the library (they may be long: unzip, copy...)
