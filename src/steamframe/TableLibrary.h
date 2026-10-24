@@ -28,6 +28,13 @@ struct Table {
    int64_t lastPlayedAt = 0;
    int playCount = 0;
    bool favorite = false;
+
+   // PinUP Player pack, not part of tables.json either: what the script says (see Config::readPupUse), cached along the statistics with the
+   // modification date of the table it was read from, and whether one of the packs it names is in a 'pupvideos' folder (computed, not saved)
+   bool usesPup = false;
+   std::vector<std::string> pupPacks;
+   int64_t pupScannedAt = 0;
+   bool hasPupPack = false;
 };
 
 // Table database shared by the launchers: keeps tables.json in sync with the content of the tables folder.
@@ -46,6 +53,10 @@ public:
    using ZipProgressCallback = std::function<void(int current, int total, const char* filename)>;
    using ZipFunction = std::function<bool(const std::filesystem::path& sourcePath, const std::filesystem::path& destPath, ZipProgressCallback callback)>;
    using LogCallback = std::function<void(LogLevel level, const std::string& message)>;
+   struct PupUse {
+      bool usesPup = false; // The script creates PinUP Player
+      std::vector<std::string> names; // Candidate pack names, by order of preference
+   };
 
    struct Config {
       std::filesystem::path tablesPath; // Folder owned by the library, one sub folder per table
@@ -57,6 +68,10 @@ public:
       ZipFunction unzip; // Usually ZipUtils::Extract, needed to import the bundles of 'archiveExtensions'
       std::vector<std::string> archiveExtensions { ".zip", ".vpxz" }; // Lower case, with the dot: bundles imported with 'unzip'
       LogCallback log;
+      // Optional: which PinUP Player packs a table uses, read from its script (see PupPacks::GetTableUse), and the folder of the packs shared by
+      // the tables (they are also looked for in a 'pupvideos' folder along each table)
+      std::function<PupUse(const std::filesystem::path& tablePath)> readPupUse;
+      std::filesystem::path sharedPupVideosPath;
    };
 
    explicit TableLibrary(Config config);
@@ -144,6 +159,7 @@ private:
    void LoadJson();
    void SaveJson();
    void Commit(std::vector<Table> tables);
+   void UpdatePupPacks(std::vector<Table>& tables) const;
    bool Update(const std::string& uuid, const std::function<bool(Table&)>& change, bool isContentChange = true);
    std::filesystem::path GetStatsPath() const;
    std::filesystem::path GetMissingRomsPath() const;
