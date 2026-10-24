@@ -11,6 +11,7 @@
 #include "core/vpversion.h"
 #include "parts/pintable.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/PupPackOptions.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
 #include "steamframe/vrui/UpdateCheck.h"
@@ -66,6 +67,7 @@ WebServer::RouteHandler WebServer::GetLibraryRoute(struct mg_http_message* hm)
       { "/profile-rename", &WebServer::ProfileRename },
       { "/profile-delete", &WebServer::ProfileDelete },
       { "/profile-active", &WebServer::ProfileActive },
+      { "/pup-options", &WebServer::PupOptions },
    };
    for (const auto& [uri, handler] : routes)
       if (mg_match(hm->uri, mg_str(uri), NULL))
@@ -91,6 +93,47 @@ void WebServer::MissingRoms(struct mg_connection *c, struct mg_http_message* hm)
    for (const VPinballLib::TableLibrary::MissingRom& missing : library.GetMissingRoms())
       list.push_back({ { "rom", missing.rom }, { "folder", missing.folder }, { "files", missing.files }, { "table", missing.table }, { "reportedAt", missing.reportedAt } });
    const string response = json { { "missingRoms", list } }.dump();
+   mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
+}
+
+// GET: the options of the PinUP Player pack in the folder 'q' (relative to the tables folder). POST with 'option': apply it, with 'restore': put
+// back the files of the pack as uploaded
+void WebServer::PupOptions(struct mg_connection *c, struct mg_http_message* hm)
+{
+   char q[1024];
+   mg_http_get_var(&hm->query, "q", q, sizeof(q));
+   if (*q == '\0' || !mg_path_is_sane(mg_str(q))) {
+      mg_http_reply(c, STATUS_BAD_REQUEST, "", "%s", RESPONSE_BAD_REQUEST);
+      return;
+   }
+   const std::filesystem::path pack = BuildTablePath(q);
+   if (!PupPackOptions::IsPack(pack)) {
+      mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", json { { "isPack", false } }.dump().c_str());
+      return;
+   }
+   string error;
+   if (mg_strcmp(hm->method, mg_str("POST")) == 0) {
+      char option[512], restore[8];
+      mg_http_get_var(&hm->query, "option", option, sizeof(option));
+      mg_http_get_var(&hm->query, "restore", restore, sizeof(restore));
+      if (*restore != '\0')
+         error = PupPackOptions::Restore(pack);
+      else if (*option != '\0')
+         error = PupPackOptions::Apply(pack, option);
+      else {
+         mg_http_reply(c, STATUS_BAD_REQUEST, "", "%s", RESPONSE_BAD_REQUEST);
+         return;
+      }
+      if (error.empty())
+         PLOGI << "PinUP Player pack " << pack << (*restore != '\0' ? ": restored as uploaded"s : ": option '" + string(option) + "' applied");
+      else
+         PLOGE << "PinUP Player pack " << pack << ": " << error;
+      SetLastUpdate();
+   }
+   json options = json::array();
+   for (const PupPackOptions::Option& option : PupPackOptions::List(pack))
+      options.push_back({ { "name", option.name }, { "supported", option.supported }, { "reason", option.reason }, { "recommended", option.recommended } });
+   const string response = json { { "isPack", true }, { "applied", PupPackOptions::GetApplied(pack) }, { "options", options }, { "error", error } }.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }
 
