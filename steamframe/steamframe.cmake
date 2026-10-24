@@ -44,6 +44,15 @@ target_compile_definitions(vpinball PRIVATE
    VPX_TABLE_WEBSERVER
 )
 
+# The fork's code in the PinUP Player plugin is guarded by VPX_STEAM_FRAME too. The plugins are defined after this file
+# (make/CMakeLists_plugins.txt), hence a call deferred to the end of the root folder
+function(steamframe_plugin_definitions)
+   if(TARGET PUPPlugin)
+      target_compile_definitions(PUPPlugin PRIVATE VPX_STEAM_FRAME)
+   endif()
+endfunction()
+cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL steamframe_plugin_definitions)
+
 # VR UI: the new VR menu, and the VR panel, pointer and other parts of the classic one
 include(${CMAKE_CURRENT_LIST_DIR}/vrui.cmake)
 
