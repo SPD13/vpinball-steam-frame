@@ -30,7 +30,7 @@ struct Option
    std::filesystem::path script;
    bool supported = false;
    std::string reason; // Why it is not supported
-   bool recommended = false; // A VR layout
+   bool recommended = false; // A VR layout, or when the pack has none, the single layout that best suits the VR cabinet (screens kept apart)
 };
 
 std::vector<Option> List(const std::filesystem::path& packFolder);
@@ -45,7 +45,11 @@ std::string Restore(const std::filesystem::path& packFolder);
 // Returns the name of the applied option, or an empty string when none was. Failures are reported in 'error'.
 std::string ApplyRecommended(const std::filesystem::path& packFolder, std::string& error);
 
-// A folder holding screens.pup, playlists.pup or triggers.pup
+// A folder holding screens.pup, playlists.pup or triggers.pup, or whose options copy them from one of its sub folders
 bool IsPack(const std::filesystem::path& folder);
+
+// The sub folders of 'folder' holding .pup files that its options copy from. Some packs have their .pup files in these folders only
+// ('austin/PuP-Pack_Options/Option 3 - BG Topper Separate/screens.pup'): the pack is the folder of the batch files, not these.
+std::vector<std::filesystem::path> PackSources(const std::filesystem::path& folder);
 
 }
