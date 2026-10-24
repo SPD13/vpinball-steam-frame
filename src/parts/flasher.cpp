@@ -999,6 +999,10 @@ void Flasher::Render(const unsigned int renderMask)
    // TODO shouldn't we handle flashers like lights and therefore process them according to disable lightmap flag ?
    if (!m_d.m_isVisible || m_meshBuffer == nullptr || isReflectionPass)
       return;
+#if defined(VPX_STEAM_FRAME)
+   if (m_cabinetSuppressed) // A display of PinUP Player shows in its place (src/steamframe/CabinetDisplays.cpp)
+      return;
+#endif
 
    // Don't render if LightSequence in play and state is off
    if (m_lockedByLS && !m_inPlayState)
@@ -1270,6 +1274,10 @@ void Flasher::Render(const unsigned int renderMask)
          break;
 
       case FlasherData::EXT_RENDER:
+#if defined(VPX_STEAM_FRAME)
+         if (!m_desktopBackdrop && RenderCabinetDisplay(pos)) // The displays of PinUP Player on the cabinet (src/steamframe/CabinetDisplays.cpp)
+            break;
+#endif
          if (m_d.m_renderStyle >= VPXWindowId::VPXWINDOW_Backglass && m_d.m_renderStyle <= VPXWindowId::VPXWINDOW_Topper)
          {
             const float width = m_curve.GetMaxBound().x - m_curve.GetMinBound().x;
