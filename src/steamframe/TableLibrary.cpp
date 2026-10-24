@@ -1,6 +1,7 @@
 // license:GPLv3+
 
 #include "TableLibrary.h"
+#include "PupPackOptions.h"
 
 #include <algorithm>
 #include <cctype>
@@ -504,12 +505,9 @@ void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
    }
 }
 
-// The PinUP Player packs in 'folder' (the folders holding screens.pup, playlists.pup or triggers.pup) moved to the shared pack folder, replacing
-// a pack of the same name. A pack at the root of 'folder' (an archive of the pack's content) is named 'rootName'.
-int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) const
+// The PinUP Player packs in 'folder': the folders holding screens.pup, playlists.pup or triggers.pup, without the ones nested in another pack
+static std::vector<fs::path> FindPupPacks(const fs::path& folder)
 {
-   if (m_config.sharedPupVideosPath.empty())
-      return 0;
    const auto lower = [](string s) {
       std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
       return s;
@@ -533,7 +531,21 @@ int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) c
       if (!covered)
          packs.push_back(root);
    }
+   return packs;
+}
 
+// The PinUP Player packs in 'folder' moved to the shared pack folder, replacing a pack of the same name. A pack at the root of 'folder' (an
+// archive of the pack's content) is named 'rootName'.
+int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) const
+{
+   if (m_config.sharedPupVideosPath.empty())
+      return 0;
+   const auto lower = [](string s) {
+      std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      return s;
+   };
+   std::error_code ec;
+   const std::vector<fs::path> packs = FindPupPacks(folder);
    int moved = 0;
    fs::create_directories(m_config.sharedPupVideosPath, ec);
    for (const fs::path& pack : packs) {
@@ -561,9 +573,25 @@ int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) c
          fs::remove_all(pack, ec);
       }
       Log(LogLevel::Info, "PinUP Player pack '" + name + "' added to " + m_config.sharedPupVideosPath.string());
+      ApplyVrPupOptions(dest);
       moved++;
    }
    return moved;
+}
+
+// The VR layout of the packs in 'folder', for the packs that have one (their option scripts cannot run here, see PupPackOptions)
+void TableLibrary::ApplyVrPupOptions(const fs::path& folder) const
+{
+   if (!m_config.applyVrPupOptions)
+      return;
+   for (const fs::path& pack : FindPupPacks(folder)) {
+      string error;
+      const string option = PupPackOptions::ApplyRecommended(pack, error);
+      if (!option.empty())
+         Log(LogLevel::Info, "PinUP Player pack " + pack.string() + ": option '" + option + "' applied");
+      else if (!error.empty())
+         Log(LogLevel::Warn, "PinUP Player pack " + pack.string() + ": " + error);
+   }
 }
 
 void TableLibrary::RescanAsync(int settleSeconds)
@@ -694,6 +722,7 @@ std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::
             imported.push_back(CreateTable(file, known));
             known.push_back(imported.back());
          }
+         ApplyVrPupOptions(destFolder); // Packs of the table in its folder ('pupvideos/<pack>')
       }
 
       // The PinUP Player packs left once the table folders are moved (packs in a table folder stay with their table)

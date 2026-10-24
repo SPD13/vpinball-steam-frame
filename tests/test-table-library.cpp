@@ -663,4 +663,76 @@ TEST_CASE("PupPackOptions: the layout batch files of a pack are applied without 
    CHECK(PupPackOptions::GetApplied(pack) == "");
 }
 
+TEST_CASE("TableLibrary: imported PinUP Player packs get their VR option")
+{
+   const auto makePack = [](const fs::path& pack, const std::vector<string>& vrOptions) {
+      Fixture::Touch(pack / "screens.pup", "default screens");
+      Fixture::Touch(pack / "ScreenType.txt", "99\r\n");
+      Fixture::Touch(pack / "1 - Desktop.bat", "echo 1 > ScreenType.txt\r\n");
+      for (const string& option : vrOptions) {
+         Fixture::Touch(pack / "PuP-Pack_Options" / option / "screens.pup", option + " screens");
+         Fixture::Touch(pack / (option + ".bat"), "xcopy /y \"PuP-Pack_Options\\" + option + "\\*.pup\"\r\necho 2 > ScreenType.txt\r\n");
+      }
+   };
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   TableLibrary library(config);
+   fs::create_directories(shared);
+
+   // A pack with one VR layout, a pack with two (which one is for the player's setup is not known), and a table bundle with its pack
+   makePack(f.root / "a" / "DarkestDungeon", { "3 Screen - VR" });
+   Fixture::MakeZip(f.root / "a", shared / "DarkestDungeon.zip");
+   makePack(f.root / "b" / "jaws", { "VR - FullDMD", "VR - Slim DMD" });
+   Fixture::MakeZip(f.root / "b", shared / "jaws.zip");
+   Fixture::Touch(f.root / "c" / "Bleach" / "Bleach.vpx");
+   makePack(f.root / "c" / "Bleach" / "pupvideos" / "bleach", { "Bleach VR" });
+   Fixture::MakeZip(f.root / "c", f.tables / "bleach.zip");
+
+   library.Rescan();
+   CHECK(PupPackOptions::GetApplied(shared / "DarkestDungeon") == "3 Screen - VR");
+   CHECK(Fixture::Read(shared / "DarkestDungeon" / "screens.pup") == "3 Screen - VR screens");
+   CHECK(Fixture::Read(shared / "DarkestDungeon" / "ScreenType.txt") == "2 \r\n");
+   CHECK(PupPackOptions::GetApplied(shared / "jaws") == "");
+   CHECK(Fixture::Read(shared / "jaws" / "screens.pup") == "default screens");
+   CHECK(PupPackOptions::GetApplied(f.tables / "Bleach" / "pupvideos" / "bleach") == "Bleach VR");
+
+   // An option chosen since then is kept by later imports of other packs, and the pack can still be restored as uploaded
+   CHECK(PupPackOptions::Apply(shared / "DarkestDungeon", "1 - Desktop") == "");
+   string error;
+   CHECK(PupPackOptions::ApplyRecommended(shared / "DarkestDungeon", error) == "");
+   CHECK(PupPackOptions::GetApplied(shared / "DarkestDungeon") == "1 - Desktop");
+   CHECK(PupPackOptions::Restore(shared / "DarkestDungeon") == "");
+   CHECK(Fixture::Read(shared / "DarkestDungeon" / "ScreenType.txt") == "99\r\n");
+
+   // Uploaded again, the pack replaces the configured one and gets its VR option again
+   CHECK(PupPackOptions::Apply(shared / "DarkestDungeon", "1 - Desktop") == "");
+   makePack(f.root / "a" / "DarkestDungeon", { "3 Screen - VR" });
+   Fixture::MakeZip(f.root / "a", shared / "DarkestDungeon.zip");
+   library.Rescan();
+   CHECK(PupPackOptions::GetApplied(shared / "DarkestDungeon") == "3 Screen - VR");
+}
+
+TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when asked")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   config.applyVrPupOptions = false;
+   TableLibrary library(config);
+   fs::create_directories(shared);
+   Fixture::Touch(f.root / "a" / "DarkestDungeon" / "screens.pup", "default screens");
+   Fixture::Touch(f.root / "a" / "DarkestDungeon" / "PuP-Pack_Options" / "VR" / "screens.pup", "vr screens");
+   Fixture::Touch(f.root / "a" / "DarkestDungeon" / "VR.bat", "xcopy /y \"PuP-Pack_Options\\VR\\*.pup\"\r\n");
+   Fixture::MakeZip(f.root / "a", shared / "DarkestDungeon.zip");
+
+   library.Rescan();
+   CHECK(PupPackOptions::GetApplied(shared / "DarkestDungeon") == "");
+   CHECK(Fixture::Read(shared / "DarkestDungeon" / "screens.pup") == "default screens");
+}
+
 #endif
