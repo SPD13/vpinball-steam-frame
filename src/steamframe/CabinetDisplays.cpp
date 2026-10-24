@@ -459,8 +459,10 @@ void CabinetDisplays::OnRendered(Surface surface, bool drew)
 
 void CabinetDisplays::GetCanvasSize(Surface surface, float width, float height, float& canvasWidth, float& canvasHeight) const
 {
-   // About the resolution of PuP's videos (1920 wide for the backglass and full DMD), without going over it
-   constexpr float targetLongSide = 1280.f;
+   // About the size of the surface in the headset: a backglass at arm's length is 500 to 800 pixels wide in each eye, up to 1300 when leaning
+   // in. PuP converts each video frame to the canvas size (about half of 1920 x 1080 here), then copies and uploads it, so a larger canvas
+   // mostly costs CPU: at 1280, decoding, converting and uploading the videos took about one CPU core on Darkest Dungeon
+   constexpr float targetLongSide = 960.f;
    const float longSide = std::max(width, height);
    const float scale = longSide > 0.f ? targetLongSide / longSide : 1.f;
    canvasWidth = std::round(width * scale);
