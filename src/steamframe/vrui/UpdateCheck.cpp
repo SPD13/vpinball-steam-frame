@@ -440,12 +440,7 @@ void Start()
    if (const char* forced = getenv("VPX_UPDATE_CHECK_VERSION"); forced && *forced)
       installed = forced;
    else
-   {
-      std::ifstream file(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Root, "VERSION"));
-      std::getline(file, installed);
-      while (!installed.empty() && std::isspace(static_cast<unsigned char>(installed.back())))
-         installed.pop_back();
-   }
+      installed = GetInstalledVersion();
    if (installed.empty())
       PLOGI << "Update check: no VERSION file next to the executable (development build), not checked";
    // The folders left by an update (the replaced game folder) or by an interrupted one are deleted first, on the worker thread as it takes
@@ -460,6 +455,16 @@ void Start()
 }
 
 bool IsUpdateAvailable() { return g_state->updateAvailable; }
+
+string GetInstalledVersion()
+{
+   string installed;
+   std::ifstream file(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Root, "VERSION"));
+   std::getline(file, installed);
+   while (!installed.empty() && std::isspace(static_cast<unsigned char>(installed.back())))
+      installed.pop_back();
+   return installed;
+}
 
 string GetLatestVersion()
 {
