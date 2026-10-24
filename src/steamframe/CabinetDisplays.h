@@ -101,6 +101,9 @@ private:
    void LoadPlacements();
    bool FindDMDAnchor(Rect& rect);
    bool FindCabinetBackglass(Rect& rect) const;
+   bool FindCabinetTopper(Rect& rect) const;
+   static bool FitUprightPanel(Primitive* primitive, float glassTopHeight, Rect& rect);
+   static bool KeepAboveDMD(Rect& glass, const Rect& dmd);
    Rect GetDefaultBackglassRect() const;
    static Rect GetFlasherRect(const Flasher* flasher);
    static float GetAspect(int aspectIndex);
