@@ -72,6 +72,8 @@ public:
       // the tables (they are also looked for in a 'pupvideos' folder along each table)
       std::function<PupUse(const std::filesystem::path& tablePath)> readPupUse;
       std::filesystem::path sharedPupVideosPath;
+      // Imported packs get their VR layout when they have one, as a PinUP Player user would run its option (see PupPackOptions::ApplyRecommended)
+      bool applyVrPupOptions = true;
    };
 
    explicit TableLibrary(Config config);
@@ -170,6 +172,7 @@ private:
    std::vector<Table> ImportVPX(const std::filesystem::path& path, const std::vector<Table>& tables);
    std::vector<Table> ImportArchive(const std::filesystem::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks = nullptr);
    int MovePupPacks(const std::filesystem::path& folder, const std::string& rootName) const;
+   void ApplyVrPupOptions(const std::filesystem::path& folder) const;
 
    const Config m_config;
    std::mutex m_operationMutex; // Serializes the operations modifying the library (they may be long: unzip, copy...)
