@@ -9,6 +9,8 @@ endif()
 
 target_sources(vpinball PRIVATE
    # Table library, lobby and launcher mode, scores and leaderboards
+   src/steamframe/CabinetDisplays.h
+   src/steamframe/CabinetDisplays.cpp
    src/steamframe/Launcher.h
    src/steamframe/Launcher.cpp
    src/steamframe/PlayerTableImage.cpp
