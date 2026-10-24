@@ -77,6 +77,12 @@ struct Fixture {
    }
 };
 
+string lowerName(string name)
+{
+   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+   return name;
+}
+
 std::vector<string> Paths(const TableLibrary& library)
 {
    std::vector<string> paths;
@@ -492,6 +498,116 @@ TEST_CASE("TableLibrary: image, ini and export")
    REQUIRE(imported.size() == 1);
    CHECK(imported[0].path == "a/a.vpx");
    CHECK(imported[0].image == "a/a.png");
+}
+
+TEST_CASE("TableLibrary: PinUP Player packs are imported to the shared pack folder")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   TableLibrary library(config);
+   fs::create_directories(shared);
+
+   // Pack folder at the root of the archive, PUPVideos folder of a Windows install, and the content of a pack without its folder
+   Fixture::Touch(f.root / "a" / "afm_113b" / "screens.pup");
+   Fixture::Touch(f.root / "a" / "afm_113b" / "FullDMD" / "dmd.mp4");
+   Fixture::MakeZip(f.root / "a", shared / "afm.zip");
+   Fixture::Touch(f.root / "b" / "PUPVideos" / "rom2" / "playlists.pup");
+   Fixture::MakeZip(f.root / "b", shared / "PinUPSystem.zip");
+   Fixture::Touch(f.root / "c" / "triggers.pup");
+   Fixture::Touch(f.root / "c" / "Backglass" / "bg.mp4");
+   Fixture::MakeZip(f.root / "c", shared / "jaws.zip");
+   // A pack already there, in another case, is replaced
+   Fixture::Touch(shared / "AFM_113B" / "old.txt");
+
+   library.Rescan();
+   CHECK(fs::exists(shared / "afm_113b" / "screens.pup"));
+   CHECK(fs::exists(shared / "afm_113b" / "FullDMD" / "dmd.mp4"));
+   CHECK_FALSE(fs::exists(shared / "AFM_113B" / "old.txt"));
+   CHECK(fs::exists(shared / "rom2" / "playlists.pup"));
+   CHECK(fs::exists(shared / "jaws" / "triggers.pup"));
+   CHECK(fs::exists(shared / "jaws" / "Backglass" / "bg.mp4"));
+   CHECK_FALSE(fs::exists(shared / "afm.zip"));
+   CHECK_FALSE(fs::exists(shared / "PinUPSystem.zip"));
+   CHECK_FALSE(fs::exists(shared / "jaws.zip"));
+   CHECK(library.GetTables().empty()); // The packs are not scanned for tables
+}
+
+TEST_CASE("TableLibrary: a bundle keeps the pack of its table, and a bundle with only a pack is imported as a pack")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   TableLibrary library(config);
+
+   // The table and its pack side by side in the bundle: the pack goes to the shared folder instead of being deleted with the bundle
+   Fixture::Touch(f.root / "a" / "Jaws" / "Jaws.vpx");
+   Fixture::Touch(f.root / "a" / "PUPVideos" / "jaws" / "screens.pup");
+   Fixture::MakeZip(f.root / "a", f.tables / "jaws-with-pack.zip");
+   // A pack inside the table folder stays with the table
+   Fixture::Touch(f.root / "b" / "Bleach" / "Bleach.vpx");
+   Fixture::Touch(f.root / "b" / "Bleach" / "pupvideos" / "bleach" / "screens.pup");
+   Fixture::MakeZip(f.root / "b", f.tables / "bleach.zip");
+   // Only a pack, dropped with the tables
+   Fixture::Touch(f.root / "c" / "motu" / "triggers.pup");
+   Fixture::MakeZip(f.root / "c", f.tables / "motu-pup-pack.zip");
+
+   library.Rescan();
+   CHECK(Paths(library) == std::vector<string> { "Bleach/Bleach.vpx", "Jaws/Jaws.vpx" });
+   CHECK(fs::exists(shared / "jaws" / "screens.pup"));
+   CHECK(fs::exists(f.tables / "Bleach" / "pupvideos" / "bleach" / "screens.pup"));
+   CHECK(fs::exists(shared / "motu" / "triggers.pup"));
+   CHECK_FALSE(fs::exists(f.tables / "motu-pup-pack.zip"));
+   CHECK_FALSE(fs::exists(f.tables / "jaws-with-pack.zip"));
+}
+
+TEST_CASE("TableLibrary: tables know whether their PinUP Player pack is installed")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   int reads = 0;
+   config.readPupUse = [&reads](const fs::path& path) {
+      reads++;
+      TableLibrary::PupUse use;
+      use.usesPup = path.stem() != "AFM";
+      use.names = { path.stem() == "AFM" ? "afm_113b" : lowerName(path.stem().string()) };
+      return use;
+   };
+   Fixture::Touch(f.tables / "AFM" / "AFM.vpx");
+   Fixture::Touch(f.tables / "Jaws" / "Jaws.vpx");
+   Fixture::Touch(f.tables / "Bleach" / "Bleach.vpx");
+   Fixture::Touch(shared / "AFM_113b" / "screens.pup"); // Shared, in another case
+   Fixture::Touch(f.tables / "Bleach" / "PupVideos" / "bleach" / "screens.pup"); // Along the table
+
+   {
+      TableLibrary library(config);
+      library.Rescan();
+      std::map<string, Table> tables;
+      for (const Table& table : library.GetTables())
+         tables[table.path] = table;
+      CHECK(tables["AFM/AFM.vpx"].hasPupPack);
+      CHECK_FALSE(tables["AFM/AFM.vpx"].usesPup);
+      CHECK_FALSE(tables["Jaws/Jaws.vpx"].hasPupPack);
+      CHECK(tables["Jaws/Jaws.vpx"].usesPup);
+      CHECK(tables["Jaws/Jaws.vpx"].pupPacks == std::vector<string> { "jaws" });
+      CHECK(tables["Bleach/Bleach.vpx"].hasPupPack);
+      CHECK(reads == 3);
+   }
+
+   // The names are cached in table-stats.json: a restart does not read the scripts again, and a pack added since is found
+   Fixture::Touch(shared / "jaws" / "screens.pup");
+   TableLibrary library(config);
+   library.Rescan();
+   CHECK(reads == 3);
+   for (const Table& table : library.GetTables())
+      CHECK(table.hasPupPack);
 }
 
 #endif
