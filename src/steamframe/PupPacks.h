@@ -19,6 +19,7 @@ struct TableUse
 {
    bool usesPup = false; // The script creates PinUP Player (CreateObject("PinUpPlayer.PinDisplay"))
    std::vector<std::string> names; // Candidate pack names, by order of preference
+   std::string rom; // The ROM of a PinMAME game (cGameName), empty for the other tables
 };
 
 TableUse GetTableUse(const std::string& script);
