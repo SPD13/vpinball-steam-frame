@@ -5,6 +5,7 @@
 
 #include "core/editablereg.h"
 #include "steamframe/CabinetDisplays.h"
+#include "steamframe/PupPacks.h"
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableLibrary.h"
@@ -73,6 +74,14 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       config.tablesPath = tablesPath.empty() ? g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Tables, std::filesystem::path("VPinballX") / "Tables") : std::filesystem::path(tablesPath);
       config.jsonPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "tables.json");
       config.excludedPaths.push_back(config.tablesPath / "pinupsystem"); // PinUP Player packs (see SetupSharedPupFolder): thousands of media files, no table
+      // The PinUP Player packs of the tables, for the 'PuP' tag of the table picker: the shared folder, or the one the user defined
+      const string pupFolder = g_settingsService.GetAppSettings().GetString(GetPupFolderPropId());
+      config.sharedPupVideosPath = (pupFolder.empty() ? config.tablesPath / "pinupsystem" : std::filesystem::path(pupFolder)) / "pupvideos";
+      config.readPupUse = [](const std::filesystem::path& tablePath)
+      {
+         const PupPacks::TableUse use = PupPacks::GetTableUse(PupPacks::ReadTableScript(tablePath));
+         return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names };
+      };
 #ifdef VPX_TABLE_WEBSERVER
       config.zip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Zip(source, dest, callback); };
       config.unzip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Extract(source, dest, callback); };
