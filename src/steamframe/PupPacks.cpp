@@ -58,7 +58,13 @@ TableUse GetTableUse(const string& script)
    use.usesPup = lowerScript.find("pinupplayer") != string::npos;
    FindQuotedValues(script, lowerScript, "puplayer.init"s, true, use.names);
    FindQuotedValues(script, lowerScript, "cpuppack"s, false, use.names);
-   FindQuotedValues(script, lowerScript, "cgamename"s, false, use.names);
+   std::vector<string> roms;
+   FindQuotedValues(script, lowerScript, "cgamename"s, false, roms);
+   for (const string& rom : roms)
+      if (std::find(use.names.begin(), use.names.end(), rom) == use.names.end())
+         use.names.push_back(rom);
+   if (!roms.empty())
+      use.rom = roms.front();
    return use;
 }
 

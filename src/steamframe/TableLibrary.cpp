@@ -71,7 +71,7 @@ bool SameTable(const Table& a, const Table& b)
 {
    return a.uuid == b.uuid && a.name == b.name && a.path == b.path && a.image == b.image && a.createdAt == b.createdAt && a.modifiedAt == b.modifiedAt
       && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite && a.usesPup == b.usesPup && a.pupPacks == b.pupPacks
-      && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack;
+      && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack && a.rom == b.rom;
 }
 
 }
@@ -303,6 +303,9 @@ void TableLibrary::LoadJson()
                   table.usesPup = it->value("usesPup", false);
                   table.pupPacks = it->value("pupPacks", std::vector<string>());
                   table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
+                  table.rom = it->value("rom", ""s);
+                  if (!it->contains("rom"))
+                     table.pupScannedAt = 0; // Scanned before the ROM was read from the script: read again
                }
             }
          } catch (const std::exception& e) {
@@ -331,6 +334,7 @@ void TableLibrary::SaveJson()
             stats[table.uuid]["usesPup"] = table.usesPup;
             stats[table.uuid]["pupPacks"] = table.pupPacks;
             stats[table.uuid]["pupScannedAt"] = table.pupScannedAt;
+            stats[table.uuid]["rom"] = table.rom;
          }
       }
    }
@@ -376,6 +380,8 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
    progress(10, "Loading tables...");
    if (!m_loaded)
       LoadJson();
+   if (!m_rejectedArchivesLoaded)
+      LoadRejectedArchives();
    const bool jsonExists = Exists(m_config.jsonPath);
    std::vector<Table> tables = m_tables;
 
@@ -428,16 +434,18 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
       const string archiveId = archive.string() + '|' + std::to_string(modifiedAt) + '|' + std::to_string(fs::file_size(archive, ec));
       if (m_rejectedArchives.contains(archiveId))
          continue;
-      int importedPacks = 0;
-      const std::vector<Table> imported = ImportArchive(archive, tables, nullptr, &importedPacks);
-      if (imported.empty() && importedPacks == 0) {
+      int importedPacks = 0, importedRoms = 0;
+      const std::vector<Table> imported = ImportArchive(archive, tables, nullptr, &importedPacks, &importedRoms);
+      if (imported.empty() && importedPacks == 0 && importedRoms == 0) {
          Log(LogLevel::Warn, "No table imported from " + archive.string() + ", the file is left untouched");
          m_rejectedArchives.insert(archiveId);
+         SaveRejectedArchives();
          continue;
       }
       tables.insert(tables.end(), imported.begin(), imported.end());
       fs::remove(archive, ec);
-      Log(LogLevel::Info, "Imported " + std::to_string(imported.size()) + " table(s) and " + std::to_string(importedPacks) + " PinUP Player pack(s) from " + archive.string());
+      Log(LogLevel::Info, "Imported " + std::to_string(imported.size()) + " table(s), " + std::to_string(importedPacks) + " PinUP Player pack(s) and "
+            + std::to_string(importedRoms) + " ROM(s) from " + archive.string());
    }
 
    progress(70, "Scanning for tables...");
@@ -453,6 +461,10 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
 
    progress(85, "Looking for PinUP Player packs...");
    UpdatePupPacks(tables);
+
+   // Once the scripts of the new tables are read, for the ROMs they need
+   progress(88, "Looking for ROMs...");
+   MoveRootRoms(tables);
 
    progress(90, "Finalizing...");
    if (!jsonExists || tables.size() != m_tables.size() || !std::equal(tables.begin(), tables.end(), m_tables.begin(), SameTable))
@@ -486,6 +498,7 @@ void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
             const PupUse use = m_config.readPupUse(tablePath);
             table.usesPup = use.usesPup;
             table.pupPacks = use.names;
+            table.rom = use.rom;
          } catch (const std::exception& e) {
             Log(LogLevel::Warn, "Failed to read the script of " + tablePath.string() + ": " + e.what());
          }
@@ -540,43 +553,196 @@ int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) c
 {
    if (m_config.sharedPupVideosPath.empty())
       return 0;
-   const auto lower = [](string s) {
-      std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-      return s;
-   };
-   std::error_code ec;
-   const std::vector<fs::path> packs = FindPupPacks(folder);
    int moved = 0;
+   for (const fs::path& pack : FindPupPacks(folder))
+      if (MovePupPack(pack, pack.lexically_normal() == folder.lexically_normal() ? rootName : pack.filename().string()))
+         moved++;
+   return moved;
+}
+
+// One pack moved to the shared pack folder under 'name', with its VR layout
+bool TableLibrary::MovePupPack(const fs::path& pack, const string& name) const
+{
+   if (m_config.sharedPupVideosPath.empty() || name.empty() || name == "." || name == "..")
+      return false;
+   std::error_code ec;
    fs::create_directories(m_config.sharedPupVideosPath, ec);
-   for (const fs::path& pack : packs) {
-      const string name = pack.lexically_normal() == folder.lexically_normal() ? rootName : pack.filename().string();
-      if (name.empty() || name == "." || name == "..")
+   // The plugin finds packs ignoring case: an existing pack with the same name in another case is replaced too
+   for (auto it = fs::directory_iterator(m_config.sharedPupVideosPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec)) {
+      if (it->is_directory(ec) && ToLower(it->path().filename().string()) == ToLower(name)) {
+         Log(LogLevel::Info, "Replacing the PinUP Player pack " + it->path().string());
+         std::error_code removeEc;
+         fs::remove_all(it->path(), removeEc);
+         break;
+      }
+   }
+   ec.clear();
+   const fs::path dest = m_config.sharedPupVideosPath / name;
+   fs::rename(pack, dest, ec);
+   if (ec) { // The shared folder may be on another file system (a PinUP Player folder defined by the user)
+      ec.clear();
+      fs::copy(pack, dest, fs::copy_options::recursive, ec);
+      if (ec) {
+         Log(LogLevel::Error, "Failed to move the PinUP Player pack " + pack.string() + " to " + dest.string() + ": " + ec.message());
+         return false;
+      }
+      fs::remove_all(pack, ec);
+   }
+   Log(LogLevel::Info, "PinUP Player pack '" + name + "' added to " + m_config.sharedPupVideosPath.string());
+   ApplyVrPupOptions(dest);
+   return true;
+}
+
+// The packs of an imported table folder that are not in a 'pupvideos' folder, the only place along a table where the plugin looks for them
+// (a bundle with 'Jaws/Jaws.vpx' and 'Jaws/jaws/screens.pup'): moved to the shared pack folder
+int TableLibrary::MoveStrayTablePacks(const fs::path& tableFolder) const
+{
+   int moved = 0;
+   for (const fs::path& pack : FindPupPacks(tableFolder)) {
+      if (ToLower(pack.parent_path().filename().string()) == "pupvideos")
          continue;
-      // The plugin finds packs ignoring case: an existing pack with the same name in another case is replaced too
-      for (auto it = fs::directory_iterator(m_config.sharedPupVideosPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec)) {
-         if (it->is_directory(ec) && lower(it->path().filename().string()) == lower(name)) {
-            Log(LogLevel::Info, "Replacing the PinUP Player pack " + it->path().string());
-            std::error_code removeEc;
-            fs::remove_all(it->path(), removeEc);
-            break;
-         }
+      if (pack.lexically_normal() == tableFolder.lexically_normal()) {
+         Log(LogLevel::Warn, "The files of a PinUP Player pack are next to the table in " + tableFolder.string() + ": they are left there");
+         continue;
       }
-      const fs::path dest = m_config.sharedPupVideosPath / name;
-      fs::rename(pack, dest, ec);
-      if (ec) { // The shared folder may be on another file system (a PinUP Player folder defined by the user)
-         ec.clear();
-         fs::copy(pack, dest, fs::copy_options::recursive, ec);
-         if (ec) {
-            Log(LogLevel::Error, "Failed to move the PinUP Player pack " + pack.string() + " to " + dest.string() + ": " + ec.message());
-            continue;
-         }
-         fs::remove_all(pack, ec);
-      }
-      Log(LogLevel::Info, "PinUP Player pack '" + name + "' added to " + m_config.sharedPupVideosPath.string());
-      ApplyVrPupOptions(dest);
-      moved++;
+      if (MovePupPack(pack, pack.filename().string()))
+         moved++;
    }
    return moved;
+}
+
+// The ROMs of a bundle that PinMAME would not find: it only looks in its ROM folder and in the 'pinmame/roms' folder along a table. They are
+// the archives of a 'roms' folder (a Windows install's 'VPinMAME/roms', or a 'roms' folder beside the table) and, in a table folder, the
+// archives next to a table. They go to the 'pinmame/roms' folder of the table when it has one (PinMAME then only looks there), otherwise to
+// the ROM folder of PinMAME.
+int TableLibrary::MoveBundleRoms(const fs::path& folder, bool isTableFolder)
+{
+   if (m_config.romsPath.empty())
+      return 0;
+   std::error_code ec;
+   fs::path dest = m_config.romsPath;
+   std::set<fs::path> tableDirs;
+   if (isTableFolder) {
+      for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+         if (it->is_directory(ec) && ToLower(it->path().filename().string()) == "pinmame")
+            for (auto sub = fs::directory_iterator(it->path(), ec); !ec && sub != fs::directory_iterator(); sub.increment(ec))
+               if (sub->is_directory(ec) && ToLower(sub->path().filename().string()) == "roms")
+                  dest = sub->path();
+      ec.clear();
+      for (const fs::path& table : ListTableFiles(folder, 0))
+         tableDirs.insert(table.parent_path().lexically_normal());
+   }
+   std::vector<fs::path> roms;
+   for (auto it = fs::recursive_directory_iterator(folder, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+      if (it->is_directory(ec) && (IsHidden(it->path()) || ToLower(it->path().filename().string()) == "pupvideos")) {
+         it.disable_recursion_pending(); // Media of a pack are no ROMs
+         continue;
+      }
+      const fs::path& path = it->path();
+      if (!it->is_regular_file(ec) || IsHidden(path) || !(HasExtension(path, ".zip") || HasExtension(path, ".7z")))
+         continue;
+      const fs::path parent = path.parent_path().lexically_normal();
+      if (parent == dest.lexically_normal())
+         continue;
+      if (ToLower(parent.filename().string()) == "roms" || tableDirs.contains(parent))
+         roms.push_back(path);
+   }
+   int moved = 0;
+   for (const fs::path& rom : roms)
+      if (MoveRom(rom, dest))
+         moved++;
+   return moved;
+}
+
+// A ROM archive moved to 'destFolder', replacing a ROM of the same name, and no longer missing
+bool TableLibrary::MoveRom(const fs::path& rom, const fs::path& destFolder)
+{
+   std::error_code ec;
+   fs::create_directories(destFolder, ec);
+   const fs::path dest = destFolder / rom.filename();
+   if (fs::exists(dest, ec) && !fs::equivalent(dest, rom, ec))
+      fs::remove(dest, ec);
+   ec.clear();
+   fs::rename(rom, dest, ec);
+   if (ec) { // The ROM folder may be on another file system (a PinMAME folder defined by the user)
+      ec.clear();
+      fs::copy_file(rom, dest, fs::copy_options::overwrite_existing, ec);
+      if (ec) {
+         Log(LogLevel::Error, "Failed to move the ROM " + rom.string() + " to " + dest.string() + ": " + ec.message());
+         return false;
+      }
+      fs::remove(rom, ec);
+   }
+   Log(LogLevel::Info, "ROM " + rom.filename().string() + " added to " + destFolder.string());
+   OnFileAdded(rom.filename().string());
+   return true;
+}
+
+// The archives dropped in the tables folder that hold neither a table nor a pack (see Rescan), named as a ROM which a table names or which
+// was reported missing: a ROM uploaded with the tables instead of the ROMs, moved to the ROM folder of PinMAME
+void TableLibrary::MoveRootRoms(const std::vector<Table>& tables)
+{
+   if (m_config.romsPath.empty() || m_rejectedArchives.empty())
+      return;
+   std::set<string> romNames;
+   for (const Table& table : tables)
+      if (!table.rom.empty())
+         romNames.insert(ToLower(table.rom));
+   for (const MissingRom& missing : GetMissingRoms())
+      romNames.insert(ToLower(fs::path(missing.rom).stem().string()));
+   std::error_code ec;
+   std::vector<fs::path> roms;
+   for (auto it = fs::directory_iterator(m_config.tablesPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec)) {
+      const fs::path& path = it->path();
+      if (it->is_regular_file(ec) && !IsHidden(path) && (HasExtension(path, ".zip") || HasExtension(path, ".7z")) && romNames.contains(ToLower(path.stem().string())))
+         roms.push_back(path);
+   }
+   bool changed = false;
+   for (const fs::path& rom : roms) {
+      const string archiveId = rom.string() + '|' + std::to_string(FileModifiedAt(rom).value_or(0)) + '|' + std::to_string(fs::file_size(rom, ec));
+      if (!m_rejectedArchives.contains(archiveId)) // Not looked into yet (being uploaded, or newer than the last scan)
+         continue;
+      if (MoveRom(rom, m_config.romsPath)) {
+         m_rejectedArchives.erase(archiveId);
+         changed = true;
+      }
+   }
+   if (changed)
+      SaveRejectedArchives();
+}
+
+// rejected-archives.json, along tables.json: the archives of the tables folder that hold neither a table nor a pack, so that they are not
+// extracted again at each start
+fs::path TableLibrary::GetRejectedArchivesPath() const { return m_config.jsonPath.parent_path() / "rejected-archives.json"; }
+
+void TableLibrary::LoadRejectedArchives()
+{
+   m_rejectedArchivesLoaded = true;
+   std::ifstream file(GetRejectedArchivesPath());
+   if (!file)
+      return;
+   try {
+      std::error_code ec;
+      for (const string& archiveId : nlohmann::json::parse(file).value("archives", std::vector<string>()))
+         if (fs::exists(archiveId.substr(0, archiveId.find('|')), ec)) // Forget the archives removed since
+            m_rejectedArchives.insert(archiveId);
+   } catch (const std::exception& e) {
+      Log(LogLevel::Warn, "Failed to parse " + GetRejectedArchivesPath().string() + ": " + e.what());
+   }
+}
+
+void TableLibrary::SaveRejectedArchives() const
+{
+   std::error_code ec;
+   if (m_rejectedArchives.empty()) {
+      fs::remove(GetRejectedArchivesPath(), ec);
+      return;
+   }
+   fs::create_directories(GetRejectedArchivesPath().parent_path(), ec);
+   std::ofstream file(GetRejectedArchivesPath(), std::ios::trunc);
+   file << nlohmann::json { { "archives", m_rejectedArchives } }.dump(2);
+   if (!file.good())
+      Log(LogLevel::Error, "Failed to save " + GetRejectedArchivesPath().string());
 }
 
 // The VR layout of the packs in 'folder', for the packs that have one (their option scripts cannot run here, see PupPackOptions)
@@ -668,7 +834,7 @@ std::vector<Table> TableLibrary::ImportVPX(const fs::path& path, const std::vect
    return { CreateTable(destFile, tables) };
 }
 
-std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks)
+std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks, int* importedRoms)
 {
    if (!m_config.unzip) {
       Log(LogLevel::Error, "No unzip support, unable to import " + path.string());
@@ -708,6 +874,7 @@ std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::
       }
 
       std::vector<Table> known = tables;
+      int packs = 0, roms = 0;
       for (const fs::path& sourceFolder : sourceFolders) {
          // Named after the first table located directly in the folder
          std::vector<fs::path> files = ListTableFiles(sourceFolder, 0);
@@ -722,13 +889,18 @@ std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::
             imported.push_back(CreateTable(file, known));
             known.push_back(imported.back());
          }
+         packs += MoveStrayTablePacks(destFolder);
          ApplyVrPupOptions(destFolder); // Packs of the table in its folder ('pupvideos/<pack>')
+         roms += MoveBundleRoms(destFolder, true);
       }
 
-      // The PinUP Player packs left once the table folders are moved (packs in a table folder stay with their table)
-      const int packs = MovePupPacks(tempFolder, path.stem().string());
+      // The PinUP Player packs left once the table folders are moved (packs in a table's 'pupvideos' folder stay with their table), then the ROMs
+      packs += MovePupPacks(tempFolder, path.stem().string());
+      roms += MoveBundleRoms(tempFolder, false);
       if (importedPacks)
          *importedPacks = packs;
+      if (importedRoms)
+         *importedRoms = roms;
    }
 
    fs::remove_all(tempFolder, ec);
