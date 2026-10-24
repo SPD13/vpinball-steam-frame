@@ -8,6 +8,7 @@
 #include "doctest.h"
 
 #include "../src/steamframe/TableLibrary.h"
+#include "../src/steamframe/PupPackOptions.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -608,6 +609,58 @@ TEST_CASE("TableLibrary: tables know whether their PinUP Player pack is installe
    CHECK(reads == 3);
    for (const Table& table : library.GetTables())
       CHECK(table.hasPupPack);
+}
+
+TEST_CASE("PupPackOptions: the layout batch files of a pack are applied without running them")
+{
+   Fixture f;
+   const fs::path pack = f.tables / "pinupsystem" / "pupvideos" / "DarkestDungeon";
+   Fixture::Touch(pack / "screens.pup", "default screens");
+   Fixture::Touch(pack / "playlists.pup", "default playlists");
+   Fixture::Touch(pack / "ScreenType.txt", "99\r\n");
+   Fixture::Touch(pack / "pupinit.bat", "rem");
+   Fixture::Touch(pack / "PuP-Pack_Options" / "3 Screen - VR" / "screens.pup", "vr screens");
+   Fixture::Touch(pack / "PuP-Pack_Options" / "3 Screen - VR" / "playlists.pup", "vr playlists");
+   Fixture::Touch(pack / "PuP-Pack_Options" / "Desktop" / "screens.pup", "desktop screens");
+   Fixture::Touch(pack / "PuP-Pack_Options" / "Desktop" / "extra.png", "png");
+   // The batch files of the Darkest Dungeon pack, and two that can not be done here
+   Fixture::Touch(pack / "3 Screen - VR.bat", "rem echo off\r\nxcopy /y \"PuP-Pack_Options\\3 Screen - VR\\*.pup\"\r\ndel pupinit.bat\r\necho 2 > ScreenType.txt\r\n");
+   Fixture::Touch(pack / "1 - Desktop.bat", "rem echo off\r\nxcopy /y \"pup-pack_options\\Desktop\\*\"\r\necho 2 > ScreenType.txt\"\r\n");
+   Fixture::Touch(pack / "EditThisPuPPack.bat", "for %%* in (.) do SET packname=%%~n*\r\ncd ..\r\nStart PinUPPackEditor.exe %packname%\r\n");
+   Fixture::Touch(pack / "Escape.bat", "copy ..\\..\\secret.txt .\r\n");
+
+   CHECK(PupPackOptions::IsPack(pack));
+   std::map<string, PupPackOptions::Option> options;
+   for (const PupPackOptions::Option& option : PupPackOptions::List(pack))
+      options[option.name] = option;
+   REQUIRE(options.size() == 5); // With pupinit.bat, which only has a remark
+   CHECK(options["3 Screen - VR"].supported);
+   CHECK(options["3 Screen - VR"].recommended);
+   CHECK(options["1 - Desktop"].supported);
+   CHECK_FALSE(options["1 - Desktop"].recommended);
+   CHECK_FALSE(options["EditThisPuPPack"].supported);
+   CHECK_FALSE(options["Escape"].supported);
+   CHECK_FALSE(options["pupinit"].supported);
+   CHECK(PupPackOptions::Apply(pack, "Escape") != "");
+
+   CHECK(PupPackOptions::Apply(pack, "3 Screen - VR") == "");
+   CHECK(Fixture::Read(pack / "screens.pup") == "vr screens");
+   CHECK(Fixture::Read(pack / "playlists.pup") == "vr playlists");
+   CHECK(Fixture::Read(pack / "ScreenType.txt") == "2 \r\n"); // As cmd writes it
+   CHECK(fs::exists(pack / "pupinit.bat")); // Batch files are never deleted
+   CHECK(PupPackOptions::GetApplied(pack) == "3 Screen - VR");
+
+   // Another option, then back to the pack as uploaded
+   CHECK(PupPackOptions::Apply(pack, "1 - Desktop") == "");
+   CHECK(Fixture::Read(pack / "screens.pup") == "desktop screens");
+   CHECK(fs::exists(pack / "extra.png"));
+   CHECK(PupPackOptions::Restore(pack) == "");
+   CHECK(Fixture::Read(pack / "screens.pup") == "default screens");
+   CHECK(Fixture::Read(pack / "playlists.pup") == "default playlists");
+   CHECK(Fixture::Read(pack / "ScreenType.txt") == "99\r\n");
+   CHECK_FALSE(fs::exists(pack / "extra.png"));
+   CHECK_FALSE(fs::exists(pack / ".options-backup"));
+   CHECK(PupPackOptions::GetApplied(pack) == "");
 }
 
 #endif
