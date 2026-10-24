@@ -411,6 +411,14 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
       if (it->is_regular_file(ec) && !IsHidden(it->path()) && IsArchive(it->path()))
          archives.push_back(it->path());
    }
+   // PinUP Player packs uploaded to the shared pack folder
+   if (!m_config.sharedPupVideosPath.empty()) {
+      std::error_code packEc;
+      for (auto it = fs::directory_iterator(m_config.sharedPupVideosPath, packEc); !packEc && it != fs::directory_iterator(); it.increment(packEc)) {
+         if (it->is_regular_file(packEc) && !IsHidden(it->path()) && IsArchive(it->path()))
+            archives.push_back(it->path());
+      }
+   }
    std::sort(archives.begin(), archives.end());
    for (const fs::path& archive : archives) {
       const int64_t modifiedAt = FileModifiedAt(archive).value_or(0);
@@ -419,15 +427,16 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
       const string archiveId = archive.string() + '|' + std::to_string(modifiedAt) + '|' + std::to_string(fs::file_size(archive, ec));
       if (m_rejectedArchives.contains(archiveId))
          continue;
-      const std::vector<Table> imported = ImportArchive(archive, tables, nullptr);
-      if (imported.empty()) {
+      int importedPacks = 0;
+      const std::vector<Table> imported = ImportArchive(archive, tables, nullptr, &importedPacks);
+      if (imported.empty() && importedPacks == 0) {
          Log(LogLevel::Warn, "No table imported from " + archive.string() + ", the file is left untouched");
          m_rejectedArchives.insert(archiveId);
          continue;
       }
       tables.insert(tables.end(), imported.begin(), imported.end());
       fs::remove(archive, ec);
-      Log(LogLevel::Info, "Imported " + std::to_string(imported.size()) + " table(s) from " + archive.string());
+      Log(LogLevel::Info, "Imported " + std::to_string(imported.size()) + " table(s) and " + std::to_string(importedPacks) + " PinUP Player pack(s) from " + archive.string());
    }
 
    progress(70, "Scanning for tables...");
@@ -493,6 +502,68 @@ void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
          if (localPacks.contains(lower(name)) || sharedPacks.contains(lower(name)))
             table.hasPupPack = true;
    }
+}
+
+// The PinUP Player packs in 'folder' (the folders holding screens.pup, playlists.pup or triggers.pup) moved to the shared pack folder, replacing
+// a pack of the same name. A pack at the root of 'folder' (an archive of the pack's content) is named 'rootName'.
+int TableLibrary::MovePupPacks(const fs::path& folder, const string& rootName) const
+{
+   if (m_config.sharedPupVideosPath.empty())
+      return 0;
+   const auto lower = [](string s) {
+      std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      return s;
+   };
+   std::error_code ec;
+   std::set<fs::path> roots;
+   for (auto it = fs::recursive_directory_iterator(folder, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+      if (!it->is_regular_file(ec))
+         continue;
+      const string name = lower(it->path().filename().string());
+      if (name == "screens.pup" || name == "playlists.pup" || name == "triggers.pup")
+         roots.insert(it->path().parent_path());
+   }
+   // A pack nested in another one moves with it (the set is sorted, so parents come first)
+   std::vector<fs::path> packs;
+   for (const fs::path& root : roots) {
+      const bool covered = std::any_of(packs.begin(), packs.end(), [&](const fs::path& parent) {
+         const fs::path relative = root.lexically_relative(parent);
+         return !relative.empty() && *relative.begin() != "..";
+      });
+      if (!covered)
+         packs.push_back(root);
+   }
+
+   int moved = 0;
+   fs::create_directories(m_config.sharedPupVideosPath, ec);
+   for (const fs::path& pack : packs) {
+      const string name = pack.lexically_normal() == folder.lexically_normal() ? rootName : pack.filename().string();
+      if (name.empty() || name == "." || name == "..")
+         continue;
+      // The plugin finds packs ignoring case: an existing pack with the same name in another case is replaced too
+      for (auto it = fs::directory_iterator(m_config.sharedPupVideosPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec)) {
+         if (it->is_directory(ec) && lower(it->path().filename().string()) == lower(name)) {
+            Log(LogLevel::Info, "Replacing the PinUP Player pack " + it->path().string());
+            std::error_code removeEc;
+            fs::remove_all(it->path(), removeEc);
+            break;
+         }
+      }
+      const fs::path dest = m_config.sharedPupVideosPath / name;
+      fs::rename(pack, dest, ec);
+      if (ec) { // The shared folder may be on another file system (a PinUP Player folder defined by the user)
+         ec.clear();
+         fs::copy(pack, dest, fs::copy_options::recursive, ec);
+         if (ec) {
+            Log(LogLevel::Error, "Failed to move the PinUP Player pack " + pack.string() + " to " + dest.string() + ": " + ec.message());
+            continue;
+         }
+         fs::remove_all(pack, ec);
+      }
+      Log(LogLevel::Info, "PinUP Player pack '" + name + "' added to " + m_config.sharedPupVideosPath.string());
+      moved++;
+   }
+   return moved;
 }
 
 void TableLibrary::RescanAsync(int settleSeconds)
@@ -569,7 +640,7 @@ std::vector<Table> TableLibrary::ImportVPX(const fs::path& path, const std::vect
    return { CreateTable(destFile, tables) };
 }
 
-std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress)
+std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks)
 {
    if (!m_config.unzip) {
       Log(LogLevel::Error, "No unzip support, unable to import " + path.string());
@@ -624,6 +695,11 @@ std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::
             known.push_back(imported.back());
          }
       }
+
+      // The PinUP Player packs left once the table folders are moved (packs in a table folder stay with their table)
+      const int packs = MovePupPacks(tempFolder, path.stem().string());
+      if (importedPacks)
+         *importedPacks = packs;
    }
 
    fs::remove_all(tempFolder, ec);
