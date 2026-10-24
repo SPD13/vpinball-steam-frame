@@ -80,8 +80,15 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       config.readPupUse = [](const std::filesystem::path& tablePath)
       {
          const PupPacks::TableUse use = PupPacks::GetTableUse(PupPacks::ReadTableScript(tablePath));
-         return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names };
+         return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names, use.rom };
       };
+      // Where ROMs found in uploads go: the ROM folder of PinMAME, as SetupSharedPinMAMEFolder chooses it (the user's PinMAME folder, the
+      // one of the home folder, or the shared one of the tables)
+      const string pinmameFolder = g_settingsService.GetAppSettings().GetString(GetPinMAMEPathPropId());
+      if (const char* home = getenv("HOME"); pinmameFolder.empty() && home != nullptr && DirExists(std::filesystem::path(home) / ".pinmame" / "roms"))
+         config.romsPath = std::filesystem::path(home) / ".pinmame" / "roms";
+      else
+         config.romsPath = (pinmameFolder.empty() ? config.tablesPath / "pinmame" : std::filesystem::path(pinmameFolder)) / "roms";
 #ifdef VPX_TABLE_WEBSERVER
       config.zip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Zip(source, dest, callback); };
       config.unzip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Extract(source, dest, callback); };
