@@ -18,6 +18,9 @@
 #include "steamframe/ScoreTracker.h"
 #include "steamframe/TableLibrary.h"
 #endif
+#ifdef VPX_XR_SIM
+#include "steamframe/xrsim/XRSim.h"
+#endif
 #include "core/VPXPluginAPIImpl.h"
 #include "parts/ball.h"
 #include "parts/flasher.h"
@@ -2620,6 +2623,9 @@ void Player::PrepareFrame()
       m_scoreTracker->Update();
    if (m_cabinetDisplays)
       m_cabinetDisplays->Update();
+#endif
+#ifdef VPX_XR_SIM
+   XRSim::UpdateScript(this); // Scripted session of the simulated OpenXR runtime of the macOS build (src/steamframe/xrsim)
 #endif
 
    m_overall_frames++; // This causes the next VPinMAME <-> VPX sync to update light status which can be heavy since it needs to perform PWM integration of all lights

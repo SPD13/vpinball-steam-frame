@@ -14,7 +14,8 @@
 //   trig l|r [ms]                       pulls the trigger (click on the UI), released after ms (default 150)
 //   input <path> <value>                any input of the Steam Frame controller profile
 //   key <scancode> [ms], keydown <scancode>, keyup <scancode>   keyboard
-//   menu [page], table <name>, exit, autoflip 0|1, lobbyonscore, code, mark <label>
+//   waitfile <path>                     the scene time stops until the file exists
+//   menu [page], table <name>, exit, autoflip 0|1 [keyboard] (flips with the triggers), lobbyonscore, code, mark <label>
 // Marks are logged as "XRSIM-MARK <epoch ms> <label>" to align the recorded video with the script.
 
 #include "core/stdafx.h"
@@ -51,7 +52,7 @@ struct Runner
    int scene = -1;
    uint32_t start = 0;
    size_t next = 0;
-   bool autoflip = false, lobbyOnScore = false;
+   bool autoflip = false, autoflipKeyboard = false, lobbyOnScore = false;
    uint32_t scoredAt = 0;
    uint32_t flipRelease[2] = { 0, 0 }, flipCooldown[2] = { 0, 0 };
    vector<std::pair<uint32_t, uint16_t>> keyReleases;
@@ -95,6 +96,8 @@ void Parse(Runner& r, const char* path)
       if (!r.scenes.empty())
          r.scenes.back().push_back(c);
    }
+   for (auto& scene : r.scenes) // Commands run in time order, whatever their order in the file
+      std::ranges::stable_sort(scene, {}, &Command::t);
    PLOGI << "XR simulator script " << path << ": " << r.scenes.size() << " scenes";
 }
 
@@ -118,18 +121,25 @@ void AutoFlip(Runner& r, Player* player, uint32_t now)
             want[side] = true;
       }
    }
+   // The controller triggers flip, like a player does (the controller models show them pulled), or the keyboard
+   const auto press = [&](int side, bool down)
+   {
+      if (r.autoflipKeyboard)
+         im.PushButtonEvent(im.GetKeyboardDeviceId(), side == 0 ? SDL_SCANCODE_LSHIFT : SDL_SCANCODE_RSHIFT, SDL_GetTicksNS(), down);
+      else
+         XRSim::SetInput(side == 0 ? "/user/hand/left/input/trigger/value" : "/user/hand/right/input/trigger/value", down ? 1.f : 0.f);
+   };
    for (int s = 0; s < 2; s++)
    {
-      const uint16_t sc = s == 0 ? SDL_SCANCODE_LSHIFT : SDL_SCANCODE_RSHIFT;
       if (r.flipRelease[s] != 0 && now >= r.flipRelease[s])
       {
-         im.PushButtonEvent(im.GetKeyboardDeviceId(), sc, SDL_GetTicksNS(), false);
+         press(s, false);
          r.flipRelease[s] = 0;
          r.flipCooldown[s] = now + 260;
       }
       else if (want[s] && r.flipRelease[s] == 0 && now >= r.flipCooldown[s])
       {
-         im.PushButtonEvent(im.GetKeyboardDeviceId(), sc, SDL_GetTicksNS(), true);
+         press(s, true);
          r.flipRelease[s] = now + 190;
       }
    }
@@ -235,8 +245,11 @@ void UpdateScript(Player* player)
             im.PushButtonEvent(im.GetKeyboardDeviceId(), static_cast<uint16_t>(c.Arg(0)), SDL_GetTicksNS(), true);
          else if (c.op == "keyup")
             im.PushButtonEvent(im.GetKeyboardDeviceId(), static_cast<uint16_t>(c.Arg(0)), SDL_GetTicksNS(), false);
-         else if (c.op == "autoflip")
+         else if (c.op == "autoflip") // autoflip 0|1 [keyboard]
+         {
             r.autoflip = c.Arg(0) != 0.f;
+            r.autoflipKeyboard = c.args.size() > 1 && c.args[1] == "keyboard";
+         }
          else if (c.op == "lobbyonscore")
             r.lobbyOnScore = true;
          else if (c.op == "menu")
@@ -265,6 +278,17 @@ void UpdateScript(Player* player)
             PLOGI << "XRSIM-MARK " << Epoch() << " table-" << (found ? "go " : "notfound ") << name;
             if (!found)
                r.next = cmds.size();
+         }
+         else if (c.op == "waitfile" && !c.args.empty())
+         {
+            // The scene time stops here until the file exists (written by another tool, a browser script for example)
+            if (!std::filesystem::exists(c.args[0]))
+            {
+               r.next--;
+               r.start = now - static_cast<uint32_t>(c.t * 1000.f);
+               break;
+            }
+            PLOGI << "XRSIM-MARK " << Epoch() << " waited-" << std::filesystem::path(c.args[0]).filename().string();
          }
          else if (c.op == "exit")
          {

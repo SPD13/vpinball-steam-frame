@@ -1,0 +1,31 @@
+diff -ru pa/src/renderer_mtl.cpp pb/src/renderer_mtl.cpp
+--- a/src/renderer_mtl.cpp	2026-10-23 19:02:15
++++ b/src/renderer_mtl.cpp	2026-10-23 19:02:15
+@@ -3320,7 +3320,7 @@
+ 				const uint64_t pt = _state & BGFX_STATE_PT_MASK;
+ 				pd->setInputPrimitiveTopology(
+ 					  BGFX_STATE_PT_POINTS == pt ? MTL::PrimitiveTopologyClassPoint
+-					: !layeredTarget            ? MTL::PrimitiveTopologyClassUnspecified
++					: !layeredTarget && !program.m_vsh->m_writesLayer ? MTL::PrimitiveTopologyClassUnspecified
+ 					: BGFX_STATE_PT_LINES     == pt
+ 					||BGFX_STATE_PT_LINESTRIP == pt ? MTL::PrimitiveTopologyClassLine
+ 					:                            MTL::PrimitiveTopologyClassTriangle
+@@ -4000,6 +4000,7 @@
+ 		bx::read(&reader, shaderSize, &err);
+ 
+ 		const char* code = (const char*)reader.getDataPtr();
++		m_writesLayer = NULL != bx::strFind(bx::StringView(code, shaderSize), "render_target_array_index").getPtr();
+ 		bx::skip(&reader, shaderSize+1);
+ 
+ 		if (shaderSize >= 4
+diff -ru pa/src/renderer_mtl.h pb/src/renderer_mtl.h
+--- a/src/renderer_mtl.h	2026-10-23 19:02:15
++++ b/src/renderer_mtl.h	2026-10-23 19:02:15
+@@ -337,6 +337,7 @@
+ 
+ 		MTL::Library*  m_lib;
+ 		MTL::Function* m_function;
++		bool m_writesLayer = false; // Writes the render target array index (stereo shaders), which needs a topology class even on single layer targets
+ 		mutable FunctionMap m_functions;
+ 		uint32_t m_hash;
+ 		uint16_t m_numThreads[3];

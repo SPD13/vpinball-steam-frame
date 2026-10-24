@@ -16,9 +16,6 @@
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/vrui/VRUI.h"
 #endif
-#ifdef VPX_XR_SIM
-#include "steamframe/xrsim/XRSim.h"
-#endif
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl3.h"
@@ -360,10 +357,6 @@ void LiveUI::NewFrame()
          std::swap(io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
       }
    }
-
-   #ifdef VPX_XR_SIM
-   XRSim::UpdateScript(m_player); // Steam Frame Edition: scripted session of the simulated OpenXR runtime of the macOS build
-   #endif
 
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    UpdateVRPointer(); // Steam Frame Edition: a VR controller points at the in-game UI (src/steamframe/vrui/Pointer.cpp)
