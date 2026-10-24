@@ -10,6 +10,7 @@
 #include "PUPPinDisplay.h"
 
 #include "LibAv.h"
+#include "PUPMediaPlayer.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 // PinUp Player plugin
@@ -62,6 +63,7 @@ static std::unique_ptr<PUPManager> pupManager;
 LPI_IMPLEMENT_CPP // Implement shared log support
 
 MSGPI_FOLDER_VAL_SETTING(pupPathProp, "PUPFolder", "PinUp Player Folder", "", true, "", 1024);
+MSGPI_BOOL_VAL_SETTING(hardwareDecodingProp, "HardwareDecoding", "Hardware Video Decoding", "Decode videos with the hardware decoders of the system when there are (V4L2 on Linux)", true, false);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -293,6 +295,8 @@ MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, const MsgPlug
    scriptApi->SetCOMObjectOverride("PinUpPlayer.PinDisplay", PUP_PinDisplay_SCD);
 
    msgApi->RegisterSetting(endpointId, &pupPathProp);
+   msgApi->RegisterSetting(endpointId, &hardwareDecodingProp);
+   PUPMediaPlayer::SetHardwareDecoding(hardwareDecodingProp_Get() != 0);
    std::filesystem::path pupFolder = PluginStrings::PathFromUTF8OrNative(pupPathProp_Get());
    std::filesystem::path rootPath = find_case_insensitive_directory_path(pupFolder / "pupvideos"sv);
    if (rootPath.empty())
