@@ -56,7 +56,12 @@ namespace {
    constexpr int STATUS_CONFLICT = 409;
    constexpr int STATUS_INTERNAL_SERVER_ERROR = 500;
 
+#if defined(VPX_STEAM_FRAME)
+   constexpr size_t MAX_UPLOAD_SIZE = size_t(64) * 1024 * 1024 * 1024; // PinUP Player packs are often over 2GB: the free space is checked instead (see Upload)
+   constexpr int STATUS_INSUFFICIENT_STORAGE = 507;
+#else
    constexpr size_t MAX_UPLOAD_SIZE = size_t(2) * 1024 * 1024 * 1024; // 2GB
+#endif
 
    constexpr const char* PAIRING_COOKIE = "vpx_pairing";
    constexpr int MAX_FAILED_PAIRINGS = 5;
@@ -572,6 +577,23 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
    long length = lengthStr[0] ? strtol(lengthStr, nullptr, 10) : 0;
 
    const std::filesystem::path path = BuildTablePath(q);
+
+#if defined(VPX_STEAM_FRAME)
+   // Large uploads (PinUP Player packs) are refused at their first chunk when the device does not have the room for them
+   if (offset == 0 && length > 0) {
+      std::error_code spaceError;
+      std::filesystem::path existing = path;
+      while (!existing.empty() && !std::filesystem::exists(existing, spaceError) && existing.has_parent_path() && existing.parent_path() != existing)
+         existing = existing.parent_path();
+      const std::filesystem::space_info space = std::filesystem::space(existing, spaceError);
+      constexpr uintmax_t margin = uintmax_t(256) * 1024 * 1024;
+      if (!spaceError && space.available < static_cast<uintmax_t>(length) + margin) {
+         PLOGE.printf("Not enough free space to upload %s: %lld MB needed, %lld MB free", file.c_str(), (long long)(length / (1024 * 1024)), (long long)(space.available / (1024 * 1024)));
+         mg_http_reply(c, STATUS_INSUFFICIENT_STORAGE, "", "Not enough free space on the device for %s", file.c_str());
+         return;
+      }
+   }
+#endif
 
    // Chunks are appended in a hidden staging folder, and the file is moved in place when complete: an interrupted transfer never leaves a truncated table that would be listed (and played)
    std::error_code ec;
