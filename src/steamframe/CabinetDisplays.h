@@ -100,6 +100,7 @@ private:
    void ApplyPlacement(Surface surface);
    void LoadPlacements();
    bool FindDMDAnchor(Rect& rect);
+   bool FindCabinetBackglass(Rect& rect) const;
    Rect GetDefaultBackglassRect() const;
    static Rect GetFlasherRect(const Flasher* flasher);
    static float GetAspect(int aspectIndex);

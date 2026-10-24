@@ -77,6 +77,17 @@ vec3 RotateDirection(const vec3& v, float rotX, float rotY, float rotZ)
    return rot.MultiplyVectorNoTranslate(v);
 }
 
+// The vertices of a primitive, in table space
+vector<vec3> GetPrimitiveVertices(Primitive* primitive)
+{
+   vector<vec3> vertices;
+   const Matrix3D& transform = primitive->RecalculateMatrices();
+   vertices.reserve(primitive->m_mesh.m_vertices.size());
+   for (const Vertex3D_NoTex2& v : primitive->m_mesh.m_vertices)
+      vertices.push_back(transform * vec3(v.x, v.y, v.z));
+   return vertices;
+}
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -269,11 +280,9 @@ bool CabinetDisplays::FindDMDAnchor(Rect& rect)
       Primitive* const primitive = static_cast<Primitive*>(part);
       if (primitive->m_mesh.m_vertices.empty())
          continue;
-      const Matrix3D& transform = primitive->RecalculateMatrices();
       vec3 minV(FLT_MAX, FLT_MAX, FLT_MAX), maxV(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-      for (const Vertex3D_NoTex2& v : primitive->m_mesh.m_vertices)
+      for (const vec3& p : GetPrimitiveVertices(primitive))
       {
-         const vec3 p = transform * vec3(v.x, v.y, v.z);
          minV = vec3(std::min(minV.x, p.x), std::min(minV.y, p.y), std::min(minV.z, p.z));
          maxV = vec3(std::max(maxV.x, p.x), std::max(maxV.y, p.y), std::max(maxV.z, p.z));
       }
@@ -284,6 +293,64 @@ bool CabinetDisplays::FindDMDAnchor(Rect& rect)
       rect.center = vec3(0.5f * (minV.x + maxV.x), maxV.y, 0.5f * (minV.z + maxV.z));
       rect.rotX = -90.f;
       PLOGI << "[CabinetDisplays] DMD placed over the primitive '" << primitive->GetName() << '\'';
+      return true;
+   }
+   return false;
+}
+
+// The glass of the backbox of a VR cabinet: the primitive PinCab_Backglass of the VPW cabinets, standing above the playfield and facing the
+// player. The rectangle lies on its front face, following its tilt.
+bool CabinetDisplays::FindCabinetBackglass(Rect& rect) const
+{
+   PinTable* const table = m_player->m_ptable;
+   for (IEditable* part : table->GetParts())
+   {
+      if (part->GetItemType() != eItemPrimitive || lowerCase(part->GetName()) != "pincab_backglass"s)
+         continue;
+      Primitive* const primitive = static_cast<Primitive*>(part);
+      const vector<vec3> vertices = GetPrimitiveVertices(primitive);
+      if (vertices.size() < 3)
+         continue;
+      vec3 minV(FLT_MAX, FLT_MAX, FLT_MAX), maxV(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+      vec3 mean(0.f, 0.f, 0.f);
+      for (const vec3& p : vertices)
+      {
+         minV = vec3(std::min(minV.x, p.x), std::min(minV.y, p.y), std::min(minV.z, p.z));
+         maxV = vec3(std::max(maxV.x, p.x), std::max(maxV.y, p.y), std::max(maxV.z, p.z));
+         mean = mean + p;
+      }
+      mean = mean * (1.f / static_cast<float>(vertices.size()));
+      // An upright glass, wider than deep, above the glass of the playfield
+      const float width = maxV.x - minV.x, depth = maxV.y - minV.y, tall = maxV.z - minV.z;
+      if (maxV.z < table->m_glassTopHeight || tall <= depth || width <= depth)
+         continue;
+      // Its tilt: the slope of the depth along the height (y = mean.y + slope * (z - mean.z)), then its front face (toward the player, +y)
+      float covYZ = 0.f, varZ = 0.f;
+      for (const vec3& p : vertices)
+      {
+         covYZ += (p.y - mean.y) * (p.z - mean.z);
+         varZ += (p.z - mean.z) * (p.z - mean.z);
+      }
+      const float slope = varZ > 0.f ? covYZ / varZ : 0.f;
+      float front = -FLT_MAX;
+      for (const vec3& p : vertices)
+         front = std::max(front, p.y - slope * (p.z - mean.z));
+      const float tilt = RADTOANG(atanf(fabsf(slope)));
+      if (tilt > 30.f)
+         continue;
+      // The tilt whose 'down' (local +y of the flasher) goes the way of the glass going down (y changes by -slope per unit of height)
+      const vec3 glassDown = vec3(0.f, -slope, -1.f);
+      const float rotX = RotateDirection(vec3(0.f, 1.f, 0.f), -90.f + tilt, 0.f, 0.f).Dot(glassDown)
+            >= RotateDirection(vec3(0.f, 1.f, 0.f), -90.f - tilt, 0.f, 0.f).Dot(glassDown) ? -90.f + tilt : -90.f - tilt;
+      const float midZ = 0.5f * (minV.z + maxV.z);
+      rect.width = width;
+      rect.height = tall / cosf(ANGTORAD(tilt));
+      rect.center = vec3(0.5f * (minV.x + maxV.x), front + slope * (midZ - mean.z), midZ);
+      rect.rotX = rotX;
+      rect.rotY = 0.f;
+      rect.rotZ = 0.f;
+      PLOGI << "[CabinetDisplays] Backglass placed on the glass of the cabinet '" << primitive->GetName() << "': center " << rect.center.x << ", " << rect.center.y << ", "
+            << rect.center.z << ", " << rect.width << " x " << rect.height << ", rotation " << rect.rotX;
       return true;
    }
    return false;
@@ -320,6 +387,13 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       }
    if (tableBackglass)
       m_backglass = GetFlasherRect(tableBackglass);
+   else if (Rect cabinetGlass; FindCabinetBackglass(cabinetGlass))
+   {
+      // In front of the glass, as the DMD is in front of its anchor
+      const vec3 normal = RotateDirection(vec3(0.f, 0.f, 1.f), cabinetGlass.rotX, cabinetGlass.rotY, cabinetGlass.rotZ);
+      cabinetGlass.center = cabinetGlass.center + (normal.y < 0.f ? -normal : normal) * 1.5f;
+      m_backglass = cabinetGlass;
+   }
    if (!hasTableBackglass)
    {
       m_surfaces[Backglass].anchor = m_backglass;
@@ -356,6 +430,22 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       topper.height = topper.width * 9.f / 16.f;
       const vec3 up = RotateDirection(vec3(0.f, -1.f, 0.f), topper.rotX, topper.rotY, topper.rotZ);
       topper.center = m_backglass.center + up * (0.5f * m_backglass.height + 0.5f * topper.height + 0.02f * m_backglass.height);
+      // On top of the backbox of a VR cabinet, whose frame rises above its glass
+      for (IEditable* part : m_player->m_ptable->GetParts())
+         if (part->GetItemType() == eItemPrimitive && lowerCase(part->GetName()) == "pincab_backbox"s)
+         {
+            float backboxTop = -FLT_MAX;
+            for (const vec3& p : GetPrimitiveVertices(static_cast<Primitive*>(part)))
+               backboxTop = std::max(backboxTop, p.z);
+            const float bottom = topper.center.z - 0.5f * topper.height * fabsf(up.z);
+            const float gap = 0.02f * m_backglass.height;
+            if (backboxTop != -FLT_MAX && bottom < backboxTop + gap)
+            {
+               topper.center.z += backboxTop + gap - bottom;
+               PLOGI << "[CabinetDisplays] Topper placed on top of the backbox '" << part->GetName() << "' (top " << backboxTop << "): center height " << topper.center.z;
+            }
+            break;
+         }
       m_surfaces[Topper].anchor = topper;
       m_surfaces[Topper].defaultAspect = 16.f / 9.f;
       m_surfaces[Topper].flasher = CreateFlasher(Topper);
