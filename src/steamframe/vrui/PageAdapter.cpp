@@ -306,6 +306,15 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
             }
             ImGui::SetCursorScreenPos(ImVec2(imagePos.x, imagePos.y + imageSize.y + pad * 0.6f));
             Widgets::TextEllipsis(item->m_label.c_str(), imageSize.x, hovered || selected ? Theme::kText : Theme::kTextMuted);
+            // Tag, in the bottom left corner of the image (the toggle is in the top right one)
+            if (!item->m_tileBadge.empty())
+            {
+               const ImVec2 textSize = ImGui::CalcTextSize(item->m_tileBadge.c_str());
+               const ImVec2 badgePad(Theme::Px(0.35f), Theme::Px(0.1f));
+               const ImVec2 badgeMin(imagePos.x + Theme::Px(0.3f), imagePos.y + imageSize.y - textSize.y - 2.f * badgePad.y - Theme::Px(0.3f));
+               drawList->AddRectFilled(badgeMin, badgeMin + textSize + badgePad * 2.f, Theme::kAccent, Theme::Px(0.3f));
+               drawList->AddText(badgeMin + badgePad, IM_COL32_WHITE, item->m_tileBadge.c_str());
+            }
          }
          bool toggleHovered = false;
          if (item->m_tileToggleState && item->m_tileToggleAction)
