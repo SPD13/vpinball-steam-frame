@@ -65,7 +65,12 @@ static std::unique_ptr<PUPManager> pupManager;
 LPI_IMPLEMENT_CPP // Implement shared log support
 
 MSGPI_FOLDER_VAL_SETTING(pupPathProp, "PUPFolder", "PinUp Player Folder", "", true, "", 1024);
+#ifdef VPX_STEAM_FRAME
+// On by default in the fork: the Steam Frame decodes H.264, HEVC and VP9 in hardware (elsewhere, without V4L2 decoders, videos are decoded in software as before)
+MSGPI_BOOL_VAL_SETTING(hardwareDecodingProp, "HardwareDecoding", "Hardware Video Decoding", "Decode videos with the hardware decoders of the system when there are (V4L2 on Linux)", true, true);
+#else
 MSGPI_BOOL_VAL_SETTING(hardwareDecodingProp, "HardwareDecoding", "Hardware Video Decoding", "Decode videos with the hardware decoders of the system when there are (V4L2 on Linux)", true, false);
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////
