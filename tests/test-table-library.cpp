@@ -735,4 +735,104 @@ TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when a
    CHECK(Fixture::Read(shared / "DarkestDungeon" / "screens.pup") == "default screens");
 }
 
+
+TEST_CASE("TableLibrary: the ROMs and packs of uploaded bundles go where PinMAME and PinUP Player look for them")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   const fs::path roms = f.tables / "pinmame" / "roms";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   config.romsPath = roms;
+   TableLibrary library(config);
+
+   // A ROM folder beside the table folder, and a ROM next to a table
+   Fixture::Touch(f.root / "a" / "AFM" / "AFM.vpx");
+   Fixture::Touch(f.root / "a" / "roms" / "afm_113b.zip", "afm rom");
+   Fixture::MakeZip(f.root / "a", f.tables / "afm-bundle.zip");
+   Fixture::Touch(f.root / "b" / "Tron" / "Tron.vpx");
+   Fixture::Touch(f.root / "b" / "Tron" / "trn_174h.zip", "tron rom");
+   Fixture::MakeZip(f.root / "b", f.tables / "tron-bundle.zip");
+   // A Windows install: Tables, VPinMAME/roms and PinUPSystem/PUPVideos
+   Fixture::Touch(f.root / "c" / "Tables" / "Motu.vpx");
+   Fixture::Touch(f.root / "c" / "VPinMAME" / "roms" / "motu.zip", "motu rom");
+   Fixture::Touch(f.root / "c" / "PinUPSystem" / "PUPVideos" / "motu" / "screens.pup");
+   Fixture::MakeZip(f.root / "c", f.tables / "motu-bundle.zip");
+   // A pack beside the table, in its folder but not in its 'pupvideos' folder
+   Fixture::Touch(f.root / "d" / "Jaws" / "Jaws.vpx");
+   Fixture::Touch(f.root / "d" / "Jaws" / "jaws" / "screens.pup");
+   Fixture::Touch(f.root / "d" / "Jaws" / "pupvideos" / "jaws_alt" / "screens.pup"); // Where the plugin looks: stays
+   Fixture::MakeZip(f.root / "d", f.tables / "jaws-bundle.zip");
+   // A table with its own ROM folder (PinMAME then only looks there): its other ROMs join it, its own stay
+   Fixture::Touch(f.root / "e" / "Bleach" / "Bleach.vpx");
+   Fixture::Touch(f.root / "e" / "Bleach" / "pinmame" / "roms" / "bleach.zip", "bleach rom");
+   Fixture::Touch(f.root / "e" / "Bleach" / "roms" / "bleach_sound.zip", "bleach sound");
+   Fixture::MakeZip(f.root / "e", f.tables / "bleach-bundle.zip");
+   // Only ROMs, in a 'roms' folder
+   Fixture::Touch(f.root / "g" / "roms" / "ss_15.zip", "ss rom");
+   Fixture::MakeZip(f.root / "g", f.tables / "rom-pack.zip");
+
+   library.AddMissingRom("afm_113b.zip", roms, { "afm_113b.zip" }, "AFM");
+   library.Rescan();
+   CHECK(Paths(library) == std::vector<string> { "AFM/AFM.vpx", "Bleach/Bleach.vpx", "Jaws/Jaws.vpx", "Motu/Motu.vpx", "Tron/Tron.vpx" });
+   CHECK(Fixture::Read(roms / "afm_113b.zip") == "afm rom");
+   CHECK(Fixture::Read(roms / "trn_174h.zip") == "tron rom");
+   CHECK_FALSE(fs::exists(f.tables / "Tron" / "trn_174h.zip"));
+   CHECK(Fixture::Read(roms / "motu.zip") == "motu rom");
+   CHECK(fs::exists(shared / "motu" / "screens.pup"));
+   CHECK(fs::exists(shared / "jaws" / "screens.pup"));
+   CHECK_FALSE(fs::exists(f.tables / "Jaws" / "jaws"));
+   CHECK(fs::exists(f.tables / "Jaws" / "pupvideos" / "jaws_alt" / "screens.pup"));
+   CHECK(Fixture::Read(f.tables / "Bleach" / "pinmame" / "roms" / "bleach.zip") == "bleach rom");
+   CHECK(Fixture::Read(f.tables / "Bleach" / "pinmame" / "roms" / "bleach_sound.zip") == "bleach sound");
+   CHECK(Fixture::Read(roms / "ss_15.zip") == "ss rom");
+   for (const char* bundle : { "afm-bundle.zip", "tron-bundle.zip", "motu-bundle.zip", "jaws-bundle.zip", "bleach-bundle.zip", "rom-pack.zip" })
+      CHECK_FALSE(fs::exists(f.tables / bundle));
+   CHECK(library.GetMissingRoms().empty()); // The ROM was added
+}
+
+TEST_CASE("TableLibrary: a ROM uploaded with the tables goes to the ROM folder once a table needs it")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path roms = f.tables / "pinmame" / "roms";
+   config.romsPath = roms;
+   config.readPupUse = [](const fs::path& path) {
+      TableLibrary::PupUse use;
+      if (path.stem() == "AFM")
+         use.rom = "afm_113b";
+      return use;
+   };
+   // The ROM first, alone: nothing tells yet that it is a ROM
+   Fixture::Touch(f.root / "a" / "afm_113b.bin", "rom data");
+   Fixture::MakeZip(f.root / "a", f.tables / "afm_113b.zip");
+   Fixture::Touch(f.root / "b" / "readme.txt");
+   Fixture::MakeZip(f.root / "b", f.tables / "readme.zip");
+   {
+      TableLibrary library(config);
+      library.Rescan();
+      CHECK(fs::exists(f.tables / "afm_113b.zip"));
+      CHECK(f.unzipCount == 2);
+   }
+
+   // After a restart, the archives already looked into are not extracted again; the table comes, and its ROM goes to the ROM folder
+   TableLibrary library(config);
+   Fixture::Touch(f.tables / "AFM" / "AFM.vpx");
+   library.Rescan();
+   CHECK(f.unzipCount == 2);
+   CHECK_FALSE(fs::exists(f.tables / "afm_113b.zip"));
+   CHECK(fs::exists(roms / "afm_113b.zip"));
+   CHECK(fs::exists(f.tables / "readme.zip")); // Not a ROM a table needs: left untouched
+   for (const Table& table : library.GetTables())
+      CHECK(table.rom == "afm_113b");
+
+   // A ROM reported missing is recognized as well
+   library.AddMissingRom("ss_15.zip", roms, { "ss_15.zip" }, "Scared Stiff");
+   Fixture::Touch(f.root / "c" / "ss_15.bin");
+   Fixture::MakeZip(f.root / "c", f.tables / "SS_15.zip");
+   library.Rescan();
+   CHECK(fs::exists(roms / "SS_15.zip"));
+   CHECK(library.GetMissingRoms().empty());
+}
 #endif

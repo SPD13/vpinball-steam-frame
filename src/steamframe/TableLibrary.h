@@ -35,6 +35,7 @@ struct Table {
    std::vector<std::string> pupPacks;
    int64_t pupScannedAt = 0;
    bool hasPupPack = false;
+   std::string rom; // The PinMAME ROM the script names (cGameName), read and cached along the packs
 };
 
 // Table database shared by the launchers: keeps tables.json in sync with the content of the tables folder.
@@ -56,6 +57,7 @@ public:
    struct PupUse {
       bool usesPup = false; // The script creates PinUP Player
       std::vector<std::string> names; // Candidate pack names, by order of preference
+      std::string rom; // PinMAME ROM, empty for the other tables
    };
 
    struct Config {
@@ -74,6 +76,9 @@ public:
       std::filesystem::path sharedPupVideosPath;
       // Imported packs get their VR layout when they have one, as a PinUP Player user would run its option (see PupPackOptions::ApplyRecommended)
       bool applyVrPupOptions = true;
+      // Optional: the ROM folder of PinMAME. ROMs found in imported bundles outside of a table's 'pinmame/roms' folder, and ROM archives
+      // dropped in the tables folder under the name of a ROM a table needs, are moved there (see ImportArchive and MoveRootRoms)
+      std::filesystem::path romsPath;
    };
 
    explicit TableLibrary(Config config);
@@ -170,8 +175,17 @@ private:
    mutable std::mutex m_missingRomsMutex;
    static std::optional<int> FuzzyWordScore(const std::string& word, const std::string& text);
    std::vector<Table> ImportVPX(const std::filesystem::path& path, const std::vector<Table>& tables);
-   std::vector<Table> ImportArchive(const std::filesystem::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks = nullptr);
+   std::vector<Table> ImportArchive(const std::filesystem::path& path, const std::vector<Table>& tables, const ProgressCallback& onProgress, int* importedPacks = nullptr,
+      int* importedRoms = nullptr);
    int MovePupPacks(const std::filesystem::path& folder, const std::string& rootName) const;
+   bool MovePupPack(const std::filesystem::path& pack, const std::string& name) const;
+   int MoveStrayTablePacks(const std::filesystem::path& tableFolder) const;
+   int MoveBundleRoms(const std::filesystem::path& folder, bool isTableFolder);
+   bool MoveRom(const std::filesystem::path& rom, const std::filesystem::path& destFolder);
+   void MoveRootRoms(const std::vector<Table>& tables);
+   std::filesystem::path GetRejectedArchivesPath() const;
+   void LoadRejectedArchives();
+   void SaveRejectedArchives() const;
    void ApplyVrPupOptions(const std::filesystem::path& folder) const;
 
    const Config m_config;
@@ -179,7 +193,8 @@ private:
    mutable std::mutex m_mutex; // Protects m_tables, never held during file operations
    std::vector<Table> m_tables;
    bool m_loaded = false;
-   std::set<std::string> m_rejectedArchives; // Bundles without table, to avoid extracting them at each rescan
+   std::set<std::string> m_rejectedArchives; // Bundles without table, to avoid extracting them at each rescan (kept in rejected-archives.json)
+   bool m_rejectedArchivesLoaded = false;
    std::atomic<uint64_t> m_revision { 0 };
 
    std::mutex m_workerMutex; // Protects m_worker and m_rescanPending
