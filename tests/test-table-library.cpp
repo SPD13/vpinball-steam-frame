@@ -715,6 +715,49 @@ TEST_CASE("TableLibrary: imported PinUP Player packs get their VR option")
    CHECK(PupPackOptions::GetApplied(shared / "DarkestDungeon") == "3 Screen - VR");
 }
 
+TEST_CASE("TableLibrary: a pack with its .pup files in its option folders only is one pack, set up for the VR cabinet")
+{
+   // The Austin Powers pack: no .pup file at its root, five layouts copying theirs from 'PuP-Pack_Options', none named VR
+   const std::vector<string> layouts { "Option 1 - DMD and Topper on BG", "Option 2 - DMD on BG Topper Separate", "Option 3 - BG Topper Separate",
+      "Option 4 - Topper on BG No DMD", "Option 5 - DMD on BG No Topper" };
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path shared = f.tables / "pinupsystem" / "pupvideos";
+   config.excludedPaths.push_back(f.tables / "pinupsystem");
+   config.sharedPupVideosPath = shared;
+   fs::create_directories(shared);
+   const fs::path source = f.root / "a" / "austin";
+   Fixture::Touch(source / "Topper" / "Topper.mp4");
+   Fixture::Touch(source / "PUPCapture" / "1.bmp");
+   Fixture::Touch(source / "EditThisPuPPack.bat", "for %%* in (.) do SET packname=%%~n*\r\ncd ..\r\nStart PinUPPackEditor.exe %packname%\r\n");
+   for (const string& layout : layouts) {
+      Fixture::Touch(source / "PuP-Pack_Options" / layout / "screens.pup", layout + " screens");
+      Fixture::Touch(source / "PuP-Pack_Options" / layout / "triggers.pup", layout + " triggers");
+      Fixture::Touch(source / (layout + ".bat"), "rem echo off\r\nxcopy /y \"PuP-Pack_Options\\" + layout + "\\*.pup\"\r\n");
+   }
+
+   CHECK(PupPackOptions::IsPack(source));
+   CHECK(PupPackOptions::PackSources(source).size() == layouts.size());
+   std::vector<string> recommended;
+   for (const PupPackOptions::Option& option : PupPackOptions::List(source))
+      if (option.recommended)
+         recommended.push_back(option.name);
+   CHECK(recommended == std::vector<string> { "Option 3 - BG Topper Separate" });
+
+   Fixture::MakeZip(f.root / "a", shared / "austin.zip");
+   TableLibrary library(config);
+   library.Rescan();
+   std::vector<string> packs;
+   for (const auto& entry : fs::directory_iterator(shared))
+      packs.push_back(entry.path().filename().string());
+   CHECK(packs == std::vector<string> { "austin" });
+   CHECK(fs::exists(shared / "austin" / "Topper" / "Topper.mp4"));
+   CHECK(fs::exists(shared / "austin" / "PUPCapture" / "1.bmp"));
+   CHECK(PupPackOptions::GetApplied(shared / "austin") == "Option 3 - BG Topper Separate");
+   CHECK(Fixture::Read(shared / "austin" / "screens.pup") == "Option 3 - BG Topper Separate screens");
+   CHECK(Fixture::Read(shared / "austin" / "triggers.pup") == "Option 3 - BG Topper Separate triggers");
+}
+
 TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when asked")
 {
    Fixture f;

@@ -518,7 +518,27 @@ void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
    }
 }
 
-// The PinUP Player packs in 'folder': the folders holding screens.pup, playlists.pup or triggers.pup, without the ones nested in another pack
+// The pack of a folder holding .pup files inside 'folder': the folder itself, or a parent whose option batch files copy from it, for packs
+// with their .pup files in their option folders only ('austin/PuP-Pack_Options/Option 3 - BG Topper Separate/screens.pup' is 'austin')
+static fs::path PackOfOptionFolder(const fs::path& folder, const fs::path& pupFolder)
+{
+   for (fs::path parent = pupFolder.parent_path(); parent != parent.parent_path(); parent = parent.parent_path()) {
+      const fs::path relative = parent.lexically_relative(folder);
+      if (relative.empty() || *relative.begin() == "..")
+         break;
+      for (const fs::path& source : PupPackOptions::PackSources(parent)) {
+         std::error_code ec;
+         if (fs::equivalent(source, pupFolder, ec))
+            return parent;
+      }
+      if (relative == ".")
+         break;
+   }
+   return pupFolder;
+}
+
+// The PinUP Player packs in 'folder': the folders holding screens.pup, playlists.pup or triggers.pup, or whose options copy them, without
+// the ones nested in another pack
 static std::vector<fs::path> FindPupPacks(const fs::path& folder)
 {
    const auto lower = [](string s) {
@@ -532,7 +552,7 @@ static std::vector<fs::path> FindPupPacks(const fs::path& folder)
          continue;
       const string name = lower(it->path().filename().string());
       if (name == "screens.pup" || name == "playlists.pup" || name == "triggers.pup")
-         roots.insert(it->path().parent_path());
+         roots.insert(PackOfOptionFolder(folder, it->path().parent_path()));
    }
    // A pack nested in another one moves with it (the set is sorted, so parents come first)
    std::vector<fs::path> packs;

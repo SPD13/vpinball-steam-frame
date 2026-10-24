@@ -318,9 +318,7 @@ void CopyFiles(const fs::path& pack, const fs::path& from, const string& pattern
    }
 }
 
-}
-
-bool IsPack(const fs::path& folder)
+bool HasPupFiles(const fs::path& folder)
 {
    std::error_code ec;
    for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
@@ -330,6 +328,60 @@ bool IsPack(const fs::path& folder)
          return true;
    }
    return false;
+}
+
+bool IsVrName(const string& lower)
+{
+   return lower.find(" vr") != string::npos || lower.find("vr ") != string::npos || lower == "vr" || lower.find("-vr") != string::npos;
+}
+
+// How well a layout without VR in its name suits the VR cabinet, which has a backglass, a DMD and a topper of its own: layouts keeping
+// the screens apart score higher, those merging the DMD or the topper into the backglass, dropping a screen, or made for a desktop lower
+int CabinetScore(const string& lower)
+{
+   const auto has = [&](const char* text) { return lower.find(text) != string::npos; };
+   int score = 0;
+   if (has("separate") || has("3 screen") || has("three screen") || has("cabinet") || has("full cab"))
+      score += 2;
+   if (has("on bg") || has("on backglass") || has("on the backglass") || has("on playfield"))
+      score -= 2;
+   if (has("no dmd") || has("no topper") || has("no backglass") || has("no bg"))
+      score -= 1;
+   if (has("desktop") || has("full screen") || has("fullscreen") || has("1 screen") || has("2 screen") || has("single screen") || has("dual screen")
+      || has("two screen"))
+      score -= 2;
+   return score;
+}
+
+}
+
+bool IsPack(const fs::path& folder)
+{
+   return HasPupFiles(folder) || !PackSources(folder).empty();
+}
+
+vector<fs::path> PackSources(const fs::path& folder)
+{
+   vector<fs::path> sources;
+   std::error_code ec;
+   for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+   {
+      if (!it->is_regular_file(ec) || Lower(it->path().extension().string()) != ".bat")
+         continue;
+      string reason;
+      const std::optional<vector<Step>> steps = Parse(it->path(), reason);
+      if (!steps)
+         continue;
+      for (const Step& step : *steps)
+      {
+         if (step.type != StepType::Copy || step.source.empty())
+            continue;
+         const fs::path source = Resolve(folder, step.source);
+         if (HasPupFiles(source) && std::find(sources.begin(), sources.end(), source) == sources.end())
+            sources.push_back(source);
+      }
+   }
+   return sources;
 }
 
 vector<Option> List(const fs::path& packFolder)
@@ -346,11 +398,33 @@ vector<Option> List(const fs::path& packFolder)
       string reason;
       option.supported = Parse(it->path(), reason).has_value();
       option.reason = reason;
-      const string lower = Lower(option.name);
-      option.recommended = option.supported && (lower.find(" vr") != string::npos || lower.find("vr ") != string::npos || lower == "vr" || lower.find("-vr") != string::npos);
+      option.recommended = option.supported && IsVrName(Lower(option.name));
       options.push_back(option);
    }
    std::sort(options.begin(), options.end(), [](const Option& a, const Option& b) { return Lower(a.name) < Lower(b.name); });
+   // Without a VR layout, the one that best suits the VR cabinet, when a single one does ("BG Topper Separate" among "DMD and Topper
+   // on BG", "DMD on BG No Topper"...)
+   if (std::none_of(options.begin(), options.end(), [](const Option& o) { return o.recommended; }))
+   {
+      Option* best = nullptr;
+      int bestScore = 0, bestCount = 0;
+      for (Option& option : options)
+      {
+         if (!option.supported)
+            continue;
+         const int score = CabinetScore(Lower(option.name));
+         if (score > bestScore)
+         {
+            best = &option;
+            bestScore = score;
+            bestCount = 1;
+         }
+         else if (score == bestScore && best)
+            bestCount++;
+      }
+      if (best && bestCount == 1)
+         best->recommended = true;
+   }
    return options;
 }
 
