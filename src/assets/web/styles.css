@@ -2155,6 +2155,7 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 
 .profile-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -2163,11 +2164,13 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 }
 
 .profile-text {
+  flex: 1 1 6rem; /* Without a basis, the name shrank to one letter per line beside a badge and its buttons */
   min-width: 0;
 }
 
 .profile-state {
   display: flex;
+  margin-left: auto;
   align-items: center;
   gap: 0.125rem;
   flex-shrink: 0;
