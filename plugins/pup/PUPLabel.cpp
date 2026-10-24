@@ -285,7 +285,11 @@ void PUPLabel::SetCaption(const string& szCaption)
       }
 
       const bool wasImage = (m_type == PUP_LABEL_TYPE_IMAGE || m_type == PUP_LABEL_TYPE_GIF);
-      std::filesystem::path fs_path = PluginStrings::PathFromUTF8(normalize_path_separators(szText));
+      // PinUP Player appends the caption to the pack folder, and Windows ignores repeated separators: tables write '\\Heros\\icon.png'
+      // for 'Heros\icon.png', whose leading separator must not make it an absolute path
+      string relativePath = normalize_path_separators(szText);
+      relativePath.erase(0, relativePath.find_first_not_of(PATH_SEPARATOR_CHAR));
+      std::filesystem::path fs_path = PluginStrings::PathFromUTF8(relativePath);
       // The playlist is the first path component, the rest is the file path inside
       // the playlist folder (which may contain subfolders, e.g. playlist\player2\foo.png)
       const std::filesystem::path playlistFolder = *fs_path.begin();
