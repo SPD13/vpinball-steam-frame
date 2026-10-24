@@ -14,6 +14,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/Launcher.h
    src/steamframe/Launcher.cpp
    src/steamframe/PlayerTableImage.cpp
+   src/steamframe/PupPackOptions.h
+   src/steamframe/PupPackOptions.cpp
    src/steamframe/PupPacks.h
    src/steamframe/PupPacks.cpp
    src/steamframe/ScoresPage.h

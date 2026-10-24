@@ -153,6 +153,16 @@
         pack (a pack with the same name is replaced). The tables which have their pack get a 'PuP' tag in the table picker.
       </div>
 
+      <div id="pup-options" class="missing-roms pup-options" hidden>
+        <div class="missing-roms-header">
+          <span class="missing-roms-title">Pack options</span>
+          <button id="pup-options-restore" class="btn btn-secondary" onclick="restorePupOptions()" hidden>Restore as uploaded</button>
+        </div>
+        <div class="missing-roms-hint">The screen layouts of this pack (its .bat files on Windows). Choose the VR one for the Steam Frame:
+          its files are copied in place, as the .bat file would do, without running it.</div>
+        <div id="pup-options-list" class="pup-options-list"></div>
+      </div>
+
       <div id="missing-pups" class="missing-roms" hidden>
         <div class="missing-roms-header">
           <span class="missing-roms-title">Missing PinUP Player packs</span>
