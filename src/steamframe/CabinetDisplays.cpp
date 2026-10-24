@@ -9,6 +9,7 @@
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/PupPacks.h"
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/InGameUIItem.h"
 #include "ui/live/ingameui/InGameUIPage.h"
@@ -35,72 +36,6 @@ constexpr const char* kPageId = "vrui/cabinet-displays";
 uint64_t NowMs() { return usec() / 1000; }
 
 bool ContainsNoCase(const string& text, const string& lowerNeedle) { return lowerCase(text).find(lowerNeedle) != string::npos; }
-
-// Folder of a directory whose name matches case-insensitively, as the PuP plugin does
-std::filesystem::path FindFolderNoCase(const std::filesystem::path& parent, const string& name)
-{
-   std::error_code ec;
-   if (name.empty() || !std::filesystem::is_directory(parent, ec))
-      return {};
-   const string lowerName = lowerCase(name);
-   for (const auto& entry : std::filesystem::directory_iterator(parent, ec))
-      if (entry.is_directory(ec) && lowerCase(entry.path().filename().string()) == lowerName)
-         return entry.path();
-   return {};
-}
-
-// The quoted string after 'key' in the script, for 'key = "value"' (assignments) and 'key x, "value"' (calls with the name second)
-void FindQuotedValues(const string& script, const string& lowerScript, const string& lowerKey, bool afterComma, vector<string>& values)
-{
-   for (size_t pos = lowerScript.find(lowerKey); pos != string::npos; pos = lowerScript.find(lowerKey, pos + 1))
-   {
-      size_t i = pos + lowerKey.size();
-      const size_t lineEnd = std::min(script.find('\n', i), script.size());
-      if (afterComma)
-      {
-         i = script.find(',', i);
-         if (i == string::npos || i >= lineEnd)
-            continue;
-         i++;
-      }
-      else
-      {
-         while (i < lineEnd && (script[i] == ' ' || script[i] == '\t'))
-            i++;
-         if (i >= lineEnd || script[i] != '=')
-            continue;
-         i++;
-      }
-      while (i < lineEnd && (script[i] == ' ' || script[i] == '\t'))
-         i++;
-      if (i >= lineEnd || script[i] != '"')
-         continue;
-      const size_t end = script.find('"', i + 1);
-      if (end == string::npos || end > lineEnd || end == i + 1)
-         continue;
-      values.push_back(script.substr(i + 1, end - i - 1));
-   }
-}
-
-// Folder of the PuP pack of the table, looked up as the plugin does: along the table, then in the PinUP Player folder
-std::filesystem::path FindPackFolder(const string& script, const std::filesystem::path& tableFolder)
-{
-   const string lowerScript = lowerCase(script);
-   vector<string> names;
-   FindQuotedValues(script, lowerScript, "puplayer.init"s, true, names);
-   FindQuotedValues(script, lowerScript, "cpuppack"s, false, names);
-   FindQuotedValues(script, lowerScript, "cgamename"s, false, names);
-   vector<std::filesystem::path> roots;
-   if (std::filesystem::path local = FindFolderNoCase(tableFolder, "pupvideos"s); !local.empty())
-      roots.push_back(local);
-   if (g_launcher)
-      roots.push_back(g_launcher->GetSharedPupVideosPath());
-   for (const auto& root : roots)
-      for (const string& name : names)
-         if (std::filesystem::path folder = FindFolderNoCase(root, name); !folder.empty())
-            return folder;
-   return {};
-}
 
 // Whether the pack defines its FullDMD screen (5): PuP then draws the score view in 16:9, instead of its 4:1 DMD screen (1)
 bool HasFullDMDScreen(const std::filesystem::path& packFolder, const string& lowerScript)
@@ -228,10 +163,11 @@ std::unique_ptr<CabinetDisplays> CabinetDisplays::Create(Player* player)
    if (!player->IsVR() && !(forced && forced[0] == '1'))
       return nullptr;
    PinTable* const table = player->m_ptable;
-   const string lowerScript = lowerCase(table->m_script_text);
-   const std::filesystem::path packFolder = FindPackFolder(table->m_script_text, table->m_filename.parent_path());
+   const PupPacks::TableUse use = PupPacks::GetTableUse(table->m_script_text);
+   const std::filesystem::path packFolder
+      = PupPacks::FindPackFolder(use.names, table->m_filename.parent_path(), g_launcher ? g_launcher->GetSharedPupVideosPath() : std::filesystem::path());
    // PuP is used through the script, or started by the plugin itself for a PinMAME game which has a pack
-   if (lowerScript.find("pinupplayer") == string::npos && packFolder.empty())
+   if (!use.usesPup && packFolder.empty())
       return nullptr;
 
    // The ancillary window flashers of the table: a topper one may have been converted as a backglass (legacy 'backglassimage' primitive)
