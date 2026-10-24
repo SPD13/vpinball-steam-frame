@@ -386,6 +386,10 @@ public:
    float GetVisualNudgeStrength() const { return m_visualNudgeStrength; }
    void SetVisualNudgeStrength(float strength) { m_visualNudgeStrength = strength; }
 
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   bool RenderVRControllerMask(); // Steam Frame Edition: depth of the VR controllers for the UI pass, which keeps them in front of the UI (src/renderer/VRControllerModels.cpp)
+   #endif
+
 private:
    void ApplyTableSettings(); // (Re)load the cached table settings (called from ctor and SetTable)
 

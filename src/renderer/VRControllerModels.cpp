@@ -275,7 +275,7 @@ std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id,
    return model;
 }
 
-void VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice)
+bool VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice, bool depthMask)
 {
    const vector<VRDevice::ControllerModel>& controllers = vrDevice.GetControllerModels();
 
@@ -342,9 +342,39 @@ void VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice)
          const Matrix3D objectToRoom = m_nodeWorld[i] * modelToRoom;
          const Vertex3Ds center = objectToRoom * Vertex3Ds(0.f, 0.f, 0.f);
          renderer->UpdateBasicShaderMatrix(objectToRoom);
+         #if defined(ENABLE_BGFX)
+         if (depthMask)
+         {
+            // The UI shader outputs a clip z of 0: the projection is given the same, which keeps the mask aligned on the models drawn in the scene
+            const ModelViewProj& mvp = renderer->GetMVP();
+            Matrix3D rotViewProj[2];
+            for (unsigned int eye = 0; eye < mvp.m_nEyes && eye < 2; eye++)
+            {
+               rotViewProj[eye] = mvp.GetRotViewProj(eye);
+               for (int row = 0; row < 4; row++)
+                  rotViewProj[eye].m[row][2] = 0.f;
+            }
+            shader->SetMatrix(ShaderUniform::matRotViewProj, &rotViewProj[0], mvp.m_nEyes);
+         }
+         #endif
          for (const int p : model.nodes[i].primitives)
          {
             const Primitive& primitive = model.primitives[p];
+            if (depthMask)
+            {
+               m_rd->ResetRenderState();
+               m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+               m_rd->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_NONE);
+               m_rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+               m_rd->SetRenderState(RenderState::ZFUNC, RenderState::Z_ALWAYS);
+               m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
+               shader->SetAlphaTestValue(-1.f);
+               shader->SetMaterial(&primitive.material, false);
+               shader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, primitive.material, false);
+               m_rd->DrawMesh(shader, false, center, 0.f, primitive.mesh, RenderDevice::TRIANGLELIST, 0, primitive.mesh->m_ib->m_count);
+               drawn = true;
+               continue;
+            }
             BaseTexture* texture = (primitive.texture >= 0 && primitive.texture < static_cast<int>(model.textures.size())) ? model.textures[primitive.texture].get() : nullptr;
             if (primitive.sticker)
             {
@@ -385,7 +415,7 @@ void VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice)
    }
 
    // Diagnostics, every 5 seconds: what was drawn, and where in the room (VPU)
-   if (const double now = static_cast<double>(usec()) * 1e-6; now >= m_nextLogTime)
+   if (const double now = static_cast<double>(usec()) * 1e-6; !depthMask && now >= m_nextLogTime)
    {
       m_nextLogTime = now + 5.;
       PLOGI << std::format("Controller models: {} listed, {} loaded, {} meshes drawn, first at {:.0f},{:.0f},{:.0f} (room VPU)", controllers.size(), m_models.size(), drawCount, firstCenter.x,
@@ -397,6 +427,26 @@ void VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice)
       renderer->UpdateBasicShaderMatrix();
       shader->SetVector(ShaderUniform::fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
    }
+   return drawn;
 }
+
+#if defined(VPX_STEAM_FRAME)
+// Steam Frame Edition: the UI panel is drawn over the scene, with the controllers the player holds in it. Their depth is written in the UI pass,
+// at the depth of the UI, which is then drawn with a depth test (see LiveUI::RenderUI): the controllers stay in front of the UI.
+bool Renderer::RenderVRControllerMask()
+{
+   #if defined(ENABLE_BGFX)
+   if (m_stereo3D != STEREO_VR || g_pplayer->m_vrDevice == nullptr || m_vrControllerModels == nullptr || !m_renderDevice->GetCurrentPass()->m_rt->HasDepth())
+      return false;
+   m_renderDevice->Clear(clearType::ZBUFFER, 0);
+   SetSpaceReference(PartGroupData::SpaceReference::SR_ROOM, false);
+   const bool drawn = m_vrControllerModels->Render(this, *g_pplayer->m_vrDevice, true);
+   m_renderDevice->ResetRenderState();
+   return drawn;
+   #else
+   return false;
+   #endif
+}
+#endif
 
 #endif

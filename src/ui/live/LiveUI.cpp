@@ -540,6 +540,9 @@ void LiveUI::RenderUI()
    // SDR white level to place UI white at, normalized to the 10000 nits PQ encodes (the white point counts in multiples of 80 nits). 0 = no conversion (sRGB backbuffer)
    uiParams.w = (!onXrUILayer && m_player->m_playfieldWnd->IsWCGBackBuffer()) ? (m_player->m_playfieldWnd->GetSDRWhitePoint() * (float)(80. / 10000.)) : 0.f;
    #endif
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   const bool controllerMask = onVRPanel && draw_data->TotalIdxCount > 0 && m_renderer->RenderVRControllerMask();
+   #endif
    m_rd->ResetRenderState();
    m_rd->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
    m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
@@ -549,6 +552,14 @@ void LiveUI::RenderUI()
    m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
    m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
    m_rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   // The UI panel is not drawn over the VR controllers: their depth was written at the depth of the UI, which fails the test there
+   if (controllerMask)
+   {
+      m_rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+      m_rd->SetRenderState(RenderState::ZFUNC, RenderState::Z_LESS);
+   }
+   #endif
    #ifdef ENABLE_BGFX
    if (m_rd->GetCurrentPass()->m_rt->m_nLayers == 1)
       m_rd->m_uiShader->SetTechnique(ShaderTechnique::LiveUI_mono);

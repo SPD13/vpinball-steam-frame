@@ -21,8 +21,10 @@ public:
    explicit VRControllerModels(RenderDevice* rd);
    ~VRControllerModels();
 
-   // Called while preparing a frame, with the room space reference selected (the models are placed in the real world)
-   void Render(Renderer* renderer, const VRDevice& vrDevice);
+   // Called while preparing a frame, with the room space reference selected (the models are placed in the real world). With depthMask, only
+   // their depth is written, at the depth the UI is drawn at, for the UI to be drawn around them (see Renderer::RenderVRControllerMask).
+   // Returns whether a model was drawn.
+   bool Render(Renderer* renderer, const VRDevice& vrDevice, bool depthMask = false);
 
 private:
    struct Primitive
