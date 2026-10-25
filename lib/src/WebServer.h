@@ -72,6 +72,8 @@ private:
    void ProfileActive(struct mg_connection *c, struct mg_http_message* hm);
    // Options of a PinUP Player pack (its layout batch files, see PupPackOptions): list, apply, restore
    void PupOptions(struct mg_connection *c, struct mg_http_message* hm);
+   // The alias file of PinMAME, edited from the advanced menu of the Files page (see RomAliases.h)
+   void PinmameAliases(struct mg_connection *c, struct mg_http_message* hm);
 #endif
 
    void AddLogEntry(const string& formattedLog);
