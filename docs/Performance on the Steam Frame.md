@@ -322,7 +322,7 @@ millisecond saved lets dynamic resolution raise the size by about 4–5 % per ax
 | 1 | Desktop mirror off on the Frame | 4.5–6.6 ms on Addams, 4.4–6.9 ms on Ghostbusters | Forced off in the Frame build | **Done** (sections 6, 7.1) |
 | 2 | Lighter playfield reflection on heavy tables | 1.1–1.3 ms on Addams, 1.0–1.2 ms on Ghostbusters | Per-table setting today (`PFReflection = 3`, "Static & Balls"); engine options below | To evaluate |
 | 3 | Fuse FXAA into the tonemap pass | Part of 1.1–3.2 ms (one full-resolution write and read less) | Shader and pass change | Idea (*Image Quality*, section 4) |
-| 4 | Reduce the scene pass's fixed geometry cost | Up to 3.8 ms on Addams | Investigation, engine work | Counted (section 7.3) |
+| 4 | Reduce the scene pass's fixed geometry cost | Up to 3.8 ms on Addams | Investigation, engine work | Measured 2026-10-25: 2.2 ms per million triangles; simplification without visible loss 1.2–1.6 ms on Addams, culling 0.6 ms on LOTR (`Table Geometry on the Steam Frame.md`); culling done (`Culling Parts Outside the View.md`) |
 | 5 | Overlap frame preparation with submission | 1.1–1.6 ms of render thread time (mirror off); frame rate at 90 Hz | Threading change | Idea |
 | 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
@@ -341,7 +341,9 @@ Details:
    tonemap every sample it reads: the gain is uncertain until measured.
 4. **Scene geometry**: Addams draws 1.9 million triangles per frame in 332 draws (section 7.3). Next: split the table from the room with
    the room hidden, as done for Ghostbusters in section 7.2; then per-eye frustum culling, merging static meshes, simpler room meshes,
-   levels of detail for distant room geometry.
+   levels of detail for distant room geometry. Measured on 2026-10-25 in `Table Geometry on the Steam Frame.md`:
+   the cost is linear in the triangles; culling parts outside the view is done (`Culling Parts Outside the View.md`), a render-only
+   simplification pass run by VPX is the remaining option.
 5. **Frame preparation and submission**: the render thread waits 1.1–1.6 ms per frame for the logic thread with the mirror off (1.8–3.5 ms
    with it on). Preparing frame N+1 while frame N is submitted would give the render thread that time back, which matters most for
    90 Hz.
