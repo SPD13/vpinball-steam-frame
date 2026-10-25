@@ -1,4 +1,4 @@
-// The tables of the library, as the table picker of the application shows them: favorites, display names and deletion
+// The tables of the library, as the table picker of the application shows them: favorites, display names, thumbnails and deletion
 
 const TABS = [
   { id: 'all', label: 'All', empty: 'No table yet' }, // Not shown: an empty library has its own message, see render
@@ -10,9 +10,15 @@ const TABS = [
 
 const POLL_INTERVAL_MS = 3000; // Changes made in the application (favorites, new tables, played table) show up without reloading
 
+// Uploaded thumbnails are resized to fit in this size (the table picker loads them at 512 pixels at most, this page shows them on high density
+// screens), and saved as JPEG
+const THUMBNAIL_MAX_SIZE = 1024;
+const THUMBNAIL_QUALITY = 0.9;
+
 const ICONS = {
   star: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
   threeDots: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
   rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>',
   scores: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path><path d="M17 5h3v2a3 3 0 0 1-3 3"></path><path d="M7 5H4v2a3 3 0 0 0 3 3"></path></svg>',
   delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
@@ -67,8 +73,8 @@ async function fetchTables() {
   }
 }
 
-async function post(url) {
-  const response = await fetch(url, { method: 'POST' });
+async function post(url, body) {
+  const response = await fetch(url, { method: 'POST', body });
   if (!response.ok)
     throw response;
   State.lastResponse = null; // Render the outcome even if it matches an older list
@@ -327,6 +333,7 @@ function openMenu(uuid, anchor) {
   const items = [
     { icon: ICONS.scores, text: 'Show scores', action: () => { location.href = `scores.html?uuid=${encodeURIComponent(uuid)}`; } },
     { icon: ICONS.rename, text: 'Display name', action: () => openNameDialog(uuid) },
+    { icon: ICONS.image, text: 'Upload thumbnail', action: () => pickThumbnail(uuid) },
     { icon: ICONS.delete, text: 'Delete', danger: true, disabled: table.playing, hint: 'The table is being played', action: () => openDeleteDialog(uuid) }
   ];
   for (const item of items) {
@@ -395,6 +402,78 @@ async function saveName(name) {
   }
 }
 
+function pickThumbnail(uuid) {
+  State.editedUuid = uuid;
+  const input = $('thumbnail-input');
+  input.value = ''; // The same file may be chosen again
+  input.click();
+}
+
+// The image, scaled down to fit in THUMBNAIL_MAX_SIZE (never up), as a JPEG blob. Halved in steps first: a single large reduction skips
+// pixels and looks grainy in some browsers. Transparent parts get the black of the table picker.
+async function resizeThumbnail(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode(); // The orientation of photos (EXIF) is applied
+    const scale = Math.min(1, THUMBNAIL_MAX_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+    let source = image;
+    let sourceWidth = image.naturalWidth;
+    let sourceHeight = image.naturalHeight;
+    while (sourceWidth / 2 >= width && sourceHeight / 2 >= height) {
+      const step = document.createElement('canvas');
+      step.width = Math.round(sourceWidth / 2);
+      step.height = Math.round(sourceHeight / 2);
+      step.getContext('2d').drawImage(source, 0, 0, step.width, step.height);
+      source = step;
+      sourceWidth = step.width;
+      sourceHeight = step.height;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, width, height);
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(source, 0, 0, width, height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', THUMBNAIL_QUALITY));
+    if (!blob)
+      throw new Error('JPEG encoding failed');
+    return blob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function uploadThumbnail(file) {
+  const uuid = State.editedUuid;
+  const table = findTable(uuid);
+  if (!table || !file)
+    return;
+  let blob;
+  try {
+    blob = await resizeThumbnail(file);
+  } catch (error) {
+    console.error('Error reading the thumbnail:', error);
+    showStatus(`${file.name} is not an image that the browser can read`, 'error');
+    return;
+  }
+  showStatus(`Uploading the thumbnail of ${table.name}...`, 'info');
+  try {
+    await post(`table-image?uuid=${encodeURIComponent(uuid)}`, blob);
+    showStatus(`Thumbnail of ${table.name} replaced`, 'success');
+  } catch (error) {
+    showStatus(error.status === 404 ? 'This table no longer exists' : `Failed to replace the thumbnail of ${table.name}`, 'error');
+    await fetchTables();
+  }
+}
+
 function openDeleteDialog(uuid) {
   const table = findTable(uuid);
   if (!table)
@@ -437,6 +516,8 @@ function setupDialogs() {
     deleteTable();
   };
   $('delete-cancel').onclick = () => $('delete-dialog').close();
+
+  $('thumbnail-input').onchange = (e) => uploadThumbnail(e.target.files[0]);
 
   // Only their buttons close the dialogs: not a click outside of the fields (the padding of the dialog is the dialog itself, like
   // its backdrop), nor the Escape key

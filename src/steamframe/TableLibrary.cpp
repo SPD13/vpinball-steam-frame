@@ -268,8 +268,8 @@ bool TableLibrary::Update(const string& uuid, const std::function<bool(Table&)>&
    const auto it = std::find_if(tables.begin(), tables.end(), [&](const Table& table) { return table.uuid == uuid; });
    if (it == tables.end() || !change(*it))
       return false;
-   if (isContentChange) // The modification date tells when the table, its name or its image changed (images are reloaded when it changes)
-      it->modifiedAt = Now();
+   if (isContentChange) // The modification date tells when the table, its name or its image changed (images are reloaded when it changes, even twice in a second)
+      it->modifiedAt = std::max(Now(), it->modifiedAt + 1);
    Commit(std::move(tables));
    return true;
 }

@@ -23,7 +23,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Table actions**: play, restart, rename, reset the table settings, delete, and use the table's VR room in the lobby.
 - **Lobby** in launcher mode, from which tables are started and to which they return, in a room chosen in the menu: a modern room, a game room at night with arcade cabinets, a pinball machine and a city view, or a sunlit studio, all made in Blender with their lighting baked (section 4).
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and Tables and ROMs tabs to switch between the two folders. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables (sections 5 and 8).
-- **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed) or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away (section 5).
+- **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed), **upload a thumbnail** from the computer, or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away (section 5).
 - **Missing ROM message** naming the files to add and where (section 8).
 - **Game aliases of mods found automatically**: a table asking PinMAME for a game it does not know (a mod renaming its game, `simpprtyh` for `simpprty`) gets the alias it needs, found in its readme, script or files, and the ROM it ships outside of a `roms` folder is moved where PinMAME looks. The alias file can be edited from the browser, under an Advanced menu, with the lines PinMAME would misread refused (section 6).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu (sections 7 and 8).
@@ -145,6 +145,7 @@ A second page, `tables.html` with `tables.js`, shows the table library the way t
 - **Star** on each tile: adds or removes the favorite at once, saved in `table-stats.json` like the picker's star.
 - **"..." menu** on each tile:
   - **Display name**: a dialog with the current name, and the name derived from the file as a hint; "Use file name" goes back to it. Names are trimmed, kept on one line, limited to 128 characters in the page. The picker shows the new name at once (same library).
+  - **Upload thumbnail** (2026-10-25): picks an image file on the computer; the page scales it down to fit in 1024 x 1024 (never up, transparent parts on black) and uploads it as JPEG, which replaces the table image (`TableLibrary::SetImage`: `<table>.jpg`, an old `.png` is removed). The picker and the tile reload it, the modification date always moving forward. A table with an image gets no screenshot when closed, so the uploaded one is kept.
   - **Delete**: a confirmation dialog with the table's path, then `TableLibrary::Delete`: the whole folder when the table is alone in it, otherwise the table and its same-name companion files. Disabled for the running table, which the server also refuses.
   - The dialogs close only with their buttons, not with Escape nor a click outside their fields.
 - **Live list**: the page polls `/tables` every 3 s while it is visible, and renders again only when the answer changed, so favorites set in the headset, tables added by uploads or a rescan, and the running table appear without reloading. Tiles are reused between renders, so images are not reloaded.
@@ -154,6 +155,7 @@ A second page, `tables.html` with `tables.js`, shows the table library the way t
   |---|---|---|---|
   | `/tables` | GET | | `{revision, scanning, tables:[{uuid, name, defaultName, path, hasImage, createdAt, modifiedAt, lastPlayedAt, playCount, favorite, playing}]}` |
   | `/table-image` | GET | `uuid` | the image, cacheable for a day; 404 without image |
+  | `/table-image` | POST | `uuid`, body: a JPEG image | 200; 400 when the body is not a JPEG, 404 unknown table, 500 when it could not be saved |
   | `/table-favorite` | POST | `uuid`, `favorite` (1 or 0) | 200; 400 without `favorite`, 404 unknown table |
   | `/table-name` | POST | `uuid`, `name` (empty: default name) | 200; 400 when `name` is missing or too long, 404 unknown table |
   | `/table-delete` | POST | `uuid` | 200; 409 for the running table, 404 unknown table, 500 when the files could not be removed |
