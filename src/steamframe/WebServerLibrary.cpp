@@ -228,7 +228,7 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
 }
 
 // GET: the image of a table (the page adds its modification date to the URL, so that browsers may cache it). POST: the body, a JPEG image that the
-// page resized, replaces it
+// page resized (PNG when it has transparent parts), replaces it
 void WebServer::TableImage(struct mg_connection *c, struct mg_http_message* hm)
 {
    const std::optional<VPinballLib::Table> table = GetRequestedTable(c, hm);
@@ -237,13 +237,16 @@ void WebServer::TableImage(struct mg_connection *c, struct mg_http_message* hm)
    VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
    std::error_code ec;
    if (mg_strcmp(hm->method, mg_str("POST")) == 0) {
-      const auto* const data = reinterpret_cast<const unsigned char*>(hm->body.buf);
-      if (hm->body.len < 4 || data[0] != 0xFF || data[1] != 0xD8 || data[2] != 0xFF) {
+      static constexpr unsigned char jpegSignature[] = { 0xFF, 0xD8, 0xFF };
+      static constexpr unsigned char pngSignature[] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+      const auto hasSignature = [hm](const auto& signature) { return hm->body.len > sizeof(signature) && memcmp(hm->body.buf, signature, sizeof(signature)) == 0; };
+      const bool isPng = hasSignature(pngSignature);
+      if (!isPng && !hasSignature(jpegSignature)) {
          mg_http_reply(c, STATUS_BAD_REQUEST, "", "%s", RESPONSE_BAD_REQUEST);
          return;
       }
-      // Written aside, then copied next to the table in place of its image (see TableLibrary::SetImage)
-      const std::filesystem::path uploadPath = std::filesystem::temp_directory_path(ec) / ("vpx-table-image-" + table->uuid + ".jpg");
+      // Written aside, then copied next to the table in place of its image, as <table>.jpg or .png after its extension (see TableLibrary::SetImage)
+      const std::filesystem::path uploadPath = std::filesystem::temp_directory_path(ec) / ("vpx-table-image-" + table->uuid + (isPng ? ".png" : ".jpg"));
       bool saved = false;
       if (!ec) {
          std::ofstream file(uploadPath, std::ios::binary | std::ios::trunc);
@@ -257,7 +260,7 @@ void WebServer::TableImage(struct mg_connection *c, struct mg_http_message* hm)
          mg_http_reply(c, STATUS_INTERNAL_SERVER_ERROR, "", RESPONSE_INTERNAL_SERVER_ERROR);
          return;
       }
-      PLOGI.printf("Table image uploaded: %s (%zu KB)", table->name.c_str(), hm->body.len / 1024);
+      PLOGI.printf("Table image uploaded: %s (%s, %zu KB)", table->name.c_str(), isPng ? "PNG" : "JPEG", hm->body.len / 1024);
       SetLastUpdate(); // A new file in the table folder: the file manager refreshes
       mg_http_reply(c, STATUS_OK, "", RESPONSE_OK);
       return;

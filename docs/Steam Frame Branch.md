@@ -17,7 +17,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Table picker** in the in-game menu ("Tables"), which is also the start screen in launcher mode: choose and switch tables without leaving the player (section 3).
 - **Lists of tables** as tabs: All, Recent, Newly added, Most played, Favorites, plus a MENU tab for the library and application options. The tabs are large buttons, easy to hit with a mouse or a VR pointer.
 - **Thumbnails**: a grid of table images, loaded in the background with a spinner on each tile meanwhile; a list view is also available. A table without an image gets a screenshot when it is closed, and "Replace table image" takes a new one (sections 4 and 8).
-- **Custom thumbnails**: give any table the picture you want in the table picker, such as the wheel image of a front-end setup, its backglass, a flyer or your own artwork. In the Tables page of the browser, "..." > **Upload thumbnail** on the table picks an image file on your computer; it is resized for the picker and replaces the table's image in the headset at once (section 5).
+- **Custom thumbnails**: give any table the picture you want in the table picker, such as the wheel image of a front-end setup, its backglass, a flyer or your own artwork. In the Tables page of the browser, "..." > **Upload thumbnail** on the table picks an image file on your computer; it is resized for the picker and replaces the table's image in the headset at once. Transparent images, like most wheels, keep their transparency (section 5).
 - **Favorites**: a star on each thumbnail, or "Add to favorites" in the table's page; the Favorites tab lists them.
 - **One list** of all the tables, without pages: only the tables on screen are drawn and only their images are loaded, so libraries of thousands of tables stay fast.
 - **Search** as you type (a virtual keyboard in VR), a letter filter and A–Z / Z–A sort in the All tab, and play statistics (added, last played, times played) for the hovered table.
@@ -146,7 +146,7 @@ A second page, `tables.html` with `tables.js`, shows the table library the way t
 - **Star** on each tile: adds or removes the favorite at once, saved in `table-stats.json` like the picker's star.
 - **"..." menu** on each tile:
   - **Display name**: a dialog with the current name, and the name derived from the file as a hint; "Use file name" goes back to it. Names are trimmed, kept on one line, limited to 128 characters in the page. The picker shows the new name at once (same library).
-  - **Upload thumbnail** (2026-10-25): picks an image file on the computer; the page scales it down to fit in 1024 x 1024 (never up, transparent parts on black) and uploads it as JPEG, which replaces the table image (`TableLibrary::SetImage`: `<table>.jpg`, an old `.png` is removed). The picker and the tile reload it, the modification date always moving forward. A table with an image gets no screenshot when closed, so the uploaded one is kept.
+  - **Upload thumbnail** (2026-10-25): picks an image file on the computer; the page scales it down to fit in 1024 x 1024 (never up) and uploads it as JPEG, or as PNG when it has transparent pixels (wheel images; made smaller if the PNG goes over 2.5 MB, the requests of the web server being limited to 3 MB), which replaces the table image (`TableLibrary::SetImage`: `<table>.jpg` or `<table>.png`, the previous image is removed). The picker and the tile reload it, the modification date always moving forward. A table with an image gets no screenshot when closed, so the uploaded one is kept.
   - **Delete**: a confirmation dialog with the table's path, then `TableLibrary::Delete`: the whole folder when the table is alone in it, otherwise the table and its same-name companion files. Disabled for the running table, which the server also refuses.
   - The dialogs close only with their buttons, not with Escape nor a click outside their fields.
 - **Live list**: the page polls `/tables` every 3 s while it is visible, and renders again only when the answer changed, so favorites set in the headset, tables added by uploads or a rescan, and the running table appear without reloading. Tiles are reused between renders, so images are not reloaded.
@@ -156,7 +156,7 @@ A second page, `tables.html` with `tables.js`, shows the table library the way t
   |---|---|---|---|
   | `/tables` | GET | | `{revision, scanning, tables:[{uuid, name, defaultName, path, hasImage, createdAt, modifiedAt, lastPlayedAt, playCount, favorite, playing}]}` |
   | `/table-image` | GET | `uuid` | the image, cacheable for a day; 404 without image |
-  | `/table-image` | POST | `uuid`, body: a JPEG image | 200; 400 when the body is not a JPEG, 404 unknown table, 500 when it could not be saved |
+  | `/table-image` | POST | `uuid`, body: a JPEG or PNG image | 200; 400 when the body is neither a JPEG nor a PNG, 404 unknown table, 500 when it could not be saved |
   | `/table-favorite` | POST | `uuid`, `favorite` (1 or 0) | 200; 400 without `favorite`, 404 unknown table |
   | `/table-name` | POST | `uuid`, `name` (empty: default name) | 200; 400 when `name` is missing or too long, 404 unknown table |
   | `/table-delete` | POST | `uuid` | 200; 409 for the running table, 404 unknown table, 500 when the files could not be removed |

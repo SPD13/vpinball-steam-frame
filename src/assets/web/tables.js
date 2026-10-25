@@ -11,8 +11,11 @@ const TABS = [
 const POLL_INTERVAL_MS = 3000; // Changes made in the application (favorites, new tables, played table) show up without reloading
 
 // Uploaded thumbnails are resized to fit in this size (the table picker loads them at 512 pixels at most, this page shows them on high density
-// screens), and saved as JPEG
+// screens), and saved as JPEG, or as PNG when they have transparent parts (wheel images). PNG files must stay under the size of a request
+// of the web server (3 MB, MG_MAX_RECV_SIZE): larger ones are made smaller.
 const THUMBNAIL_MAX_SIZE = 1024;
+const THUMBNAIL_MIN_SIZE = 256;
+const THUMBNAIL_MAX_BYTES = 2.5 * 1024 * 1024;
 const THUMBNAIL_QUALITY = 0.9;
 
 const ICONS = {
@@ -409,43 +412,59 @@ function pickThumbnail(uuid) {
   input.click();
 }
 
-// The image, scaled down to fit in THUMBNAIL_MAX_SIZE (never up), as a JPEG blob. Halved in steps first: a single large reduction skips
-// pixels and looks grainy in some browsers. Transparent parts get the black of the table picker.
+// The image on a canvas, scaled down to fit in maxSize (never up). Halved in steps first: a single large reduction skips pixels and looks
+// grainy in some browsers.
+function scaleImage(image, maxSize) {
+  const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  let source = image;
+  let sourceWidth = image.naturalWidth;
+  let sourceHeight = image.naturalHeight;
+  while (sourceWidth / 2 >= width && sourceHeight / 2 >= height) {
+    const step = document.createElement('canvas');
+    step.width = Math.round(sourceWidth / 2);
+    step.height = Math.round(sourceHeight / 2);
+    step.getContext('2d').drawImage(source, 0, 0, step.width, step.height);
+    source = step;
+    sourceWidth = step.width;
+    sourceHeight = step.height;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(source, 0, 0, width, height);
+  return canvas;
+}
+
+function hasTransparency(canvas) {
+  const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let i = 3; i < pixels.length; i += 4)
+    if (pixels[i] < 255)
+      return true;
+  return false;
+}
+
+// The image resized for the table picker, as a JPEG blob, or a PNG one when it has transparent parts
 async function resizeThumbnail(file) {
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
     image.src = url;
     await image.decode(); // The orientation of photos (EXIF) is applied
-    const scale = Math.min(1, THUMBNAIL_MAX_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
-    let source = image;
-    let sourceWidth = image.naturalWidth;
-    let sourceHeight = image.naturalHeight;
-    while (sourceWidth / 2 >= width && sourceHeight / 2 >= height) {
-      const step = document.createElement('canvas');
-      step.width = Math.round(sourceWidth / 2);
-      step.height = Math.round(sourceHeight / 2);
-      step.getContext('2d').drawImage(source, 0, 0, step.width, step.height);
-      source = step;
-      sourceWidth = step.width;
-      sourceHeight = step.height;
+    for (let maxSize = THUMBNAIL_MAX_SIZE; ; maxSize /= 2) {
+      const canvas = scaleImage(image, maxSize);
+      const transparent = hasTransparency(canvas);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, transparent ? 'image/png' : 'image/jpeg', THUMBNAIL_QUALITY));
+      if (!blob)
+        throw new Error('Image encoding failed');
+      if (blob.size <= THUMBNAIL_MAX_BYTES || maxSize <= THUMBNAIL_MIN_SIZE)
+        return blob;
     }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#000';
-    context.fillRect(0, 0, width, height);
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(source, 0, 0, width, height);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', THUMBNAIL_QUALITY));
-    if (!blob)
-      throw new Error('JPEG encoding failed');
-    return blob;
   } finally {
     URL.revokeObjectURL(url);
   }
