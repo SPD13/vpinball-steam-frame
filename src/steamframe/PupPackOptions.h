@@ -30,7 +30,7 @@ struct Option
    std::filesystem::path script;
    bool supported = false;
    std::string reason; // Why it is not supported
-   bool recommended = false; // A VR layout, or when the pack has none, the single layout that best suits the VR cabinet (screens kept apart)
+   bool recommended = false; // A VR layout, or when the pack has none, the layout that best suits the VR cabinet (screens kept apart, see List)
 };
 
 std::vector<Option> List(const std::filesystem::path& packFolder);
