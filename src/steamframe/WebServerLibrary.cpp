@@ -18,6 +18,7 @@
 
 #include <nlohmann/json.hpp>
 #include <filesystem>
+#include <fstream>
 
 using json = nlohmann::json;
 
@@ -198,8 +199,13 @@ static std::optional<VPinballLib::Table> GetRequestedTable(struct mg_connection 
 void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
 {
    VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
+   // The game that PinMAME does not know, without alias, by table: the page links these tables to the alias editor of the Files page
+   std::unordered_map<string, string> unknownGames;
+   for (const VPinballLib::TableLibrary::UnknownGame& unknown : library.GetUnknownGames())
+      unknownGames[unknown.uuid] = unknown.rom;
    json tables = json::array();
-   for (const VPinballLib::Table& table : library.GetTables())
+   for (const VPinballLib::Table& table : library.GetTables()) {
+      const auto unknownGame = unknownGames.find(table.uuid);
       tables.push_back({
          { "uuid", table.uuid },
          { "name", table.name },
@@ -214,19 +220,52 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
          { "usesPup", table.usesPup },
          { "pupPack", table.pupPacks.empty() ? ""s : table.pupPacks.front() },
          { "hasPupPack", table.hasPupPack },
+         { "unknownGame", unknownGame == unknownGames.end() ? ""s : unknownGame->second },
          { "playing", IsPlayed(library, table) } });
+   }
    const string response = json { { "revision", library.GetRevision() }, { "scanning", library.IsScanning() }, { "tables", tables } }.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }
 
-// GET: the image of a table (the page adds its modification date to the URL, so that browsers may cache it)
+// GET: the image of a table (the page adds its modification date to the URL, so that browsers may cache it). POST: the body, a JPEG image that the
+// page resized (PNG when it has transparent parts), replaces it
 void WebServer::TableImage(struct mg_connection *c, struct mg_http_message* hm)
 {
    const std::optional<VPinballLib::Table> table = GetRequestedTable(c, hm);
    if (!table)
       return;
-   const std::filesystem::path imagePath = g_launcher->GetTableLibrary().GetImagePath(*table);
+   VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
    std::error_code ec;
+   if (mg_strcmp(hm->method, mg_str("POST")) == 0) {
+      static constexpr unsigned char jpegSignature[] = { 0xFF, 0xD8, 0xFF };
+      static constexpr unsigned char pngSignature[] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+      const auto hasSignature = [hm](const auto& signature) { return hm->body.len > sizeof(signature) && memcmp(hm->body.buf, signature, sizeof(signature)) == 0; };
+      const bool isPng = hasSignature(pngSignature);
+      if (!isPng && !hasSignature(jpegSignature)) {
+         mg_http_reply(c, STATUS_BAD_REQUEST, "", "%s", RESPONSE_BAD_REQUEST);
+         return;
+      }
+      // Written aside, then copied next to the table in place of its image, as <table>.jpg or .png after its extension (see TableLibrary::SetImage)
+      const std::filesystem::path uploadPath = std::filesystem::temp_directory_path(ec) / ("vpx-table-image-" + table->uuid + (isPng ? ".png" : ".jpg"));
+      bool saved = false;
+      if (!ec) {
+         std::ofstream file(uploadPath, std::ios::binary | std::ios::trunc);
+         file.write(hm->body.buf, static_cast<std::streamsize>(hm->body.len));
+         file.close();
+         saved = file.good() && library.SetImage(table->uuid, PathToUTF8(uploadPath));
+         std::filesystem::remove(uploadPath, ec);
+      }
+      if (!saved) {
+         PLOGE.printf("Failed to replace the image of %s", table->name.c_str());
+         mg_http_reply(c, STATUS_INTERNAL_SERVER_ERROR, "", RESPONSE_INTERNAL_SERVER_ERROR);
+         return;
+      }
+      PLOGI.printf("Table image uploaded: %s (%s, %zu KB)", table->name.c_str(), isPng ? "PNG" : "JPEG", hm->body.len / 1024);
+      SetLastUpdate(); // A new file in the table folder: the file manager refreshes
+      mg_http_reply(c, STATUS_OK, "", RESPONSE_OK);
+      return;
+   }
+   const std::filesystem::path imagePath = library.GetImagePath(*table);
    if (imagePath.empty() || !std::filesystem::is_regular_file(imagePath, ec)) {
       mg_http_reply(c, STATUS_NOT_FOUND, "", RESPONSE_NOT_FOUND);
       return;

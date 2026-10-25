@@ -604,11 +604,27 @@ TEST_CASE("TableLibrary: tables know whether their PinUP Player pack is installe
 
    // The names are cached in table-stats.json: a restart does not read the scripts again, and a pack added since is found
    Fixture::Touch(shared / "jaws" / "screens.pup");
+   {
+      TableLibrary library(config);
+      library.Rescan();
+      CHECK(reads == 3);
+      for (const Table& table : library.GetTables())
+         CHECK(table.hasPupPack);
+   }
+
+   // Unless they were read by an older version, which did not find the same things in the scripts (StarCraft kept the ROM of a line
+   // commented out): the tables are read again
+   const fs::path statsPath = f.json.parent_path() / "table-stats.json";
+   nlohmann::json stats = nlohmann::json::parse(Fixture::Read(statsPath));
+   for (auto& [uuid, entry] : stats.items()) {
+      CHECK(entry.contains("scanVersion"));
+      entry.erase("scanVersion");
+   }
+   Fixture::Touch(statsPath, stats.dump());
    TableLibrary library(config);
    library.Rescan();
-   CHECK(reads == 3);
-   for (const Table& table : library.GetTables())
-      CHECK(table.hasPupPack);
+   CHECK(reads == 6);
+   CHECK(nlohmann::json::parse(Fixture::Read(statsPath)).begin()->contains("scanVersion"));
 }
 
 TEST_CASE("PupPackOptions: the layout batch files of a pack are applied without running them")
@@ -1134,6 +1150,7 @@ TEST_CASE("TableLibrary: a table asking for an unknown game gets its alias and i
    std::vector<TableLibrary::UnknownGame> unknown = library.GetUnknownGames();
    REQUIRE(unknown.size() == 1);
    CHECK(unknown[0].table == "Mystery");
+   CHECK(library.GetTable(unknown[0].uuid).has_value()); // The tables page marks the table by its uuid
    CHECK(unknown[0].rom == "zzzunknown");
 
    // Saved from the web server: refused with an error, then accepted, and the table is no longer unknown
