@@ -925,4 +925,185 @@ TEST_CASE("TableLibrary: a ROM uploaded with the tables goes to the ROM folder o
    CHECK(fs::exists(roms / "SS_15.zip"));
    CHECK(library.GetMissingRoms().empty());
 }
+namespace {
+
+// A driver catalog of PinMAME with a few games, in the format of gamedefs/catalog/pinmame.json
+fs::path WriteCatalog(const fs::path& folder)
+{
+   const fs::path path = folder / "pinmame.json";
+   nlohmann::json drivers = nlohmann::json::array();
+   for (const char* id : { "simpprty", "simpprtg", "sorcr_l1", "sorcr_l2", "afm_113b", "tz_94h", "simp_a27" })
+      drivers.push_back({ { "id", id }, { "description", id } });
+   Fixture::Touch(path, nlohmann::json { { "drivers", drivers } }.dump());
+   return path;
+}
+
+}
+
+TEST_CASE("RomAliases: the alias file is read and checked as libpinmame reads it")
+{
+   Fixture f;
+   RomAliases::GameCatalog catalog(WriteCatalog(f.root));
+   CHECK(catalog.IsAvailable());
+   CHECK(catalog.IsGame("SimpPrty"));
+   CHECK_FALSE(catalog.IsGame("simpprtyh"));
+   CHECK(catalog.GetGamePrefix("simpprtyh") == "simpprty");
+   CHECK(catalog.GetGamePrefix("tz_94hmod") == "tz_94h");
+   CHECK(catalog.GetGamePrefix("simpprtyhorrorhalloween") == ""); // A prefix shorter than half of the name is no clue
+   CHECK(catalog.GetGamePrefix("simpprty") == "");
+
+   const fs::path aliasFile = f.root / "pinmame" / "alias.txt";
+   Fixture::Touch(aliasFile, "# comment\nsimp,simp_a27\nSIMPPRTYH , simpprty # mod\nnocomma\n");
+   CHECK(RomAliases::FindAlias(aliasFile, "simp") == "simp_a27");
+   CHECK(RomAliases::FindAlias(aliasFile, "simpprtyh") == "simpprty");
+   CHECK_FALSE(RomAliases::FindAlias(aliasFile, "nocomma"));
+   CHECK_FALSE(RomAliases::FindAlias(aliasFile, "comment"));
+
+   // Appended after a missing final new line, the comment line kept short enough for libpinmame
+   Fixture::Touch(aliasFile, "simp,simp_a27");
+   string error;
+   CHECK(RomAliases::AppendAlias(aliasFile, "alienspupver", "sorcr_l1", "From readme.txt, for " + string(200, 'x'), error));
+   const string content = Fixture::Read(aliasFile);
+   CHECK(content.starts_with("simp,simp_a27\n# From readme.txt, for xxx"));
+   CHECK(content.ends_with("...\nalienspupver,sorcr_l1\n"));
+   for (std::istringstream lines(content); !lines.eof();) {
+      string line;
+      std::getline(lines, line);
+      CHECK(line.size() <= 126);
+   }
+
+   std::vector<RomAliases::Issue> errors, warnings;
+   const string normalized = RomAliases::Normalize("  # aliases \r\nsimpprtyh, simpprty\r\n\r\nalone\nsimpprtyh,simpprtg\nfoo,notagame # x\nsimpprty,simpprtg\n" + string(130, '#') + "\n  \n\n", catalog, errors, warnings);
+   CHECK(normalized == "# aliases\nsimpprtyh, simpprty\n\nalone\nsimpprtyh,simpprtg\nfoo,notagame # x\nsimpprty,simpprtg\n" + string(130, '#') + "\n");
+   REQUIRE(errors.size() == 2);
+   CHECK(errors[0].line == 4); // A single name: libpinmame would crash on it
+   CHECK(errors[1].line == 8); // Read in parts
+   REQUIRE(warnings.size() == 3);
+   CHECK(warnings[0].line == 5); // Given twice
+   CHECK(warnings[1].line == 6); // Unknown game
+   CHECK(warnings[2].line == 7); // Replaces a game
+   errors.clear();
+   warnings.clear();
+   // The lines of the replaced file get no warning: the user did not write them
+   RomAliases::Normalize("foo,notagame\nbar,notagame\n", catalog, errors, warnings, "foo,notagame\n");
+   REQUIRE(warnings.size() == 1);
+   CHECK(warnings[0].line == 2);
+   CHECK(RomAliases::Normalize("a,simp_a27", catalog, errors, warnings) == "a,simp_a27\n");
+   CHECK(RomAliases::Normalize("", catalog, errors, warnings).empty());
+   CHECK(errors.empty());
+}
+
+TEST_CASE("RomAliases: the game of an unknown name is found along the table")
+{
+   Fixture f;
+   RomAliases::GameCatalog catalog(WriteCatalog(f.root));
+   const fs::path table = f.tables / "Simpsons";
+   const std::map<string, RomAliases::Evidence> noHints;
+
+   // The readme gives the pair, as it tells the user to add it to VPMAlias.txt
+   Fixture::Touch(table / "readme.txt", "You must set an alias in your VPMAlias.txt file to \"simpprtyh,simpprty\" or change cGameName.");
+   std::optional<RomAliases::Evidence> found = RomAliases::FindGame("simpprtyh", {}, table, noHints, catalog);
+   REQUIRE(found);
+   CHECK(found->game == "simpprty");
+   CHECK(found->source == "readme.txt");
+   // A pair whose game PinMAME does not know is no clue, nor a longer name: the next clue is used
+   Fixture::Touch(table / "readme.txt", "simpprtyh,simpprtyx and simpprtyhx,simpprtg");
+   found = RomAliases::FindGame("simpprtyh", {}, table, noHints, catalog);
+   REQUIRE(found);
+   CHECK(found->source == "its name");
+
+   // A hint from the bundle comes first, then the script
+   found = RomAliases::FindGame("simpprtyh", {}, table, { { "simpprtyh", { "simpprtg", "notes.txt of the uploaded bundle" } } }, catalog);
+   CHECK(found->game == "simpprtg");
+   found = RomAliases::FindGame("alienspupver", { "notagame", "sorcr_l1", "sorcr_l2" }, f.tables / "Aliens", noHints, catalog);
+   REQUIRE(found);
+   CHECK(found->game == "sorcr_l1");
+   CHECK(found->source == "the table script");
+
+   // Files and folders named after a game
+   Fixture::Touch(f.tables / "Aliens" / "altcolor" / "sorcr_l2" / "pin2dmd.pal");
+   found = RomAliases::FindGame("alienspupver", {}, f.tables / "Aliens", noHints, catalog);
+   REQUIRE(found);
+   CHECK(found->game == "sorcr_l2");
+   CHECK(found->source == "altcolor/sorcr_l2");
+   Fixture::Touch(f.tables / "Aliens" / "pinmame" / "nvram" / "afm_113b.nv");
+   CHECK_FALSE(RomAliases::FindGame("alienspupver", {}, f.tables / "Aliens", noHints, catalog)); // Two games, none in the name
+
+   // Nothing along the table: no game
+   CHECK_FALSE(RomAliases::FindGame("zzzunknown", {}, f.tables / "Nothing", noHints, catalog));
+}
+
+TEST_CASE("TableLibrary: a table asking for an unknown game gets its alias and its ROM")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   const fs::path roms = f.tables / "pinmame" / "roms";
+   config.romsPath = roms;
+   config.pinmameCatalogPath = WriteCatalog(f.root);
+   config.defaultAliasesPath = f.root / "VPMAlias.txt";
+   Fixture::Touch(config.defaultAliasesPath, "# VPinMAME aliases\nsimp,simp_a27\n");
+   config.readPupUse = [](const fs::path& path) {
+      TableLibrary::PupUse use;
+      const string name = path.stem().string();
+      if (name == "Simpsons TOH")
+         use.rom = "simpprtyh";
+      else if (name == "Aliens") {
+         use.rom = "alienspupver";
+         use.games = { "sorcr_l2" }; // Commented cGameName
+      } else if (name == "Mystery")
+         use.rom = "zzzunknown";
+      else if (name == "AFM")
+         use.rom = "afm_113b";
+      return use;
+   };
+
+   // The Simpsons Treehouse of Horror mod: the alias in its readme, a muted ROM in a folder of its own
+   Fixture::Touch(f.root / "toh" / "Simpsons TOH.vpx");
+   Fixture::Touch(f.root / "toh" / "readme.txt", "set an alias in your VPMAlias.txt file to \"simpprtyh,simpprty\"");
+   Fixture::Touch(f.root / "toh" / "MutedRom" / "simpprty.zip", "muted rom");
+   Fixture::MakeZip(f.root / "toh", f.tables / "toh.zip");
+   // Aliens: the table in a sub folder, the alias only in the instructions at the root of the bundle
+   Fixture::Touch(f.root / "aliens" / "Aliens" / "Aliens.vpx");
+   Fixture::Touch(f.root / "aliens" / "INSTALLATION INSTRUCTIONS.txt", "Add this line to VPMAlias.txt: alienspupver,sorcr_l1");
+   Fixture::MakeZip(f.root / "aliens", f.tables / "aliens.zip");
+   // A table asking for an unknown game without any clue, and one whose ROM is already installed (a ROM in its folder must not replace it)
+   Fixture::Touch(f.tables / "Mystery" / "Mystery.vpx");
+   Fixture::Touch(f.tables / "AFM" / "AFM.vpx");
+   Fixture::Touch(f.tables / "AFM" / "extras" / "afm_113b.zip", "other rom");
+   Fixture::Touch(roms / "afm_113b.zip", "installed rom");
+
+   TableLibrary library(config);
+   library.Rescan();
+   const fs::path aliasFile = f.tables / "pinmame" / "alias.txt";
+   const string aliases = Fixture::Read(aliasFile);
+   CHECK(aliases.starts_with("# VPinMAME aliases\nsimp,simp_a27\n")); // Created from VPinMAME's aliases
+   CHECK(RomAliases::FindAlias(aliasFile, "simpprtyh") == "simpprty");
+   CHECK(RomAliases::FindAlias(aliasFile, "alienspupver") == "sorcr_l1");
+   CHECK(aliases.find("# From INSTALLATION INSTRUCTIONS.txt of the uploaded bundle, for Aliens") != string::npos);
+   CHECK(aliases.find("# From readme.txt of the uploaded bundle, for Simpsons TOH") != string::npos);
+   CHECK(Fixture::Read(roms / "simpprty.zip") == "muted rom");
+   CHECK(Fixture::Read(roms / "afm_113b.zip") == "installed rom");
+   CHECK(fs::exists(f.tables / "AFM" / "extras" / "afm_113b.zip"));
+
+   std::vector<TableLibrary::UnknownGame> unknown = library.GetUnknownGames();
+   REQUIRE(unknown.size() == 1);
+   CHECK(unknown[0].table == "Mystery");
+   CHECK(unknown[0].rom == "zzzunknown");
+
+   // Saved from the web server: refused with an error, then accepted, and the table is no longer unknown
+   std::vector<RomAliases::Issue> errors, warnings;
+   string error;
+   CHECK_FALSE(library.SaveAliasFile(aliases + "zzzunknown\n", errors, warnings, error));
+   CHECK(Fixture::Read(aliasFile) == aliases);
+   errors.clear();
+   CHECK(library.SaveAliasFile(aliases + "zzzunknown,tz_94h\n", errors, warnings, error));
+   CHECK(errors.empty());
+   CHECK(library.ReadAliasFile() == aliases + "zzzunknown,tz_94h\n");
+   CHECK(library.GetUnknownGames().empty());
+
+   // The alias file exists: it is never replaced by the default one, and an alias is not added twice
+   library.Rescan();
+   CHECK(library.ReadAliasFile() == aliases + "zzzunknown,tz_94h\n");
+}
+
 #endif

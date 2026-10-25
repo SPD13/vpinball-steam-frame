@@ -6,12 +6,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "RomAliases.h"
 
 namespace VPinballLib {
 
@@ -58,6 +61,7 @@ public:
       bool usesPup = false; // The script creates PinUP Player
       std::vector<std::string> names; // Candidate pack names, by order of preference
       std::string rom; // PinMAME ROM, empty for the other tables
+      std::vector<std::string> games; // Other PinMAME games the script quotes, clues for the alias of a 'rom' PinMAME does not know
    };
 
    struct Config {
@@ -79,6 +83,12 @@ public:
       // Optional: the ROM folder of PinMAME. ROMs found in imported bundles outside of a table's 'pinmame/roms' folder, and ROM archives
       // dropped in the tables folder under the name of a ROM a table needs, are moved there (see ImportArchive and MoveRootRoms)
       std::filesystem::path romsPath;
+      // Optional: the driver catalog of PinMAME (gamedefs/catalog/pinmame.json of its plugin), to recognize the tables asking for a game
+      // PinMAME does not know. The library adds the alias they need to the alias file of PinMAME, 'alias.txt' along the ROM folder, and moves
+      // the ROM archive of the game found in the table folder to the ROM folder (see ResolveGameAliases). The alias file is created from
+      // 'defaultAliasesPath' (VPinMAME's built-in aliases, VPMAlias.txt) when there is none.
+      std::filesystem::path pinmameCatalogPath;
+      std::filesystem::path defaultAliasesPath;
    };
 
    explicit TableLibrary(Config config);
@@ -136,6 +146,19 @@ public:
    void ClearMissingRoms();
    void OnFileAdded(const std::string& fileName);
 
+   // PinMAME ROM aliases (see RomAliases.h). The alias file shared by the tables, empty without a ROM folder (a table with its own
+   // 'pinmame/roms' folder has its alias file in that 'pinmame' folder, which PinMAME then uses instead).
+   std::filesystem::path GetAliasFilePath() const;
+   std::string ReadAliasFile() const;
+   // Save the content, normalized, as the alias file. Nothing is saved when there are errors (lines that libpinmame would misread).
+   bool SaveAliasFile(const std::string& content, std::vector<RomAliases::Issue>& errors, std::vector<RomAliases::Issue>& warnings, std::string& error);
+   // The tables asking for a game that PinMAME does not know, and that has no alias
+   struct UnknownGame {
+      std::string table;
+      std::string rom;
+   };
+   std::vector<UnknownGame> GetUnknownGames();
+
    const std::filesystem::path& GetTablesPath() const { return m_config.tablesPath; }
    std::filesystem::path GetFullPath(const Table& table) const { return BuildPath(table.path); }
    std::filesystem::path GetImagePath(const Table& table) const { return table.image.empty() ? std::filesystem::path() : BuildPath(table.image); }
@@ -187,6 +210,12 @@ private:
    void LoadRejectedArchives();
    void SaveRejectedArchives() const;
    void ApplyVrPupOptions(const std::filesystem::path& folder) const;
+   std::filesystem::path GetTableAliasFilePath(const std::filesystem::path& tableFolder) const;
+   std::filesystem::path FindTableRomsFolder(const std::filesystem::path& tableFolder) const;
+   void EnsureAliasFile() const;
+   void CollectAliasHints(const std::filesystem::path& bundleFolder);
+   void ResolveGameAliases(const std::vector<Table>& tables);
+   bool MoveTableRom(const std::filesystem::path& tableFolder, const std::string& game);
 
    const Config m_config;
    std::mutex m_operationMutex; // Serializes the operations modifying the library (they may be long: unzip, copy...)
@@ -195,6 +224,11 @@ private:
    bool m_loaded = false;
    std::set<std::string> m_rejectedArchives; // Bundles without table, to avoid extracting them at each rescan (kept in rejected-archives.json)
    bool m_rejectedArchivesLoaded = false;
+   RomAliases::GameCatalog m_gameCatalog;
+   std::map<std::string, RomAliases::Evidence> m_aliasHints; // Alias pairs of the imported bundles, by lower case name (see CollectAliasHints)
+   std::set<std::string> m_aliasChecks; // The tables already looked at by ResolveGameAliases (uuid, date, ROM and alias file revision)
+   std::atomic<uint64_t> m_aliasFileRevision { 0 }; // Incremented when the alias file is saved from the web server
+   mutable std::mutex m_aliasFileMutex;
    std::atomic<uint64_t> m_revision { 0 };
 
    std::mutex m_workerMutex; // Protects m_worker and m_rescanPending
