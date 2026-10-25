@@ -23,6 +23,9 @@ namespace {
 
 constexpr const char* IMPORT_FOLDER = ".import"; // Hidden scratch folder inside the tables folder, so that imported folders are moved instead of copied
 constexpr const char* const SIDECAR_EXTENSIONS[] = { ".ini", ".vbs", ".directb2s", ".png", ".jpg" };
+// Version of what Config::readPupUse finds in the scripts, saved with it in table-stats.json: raised when it finds other things (2: the ROM
+// of the first line which is not commented out, and none for the tables not starting PinMAME), so that the tables are read again
+constexpr int SCRIPT_SCAN_VERSION = 2;
 
 string ToLower(string value)
 {
@@ -306,8 +309,8 @@ void TableLibrary::LoadJson()
                   table.pupPacks = it->value("pupPacks", std::vector<string>());
                   table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
                   table.rom = it->value("rom", ""s);
-                  if (!it->contains("rom"))
-                     table.pupScannedAt = 0; // Scanned before the ROM was read from the script: read again
+                  if (it->value("scanVersion", 0) < SCRIPT_SCAN_VERSION)
+                     table.pupScannedAt = 0; // Read by an older version, which did not find the same things in the script: read again
                }
             }
          } catch (const std::exception& e) {
@@ -337,6 +340,7 @@ void TableLibrary::SaveJson()
             stats[table.uuid]["pupPacks"] = table.pupPacks;
             stats[table.uuid]["pupScannedAt"] = table.pupScannedAt;
             stats[table.uuid]["rom"] = table.rom;
+            stats[table.uuid]["scanVersion"] = SCRIPT_SCAN_VERSION;
          }
       }
    }

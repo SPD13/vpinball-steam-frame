@@ -107,9 +107,12 @@ TableUse GetTableUse(const string& script)
    for (const string& rom : roms)
       if (std::find(use.names.begin(), use.names.end(), rom) == use.names.end())
          use.names.push_back(rom);
-   // The ROM is the first name which is not commented out ('Const cGameName = "..." lines of other versions are often kept as comments)
+   // The ROM is the first name which is not commented out ('Const cGameName = "..." lines of other versions are often kept as comments),
+   // for the tables starting PinMAME only: original tables name themselves with cGameName too, for their PuP pack or their backglass
+   const bool usesPinMame = lowerScript.find("loadvpm") != string::npos || lowerScript.find("vpinmame.controller") != string::npos
+      || lowerScript.find("loadcontroller(\"vpm\"") != string::npos;
    const auto active = std::find(commented.begin(), commented.end(), false);
-   if (!roms.empty())
+   if (usesPinMame && !roms.empty())
       use.rom = active != commented.end() ? roms[active - commented.begin()] : roms.front();
    FindCallValues(script, lowerScript, ".games("s, use.games);
    for (const string& rom : roms)
