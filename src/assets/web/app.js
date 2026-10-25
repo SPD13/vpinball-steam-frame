@@ -2444,6 +2444,13 @@ function startup() {
 
   const initialHash = window.location.hash ? window.location.hash.substring(1) : '';
 
+  // 'vpx.html?aliases': the tables page links the tables asking for a game that PinMAME does not know to the alias editor. The parameter
+  // is removed, so that reloading the page does not open it again.
+  if (new URLSearchParams(window.location.search).has('aliases')) {
+    history.replaceState(history.state, '', window.location.pathname + window.location.hash);
+    openAliasesDialog();
+  }
+
   fetchInfo()
     .then(() => {
       connectStatusWebSocket();
