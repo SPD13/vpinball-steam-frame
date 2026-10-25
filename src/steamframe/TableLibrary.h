@@ -154,6 +154,7 @@ public:
    bool SaveAliasFile(const std::string& content, std::vector<RomAliases::Issue>& errors, std::vector<RomAliases::Issue>& warnings, std::string& error);
    // The tables asking for a game that PinMAME does not know, and that has no alias
    struct UnknownGame {
+      std::string uuid;
       std::string table;
       std::string rom;
    };
