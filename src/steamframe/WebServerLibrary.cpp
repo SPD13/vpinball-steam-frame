@@ -50,7 +50,7 @@ string WebServer::GetVersionLabel()
    return "Steam Frame Edition " + edition + " - vpinball v" STR(VP_VERSION_MAJOR) "." STR(VP_VERSION_MINOR) "." STR(VP_VERSION_REV) " Beta";
 }
 
-// The handler of a route of the table library or of the leaderboards, nullptr for another route. They all need a paired browser.
+// The handler of a route of the table library, of the leaderboards or of the backup page, nullptr for another route. They all need a paired browser.
 WebServer::RouteHandler WebServer::GetLibraryRoute(struct mg_http_message* hm)
 {
    static constexpr std::pair<const char*, RouteHandler> routes[] = {
@@ -70,6 +70,17 @@ WebServer::RouteHandler WebServer::GetLibraryRoute(struct mg_http_message* hm)
       { "/profile-active", &WebServer::ProfileActive },
       { "/pup-options", &WebServer::PupOptions },
       { "/pinmame-aliases", &WebServer::PinmameAliases },
+      { "/backup-items", &WebServer::BackupItems },
+      { "/backup-prepare", &WebServer::BackupPrepare },
+      { "/backup-status", &WebServer::BackupStatus },
+      { "/backup-download", &WebServer::BackupDownload },
+      { "/backup-cancel", &WebServer::BackupCancel },
+      { "/restore-begin", &WebServer::RestoreBegin },
+      { "/restore-check", &WebServer::RestoreCheck },
+      { "/restore-file", &WebServer::RestoreFile },
+      { "/restore-finish", &WebServer::RestoreFinish },
+      { "/restore-status", &WebServer::RestoreStatus },
+      { "/restore-cancel", &WebServer::RestoreCancel },
    };
    for (const auto& [uri, handler] : routes)
       if (mg_match(hm->uri, mg_str(uri), NULL))

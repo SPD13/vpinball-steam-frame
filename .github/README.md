@@ -33,6 +33,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Lobby** in launcher mode, from which tables are started and to which they return, in the room chosen with the lobby room selector.
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and a link to the ROM folder. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables.
 - **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed), **upload a thumbnail** from the computer, or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away.
+- **Full backup of tables, ROMs, settings and scores**: a Backup page in the browser, next to Files, downloads everything the Frame holds to your computer (tables with their backglasses and PuP packs, table images, ROMs, machine saves, favorites and names, settings, scores and players, ROM aliases), or only the items and tables you choose. Restore it after a fresh installation or onto another Frame, item by item and table by table: scores, players and favorites are merged with the ones already there ([how it works](#backup-and-restore)).
 - **Missing ROM message** naming the files to add and where.
 - **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** (see [PinMAME ROM aliases](#pinmame-rom-aliases)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
@@ -111,7 +112,7 @@ Or update from the headset: when a newer version is out, select the yellow **New
 
 ### Uninstalling
 
-In the installer app, after step 1: **Uninstall the game from the Frame...** at the bottom of step 2, then **Uninstall**. It removes the game, its library entry and artwork; tick **Also delete its settings, scores and play statistics** to remove those too. The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted.
+In the installer app, after step 1: **Uninstall the game from the Frame...** at the bottom of step 2, then **Uninstall**. It removes the game, its library entry and artwork; tick **Also delete its settings, scores and play statistics** to remove those too. The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted. To keep everything for a new installation, make a [backup](#backup-and-restore) first.
 
 ### Troubleshooting
 
@@ -245,6 +246,45 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 | `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
+
+## Backup and restore
+
+A fresh installation of the Frame, or a new headset, starts with an empty library. Back up what you keep on the Frame to your computer, and restore it there later.
+
+### What a backup holds
+
+| Item | Content |
+| --- | --- |
+| Tables | The tables and the files along them: backglasses, music, PinUP Player packs |
+| Table images | The images shown by the table picker |
+| ROMs | PinMAME ROMs, with the colorizations and the sound packs of the games |
+| Machine saves | High scores and settings saved by the games (PinMAME nvram, VPReg) |
+| Library | Favorites, table names and play counts |
+| Settings | Settings of the application and of the tables, the lobby room |
+| Scores and players | Leaderboards and player profiles |
+| ROM aliases | The PinMAME alias file |
+
+### Making a backup
+
+1. In the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a computer on the same network.
+2. Open **Backup**, next to Files. Tick the items to save; each one shows its size. Keep **All tables**, or pick **Choose tables** to select them one by one (a table's ROM, saves and settings follow it).
+3. Select **Create backup**. The page checks the files, then the browser downloads `VPX-Backup-<date>.vpxbackup`.
+
+The backup is made while it downloads, so it takes no space on the Frame, even for tens of gigabytes. A broken download can be resumed from the browser's downloads list. The file is a zip. It is named `.vpxbackup` so that browsers do not extract it. Restore the file as it was downloaded: a zip made again from its content is refused.
+
+### Restoring a backup
+
+1. On the **Backup** page, under **Restore a backup**, select **Choose a backup...** and pick the `.vpxbackup` file. The browser reads it, without uploading it whole, and shows its items and tables.
+2. Tick what to bring back: all of it, some items, or only some tables.
+3. Select **Restore**, then confirm. Only the selected files are uploaded.
+
+What happens to what is already on the Frame:
+
+- **Files** (tables, images, ROMs, saves) replace the ones with the same name. Files already there with the same size and date are skipped, so an interrupted restore can simply be started again.
+- **Scores, players, favorites and table names** are merged with the Frame's. Tables are matched by their file, so scores find their table again after a reinstallation.
+- **Settings** apply when the next table or the lobby loads. The Frame's own settings are kept: folders, displays, audio, controllers, the position of the table in the room, and the Wi-Fi upload settings.
+
+The page refuses to back up or restore while a table is being played: close it first (the lobby is fine). Keep the headset awake during a backup or a restore, because it leaves the network when it sleeps. The game also asks the Frame not to sleep while a transfer runs. More details: [Steam Frame Branch](/docs/Steam%20Frame%20Branch.md), section 16.
 
 ## PinMAME ROM aliases
 

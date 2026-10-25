@@ -277,6 +277,39 @@ bool TableLibrary::Update(const string& uuid, const std::function<bool(Table&)>&
 ///////////////////////////////////////////////////////////////////////////////
 // tables.json
 
+static std::vector<Table> ParseTables(const nlohmann::json& json)
+{
+   std::vector<Table> tables;
+   for (const auto& entry : json.at("tables")) {
+      Table table;
+      table.uuid = entry.value("uuid", string());
+      table.name = entry.value("name", string());
+      table.path = entry.value("path", string());
+      table.image = entry.value("image", string());
+      table.createdAt = entry.value("createdAt", int64_t(0));
+      table.modifiedAt = entry.value("modifiedAt", int64_t(0));
+      tables.push_back(std::move(table));
+   }
+   return tables;
+}
+
+static void ParseStats(const nlohmann::json& stats, std::vector<Table>& tables)
+{
+   for (Table& table : tables) {
+      if (const auto it = stats.find(table.uuid); it != stats.end()) {
+         table.lastPlayedAt = it->value("lastPlayedAt", int64_t(0));
+         table.playCount = it->value("playCount", 0);
+         table.favorite = it->value("favorite", false);
+         table.usesPup = it->value("usesPup", false);
+         table.pupPacks = it->value("pupPacks", std::vector<string>());
+         table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
+         table.rom = it->value("rom", ""s);
+         if (it->value("scanVersion", 0) < SCRIPT_SCAN_VERSION)
+            table.pupScannedAt = 0; // Read by an older version, which did not find the same things in the script: read again
+      }
+   }
+}
+
 void TableLibrary::LoadJson()
 {
    m_loaded = true;
@@ -284,35 +317,11 @@ void TableLibrary::LoadJson()
    if (!file)
       return;
    try {
-      const nlohmann::json json = nlohmann::json::parse(file);
-      std::vector<Table> tables;
-      for (const auto& entry : json.at("tables")) {
-         Table table;
-         table.uuid = entry.value("uuid", string());
-         table.name = entry.value("name", string());
-         table.path = entry.value("path", string());
-         table.image = entry.value("image", string());
-         table.createdAt = entry.value("createdAt", int64_t(0));
-         table.modifiedAt = entry.value("modifiedAt", int64_t(0));
-         tables.push_back(std::move(table));
-      }
+      std::vector<Table> tables = ParseTables(nlohmann::json::parse(file));
       // Player statistics are optional, and must not prevent from loading the tables
       if (std::ifstream statsFile(GetStatsPath()); statsFile) {
          try {
-            const nlohmann::json stats = nlohmann::json::parse(statsFile);
-            for (Table& table : tables) {
-               if (const auto it = stats.find(table.uuid); it != stats.end()) {
-                  table.lastPlayedAt = it->value("lastPlayedAt", int64_t(0));
-                  table.playCount = it->value("playCount", 0);
-                  table.favorite = it->value("favorite", false);
-                  table.usesPup = it->value("usesPup", false);
-                  table.pupPacks = it->value("pupPacks", std::vector<string>());
-                  table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
-                  table.rom = it->value("rom", ""s);
-                  if (it->value("scanVersion", 0) < SCRIPT_SCAN_VERSION)
-                     table.pupScannedAt = 0; // Read by an older version, which did not find the same things in the script: read again
-               }
-            }
+            ParseStats(nlohmann::json::parse(statsFile), tables);
          } catch (const std::exception& e) {
             Log(LogLevel::Error, "Failed to parse " + GetStatsPath().string() + ": " + e.what());
          }
@@ -366,6 +375,65 @@ void TableLibrary::SaveJson()
    };
    save(m_config.jsonPath, json);
    save(GetStatsPath(), stats);
+}
+
+std::map<string, string> TableLibrary::ImportMetadata(const string& tablesJson, const string& statsJson, int64_t restoreStartedAt)
+{
+   std::map<string, string> uuids;
+   std::vector<Table> restored;
+   try {
+      restored = ParseTables(nlohmann::json::parse(tablesJson));
+   } catch (const std::exception& e) {
+      Log(LogLevel::Error, "Failed to parse the tables.json of the backup: "s + e.what());
+      return uuids;
+   }
+   if (!statsJson.empty()) {
+      try {
+         ParseStats(nlohmann::json::parse(statsJson), restored);
+      } catch (const std::exception& e) {
+         Log(LogLevel::Warn, "Failed to parse the table-stats.json of the backup: "s + e.what());
+      }
+   }
+
+   std::lock_guard operationLock(m_operationMutex);
+   if (!m_loaded)
+      LoadJson();
+   std::vector<Table> tables = m_tables;
+   int added = 0, merged = 0;
+   for (const Table& backup : restored) {
+      // The tables whose file is on the device, restored or not
+      if (backup.uuid.empty() || backup.path.empty() || fs::path(backup.path).is_absolute() || !IsInsideTables(BuildPath(backup.path)) || !Exists(BuildPath(backup.path)))
+         continue;
+      const bool uuidUsed = std::any_of(tables.begin(), tables.end(), [&backup](const Table& table) { return table.uuid == backup.uuid; });
+      const auto local = std::find_if(tables.begin(), tables.end(), [&backup](const Table& table) { return table.path == backup.path; });
+      if (local == tables.end()) {
+         Table table = backup;
+         if (uuidUsed)
+            table.uuid = GenerateUUID(tables);
+         table.image = FindImage(table.path);
+         table.modifiedAt = Now(); // Its image is loaded again
+         table.pupScannedAt = 0; // Its script is read again
+         uuids[backup.uuid] = table.uuid;
+         tables.push_back(std::move(table));
+         added++;
+         continue;
+      }
+      if (local->uuid != backup.uuid && !uuidUsed && local->createdAt >= restoreStartedAt)
+         local->uuid = backup.uuid;
+      uuids[backup.uuid] = local->uuid;
+      if (local->name == NameFromStem(fs::path(local->path)) && !backup.name.empty()) // Unless the user gave it a name on this device
+         local->name = backup.name;
+      local->favorite = local->favorite || backup.favorite;
+      local->playCount = std::max(local->playCount, backup.playCount);
+      local->lastPlayedAt = std::max(local->lastPlayedAt, backup.lastPlayedAt);
+      if (backup.createdAt != 0 && (local->createdAt == 0 || backup.createdAt < local->createdAt))
+         local->createdAt = backup.createdAt;
+      local->modifiedAt = std::max(Now(), local->modifiedAt + 1);
+      merged++;
+   }
+   Commit(std::move(tables));
+   Log(LogLevel::Info, "Library information restored from a backup: " + std::to_string(added) + " table(s) added, " + std::to_string(merged) + " merged");
+   return uuids;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -478,6 +546,7 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
    progress(90, "Finalizing...");
    if (!jsonExists || tables.size() != m_tables.size() || !std::equal(tables.begin(), tables.end(), m_tables.begin(), SameTable))
       Commit(std::move(tables));
+   m_scanned = true;
    progress(100, "Complete");
 }
 

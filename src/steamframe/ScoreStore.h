@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -99,6 +100,12 @@ public:
    std::optional<ScoreRank> GetRank(const std::string& scoreId) const;
    // Best score of each profile on a table, best first (scores belonging to nobody are left out)
    std::vector<Score> GetBestByProfile(const std::string& tableUuid) const;
+
+   // Merge the profiles.json and scores.json of a backup (see steamframe/Backup.h): profiles matched by id, then by name; scores already
+   // there (same id, or same table, score, date and player) skipped. Tables are given their uuid on the device with 'tableUuids' (by uuid in the
+   // backup), or found by path with 'tablesByPath'. Returns the number of profiles and scores added.
+   std::pair<int, int> Import(const std::string& profilesJson, const std::string& scoresJson, const std::map<std::string, std::string>& tableUuids,
+      const std::map<std::string, std::string>& tablesByPath);
 
    // Incremented at each change, for UIs that poll
    uint64_t GetRevision() const { return m_revision.load(); }

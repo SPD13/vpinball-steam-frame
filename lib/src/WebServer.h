@@ -74,6 +74,18 @@ private:
    void PupOptions(struct mg_connection *c, struct mg_http_message* hm);
    // The alias file of PinMAME, edited from the advanced menu of the Files page (see RomAliases.h)
    void PinmameAliases(struct mg_connection *c, struct mg_http_message* hm);
+   // Backup of the user's data and its restore, for the backup page (steamframe/WebServerBackup.cpp)
+   void BackupItems(struct mg_connection *c, struct mg_http_message* hm);
+   void BackupPrepare(struct mg_connection *c, struct mg_http_message* hm);
+   void BackupStatus(struct mg_connection *c, struct mg_http_message* hm);
+   void BackupDownload(struct mg_connection *c, struct mg_http_message* hm);
+   void BackupCancel(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreBegin(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreCheck(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreFile(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreFinish(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreStatus(struct mg_connection *c, struct mg_http_message* hm);
+   void RestoreCancel(struct mg_connection *c, struct mg_http_message* hm);
 #endif
 
    void AddLogEntry(const string& formattedLog);
