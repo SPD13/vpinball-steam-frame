@@ -1134,6 +1134,7 @@ TEST_CASE("TableLibrary: a table asking for an unknown game gets its alias and i
    std::vector<TableLibrary::UnknownGame> unknown = library.GetUnknownGames();
    REQUIRE(unknown.size() == 1);
    CHECK(unknown[0].table == "Mystery");
+   CHECK(library.GetTable(unknown[0].uuid).has_value()); // The tables page marks the table by its uuid
    CHECK(unknown[0].rom == "zzzunknown");
 
    // Saved from the web server: refused with an error, then accepted, and the table is no longer unknown

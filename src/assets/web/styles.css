@@ -1322,8 +1322,43 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 
 .table-tile-placeholder[hidden],
 .table-tile-badge[hidden],
-.table-tile-pup[hidden] {
+.table-tile-pup[hidden],
+.table-tile-unknown[hidden] {
   display: none;
+}
+
+/* The table asks PinMAME for a game it does not know (bottom right): a link to the alias editor of the Files page */
+.table-tile-unknown {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: #eab308;
+  color: #422006;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.table-tile-unknown:hover {
+  background: #facc15;
+}
+
+/* Above the tables: the tables that can not start for want of an alias, linked to the alias editor */
+.tables-unknown {
+  display: block;
+  margin: 0 0 0.75rem;
+  text-decoration: none;
+}
+
+.tables-unknown[hidden] {
+  display: none;
+}
+
+.tables-unknown-link {
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 /* The table has its PinUP Player pack (bottom left, as in the table picker of the application) */

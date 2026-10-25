@@ -137,6 +137,24 @@ function getFileName(path) {
   return path.split('/').pop();
 }
 
+function getUnknownGameText(table) {
+  return `PinMAME doesn't know the game '${table.unknownGame}': it needs an alias. Click to edit the aliases.`;
+}
+
+// The tables asking PinMAME for a game it does not know, whatever the tab or the search: they can not start until they get an alias
+function renderUnknownGames() {
+  const unknown = State.tables.filter(table => table.unknownGame);
+  const warning = $('tables-unknown');
+  warning.hidden = unknown.length === 0;
+  if (unknown.length === 0)
+    return;
+  const names = unknown.map(table => `${table.name} ('${table.unknownGame}')`).join(', ');
+  warning.replaceChildren(
+    Object.assign(document.createElement('strong'), { textContent: unknown.length === 1 ? 'A table can not start: ' : `${unknown.length} tables can not start: ` }),
+    `PinMAME doesn't know the game ${unknown.length === 1 ? 'it asks' : 'they ask'} for, ${unknown.length === 1 ? 'it needs' : 'they need'} an alias. ${names}. `,
+    Object.assign(document.createElement('span'), { className: 'tables-unknown-link', textContent: 'Edit the aliases' }));
+}
+
 function renderTabs() {
   const container = $('tables-tabs');
   container.replaceChildren(...TABS.map(tab => {
@@ -168,6 +186,7 @@ function createTile(uuid) {
       <img alt="" loading="lazy" decoding="async">
       <span class="table-tile-badge" hidden>Playing</span>
       <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
+      <a class="table-tile-unknown" href="vpx.html?aliases" hidden>&#9888; Unknown game</a>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>
     <div class="table-tile-footer">
@@ -183,6 +202,7 @@ function createTile(uuid) {
     placeholder: tile.querySelector('.table-tile-placeholder'),
     badge: tile.querySelector('.table-tile-badge'),
     pup: tile.querySelector('.table-tile-pup'),
+    unknown: tile.querySelector('.table-tile-unknown'),
     star: tile.querySelector('.table-tile-star'),
     name: tile.querySelector('.table-tile-name'),
     file: tile.querySelector('.table-tile-file'),
@@ -206,6 +226,8 @@ function updateTile(refs, table) {
   refs.placeholder.textContent = (table.name.trim()[0] || '#').toUpperCase();
   refs.badge.hidden = !table.playing;
   refs.pup.hidden = !table.hasPupPack;
+  refs.unknown.hidden = !table.unknownGame;
+  refs.unknown.title = table.unknownGame ? getUnknownGameText(table) : '';
   refs.tile.classList.toggle('playing', table.playing);
 
   refs.star.classList.toggle('on', table.favorite);
@@ -234,6 +256,7 @@ function render() {
   $('tables-count').textContent = State.scanning ? 'Scanning tables folder...'
     : tables.length !== total ? `${tables.length} of ${total} tables`
     : `${total} table${total === 1 ? '' : 's'}`;
+  renderUnknownGames();
 
   const empty = $('tables-empty');
   empty.hidden = tables.length > 0 || State.scanning;

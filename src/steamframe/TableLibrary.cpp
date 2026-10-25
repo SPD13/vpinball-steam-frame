@@ -926,7 +926,7 @@ std::vector<TableLibrary::UnknownGame> TableLibrary::GetUnknownGames()
       const fs::path aliasFile = GetTableAliasFilePath(BuildPath(table.path).parent_path());
       std::lock_guard lock(m_aliasFileMutex);
       if (!RomAliases::FindAlias(aliasFile, table.rom))
-         unknown.push_back({ table.name, table.rom });
+         unknown.push_back({ table.uuid, table.name, table.rom });
    }
    return unknown;
 }

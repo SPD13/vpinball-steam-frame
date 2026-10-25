@@ -198,8 +198,13 @@ static std::optional<VPinballLib::Table> GetRequestedTable(struct mg_connection 
 void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
 {
    VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
+   // The game that PinMAME does not know, without alias, by table: the page links these tables to the alias editor of the Files page
+   std::unordered_map<string, string> unknownGames;
+   for (const VPinballLib::TableLibrary::UnknownGame& unknown : library.GetUnknownGames())
+      unknownGames[unknown.uuid] = unknown.rom;
    json tables = json::array();
-   for (const VPinballLib::Table& table : library.GetTables())
+   for (const VPinballLib::Table& table : library.GetTables()) {
+      const auto unknownGame = unknownGames.find(table.uuid);
       tables.push_back({
          { "uuid", table.uuid },
          { "name", table.name },
@@ -214,7 +219,9 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
          { "usesPup", table.usesPup },
          { "pupPack", table.pupPacks.empty() ? ""s : table.pupPacks.front() },
          { "hasPupPack", table.hasPupPack },
+         { "unknownGame", unknownGame == unknownGames.end() ? ""s : unknownGame->second },
          { "playing", IsPlayed(library, table) } });
+   }
    const string response = json { { "revision", library.GetRevision() }, { "scanning", library.IsScanning() }, { "tables", tables } }.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }

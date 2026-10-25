@@ -152,6 +152,21 @@ void Controller::SetGameName(const string& name)
    }
    else if (status == PINMAME_STATUS_GAME_NOT_FOUND)
    {
+      // The table does not work without its game, often a mod asking for its own name: tell the player that it needs an alias. Neither
+      // the ROM nor the missing ROM list can tell it, as the game, hence its ROM, is not known until there is an alias.
+      VPXPluginAPI* vpxApi = nullptr;
+      unsigned int getVpxApiId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
+      m_msgApi->BroadcastMsg(m_endpointId, getVpxApiId, &vpxApi);
+      m_msgApi->ReleaseMsgID(getVpxApiId);
+      if (vpxApi && vpxApi->ShowMessage)
+      {
+         string message = "PinMAME doesn't know the game '"s + name + "': it needs an alias, see the web server.\n";
+         message += "\nAn alias gives the PinMAME game of the table, as a line '"s + name + ",game'";
+         if (!m_vpmPath.empty())
+            message += " of:\n"s + (std::filesystem::path(m_vpmPath) / "alias.txt"sv).string();
+         message += "\nThe Tables page of the web server lists the tables needing one, and opens the alias editor.\n";
+         vpxApi->ShowMessage("The table can not work: unknown game", message.c_str());
+      }
       PSC_FAIL("Game name not found: '%s'.", name.c_str());
    }
    else if (status == PINMAME_STATUS_CONFIG_NOT_SET)
