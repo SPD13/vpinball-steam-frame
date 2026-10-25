@@ -50,7 +50,7 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
 
    const vec3 head = (vec3(views[0].pose.position.x, views[0].pose.position.y, views[0].pose.position.z) + vec3(views[1].pose.position.x, views[1].pose.position.y, views[1].pose.position.z)) * 0.5f;
    m_uiHeadPos = head;
-   if (!m_uiPanelPlaced)
+   if (!m_uiPanelPlaced || m_uiPanelReplace)
    {
       // The panel covers the whole UI display area, most of it being transparent. The UI windows are laid out for the full field of view
       // of the headset: at 1m, 2.8m wide gives about 109 degrees (86 at the default distance of 1.5m).
@@ -70,6 +70,7 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
       m_uiPanelDown = up * -height;
       m_uiPanelOrigin = center - m_uiPanelRight * 0.5f - m_uiPanelDown * 0.5f;
       m_uiPanelPlaced = true;
+      m_uiPanelReplace = false;
    }
 
    // Depth is not used (the shader outputs a constant depth, the UI being drawn over the scene), so near and far planes do not matter

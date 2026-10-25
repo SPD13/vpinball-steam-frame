@@ -159,6 +159,8 @@ public:
    // The UI is displayed on a panel standing in the room, placed in front of the player in the table's forward direction (not where the head looks)
    // when it is first displayed and each time RecenterUIPanel is called
    void RecenterUIPanel() { m_uiPanelPlaced = false; }
+   // Same, the panel staying where it is until it is placed again, instead of the UI being head locked for a frame (menu distance changes)
+   void ReplaceUIPanel() { m_uiPanelReplace = true; }
    // Transforms from UI pixel coordinates (0..width, 0..height from the top left of the panel) to each eye clip space. Returns false if the panel is not placed yet
    bool GetUIPanelTransforms(float width, float height, Matrix3D (&pixelToClip)[2]) const;
    // Position pointed by a controller on the UI panel, normalized to 0..1 from its top left, and vertical axis of the thumbstick of that
@@ -395,6 +397,7 @@ private:
 
    // UI panel, in the reference space (meters): top left corner, and vectors along its full width and height
    bool m_uiPanelPlaced = false;
+   bool m_uiPanelReplace = false; // Placed again at the next update
    vec3 m_uiPanelOrigin, m_uiPanelRight, m_uiPanelDown;
    Matrix3D m_uiPanelViewProj[2]; // Reference space to each eye clip space
    // UI pointer: the aim ray of a controller, intersected with the UI panel
