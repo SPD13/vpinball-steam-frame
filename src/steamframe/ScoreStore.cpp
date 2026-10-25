@@ -53,20 +53,42 @@ void ScoreStore::Log(LogLevel level, const string& message) const
 ///////////////////////////////////////////////////////////////////////////////
 // Persistence
 
+static Profile ParseProfile(const nlohmann::json& entry)
+{
+   Profile profile;
+   profile.id = entry.value("id", ""s);
+   profile.name = entry.value("name", ""s);
+   profile.createdAt = entry.value("createdAt", int64_t(0));
+   return profile;
+}
+
+static Score ParseScore(const nlohmann::json& entry)
+{
+   Score score;
+   score.id = entry.value("id", ""s);
+   score.tableUuid = entry.value("tableUuid", ""s);
+   score.tablePath = entry.value("tablePath", ""s);
+   score.tableName = entry.value("tableName", ""s);
+   score.rom = entry.value("rom", ""s);
+   score.profileId = entry.value("profileId", ""s);
+   score.playerSlot = entry.value("playerSlot", 1);
+   score.playerCount = entry.value("playerCount", 1);
+   score.score = entry.value("score", int64_t(0));
+   score.playedAt = entry.value("playedAt", int64_t(0));
+   score.durationSec = entry.value("durationSec", 0);
+   score.source = entry.value("source", ""s);
+   return score;
+}
+
 void ScoreStore::Load()
 {
    std::lock_guard lock(m_mutex);
    if (std::ifstream file(m_config.profilesPath); file.is_open()) {
       try {
          const nlohmann::json json = nlohmann::json::parse(file);
-         for (const auto& entry : json.at("profiles")) {
-            Profile profile;
-            profile.id = entry.value("id", ""s);
-            profile.name = entry.value("name", ""s);
-            profile.createdAt = entry.value("createdAt", int64_t(0));
-            if (!profile.id.empty())
+         for (const auto& entry : json.at("profiles"))
+            if (Profile profile = ParseProfile(entry); !profile.id.empty())
                m_profiles.push_back(profile);
-         }
          const auto exists = [this](const string& id) { return std::ranges::any_of(m_profiles, [&id](const Profile& profile) { return profile.id == id; }); };
          if (const auto players = json.find("players"); players != json.end() && players->is_array()) {
             for (size_t i = 0; i < players->size() && i < m_playerProfileIds.size(); i++)
@@ -86,23 +108,9 @@ void ScoreStore::Load()
    if (std::ifstream file(m_config.scoresPath); file.is_open()) {
       try {
          const nlohmann::json json = nlohmann::json::parse(file);
-         for (const auto& entry : json.at("scores")) {
-            Score score;
-            score.id = entry.value("id", ""s);
-            score.tableUuid = entry.value("tableUuid", ""s);
-            score.tablePath = entry.value("tablePath", ""s);
-            score.tableName = entry.value("tableName", ""s);
-            score.rom = entry.value("rom", ""s);
-            score.profileId = entry.value("profileId", ""s);
-            score.playerSlot = entry.value("playerSlot", 1);
-            score.playerCount = entry.value("playerCount", 1);
-            score.score = entry.value("score", int64_t(0));
-            score.playedAt = entry.value("playedAt", int64_t(0));
-            score.durationSec = entry.value("durationSec", 0);
-            score.source = entry.value("source", ""s);
-            if (!score.id.empty() && !score.tableUuid.empty())
+         for (const auto& entry : json.at("scores"))
+            if (Score score = ParseScore(entry); !score.id.empty() && !score.tableUuid.empty())
                m_scores.push_back(score);
-         }
       } catch (const std::exception& e) {
          Log(LogLevel::Error, "Failed to parse " + m_config.scoresPath.string() + ": " + e.what());
       }
@@ -153,6 +161,84 @@ void ScoreStore::SaveScores() const
    string error;
    if (!SaveJson(m_config.scoresPath, { { "scores", scores } }, error))
       Log(LogLevel::Error, error);
+}
+
+std::pair<int, int> ScoreStore::Import(const string& profilesJson, const string& scoresJson, const std::map<string, string>& tableUuids,
+   const std::map<string, string>& tablesByPath)
+{
+   std::vector<Profile> profiles;
+   std::vector<string> players;
+   std::vector<Score> scores;
+   try {
+      if (!profilesJson.empty()) {
+         const nlohmann::json json = nlohmann::json::parse(profilesJson);
+         for (const auto& entry : json.at("profiles"))
+            if (Profile profile = ParseProfile(entry); !profile.id.empty() && !Trim(profile.name).empty())
+               profiles.push_back(profile);
+         players = json.value("players", std::vector<string>());
+         if (players.empty())
+            players.push_back(json.value("activeProfileId", ""s));
+      }
+      if (!scoresJson.empty()) {
+         const nlohmann::json json = nlohmann::json::parse(scoresJson);
+         for (const auto& entry : json.at("scores"))
+            if (Score score = ParseScore(entry); !score.id.empty() && !score.tableUuid.empty())
+               scores.push_back(score);
+      }
+   } catch (const std::exception& e) {
+      Log(LogLevel::Error, "Failed to parse the scores of the backup: "s + e.what());
+      return { 0, 0 };
+   }
+
+   std::lock_guard lock(m_mutex);
+   const bool hadProfiles = !m_profiles.empty();
+   std::map<string, string> profileIds; // Id in the backup -> id on the device
+   int addedProfiles = 0;
+   for (const Profile& profile : profiles) {
+      if (std::ranges::any_of(m_profiles, [&profile](const Profile& p) { return p.id == profile.id; })) {
+         profileIds[profile.id] = profile.id;
+         continue;
+      }
+      const string name = ToLower(Trim(profile.name));
+      if (const auto it = std::ranges::find_if(m_profiles, [&name](const Profile& p) { return ToLower(Trim(p.name)) == name; }); it != m_profiles.end()) {
+         profileIds[profile.id] = it->id;
+         continue;
+      }
+      Profile added = profile;
+      if (std::ranges::any_of(m_scores, [&added](const Score& score) { return score.id == added.id; }))
+         added.id = GenerateId();
+      profileIds[profile.id] = added.id;
+      m_profiles.push_back(added);
+      addedProfiles++;
+   }
+   // The players get the profiles of the backup when the device had none
+   if (!hadProfiles)
+      for (size_t i = 0; i < players.size() && i < m_playerProfileIds.size(); i++)
+         if (const auto it = profileIds.find(players[i]); it != profileIds.end())
+            m_playerProfileIds[i] = it->second;
+
+   int addedScores = 0;
+   for (Score score : scores) {
+      if (std::ranges::any_of(m_scores, [&score](const Score& s) { return s.id == score.id; }))
+         continue;
+      if (const auto it = tableUuids.find(score.tableUuid); it != tableUuids.end())
+         score.tableUuid = it->second;
+      else if (const auto byPath = tablesByPath.find(score.tablePath); byPath != tablesByPath.end())
+         score.tableUuid = byPath->second;
+      const auto profile = profileIds.find(score.profileId);
+      score.profileId = profile == profileIds.end() ? string() : profile->second;
+      if (std::ranges::any_of(m_scores, [&score](const Score& s) { return s.tableUuid == score.tableUuid && s.score == score.score && s.playedAt == score.playedAt && s.playerSlot == score.playerSlot; }))
+         continue;
+      m_scores.push_back(score);
+      addedScores++;
+   }
+   if (addedProfiles > 0)
+      SaveProfiles();
+   if (addedScores > 0)
+      SaveScores();
+   m_revision++;
+   Log(LogLevel::Info, "Scores restored from a backup: " + std::to_string(addedProfiles) + " profile(s) and " + std::to_string(addedScores) + " score(s) added");
+   return { addedProfiles, addedScores };
 }
 
 string ScoreStore::GenerateId() const

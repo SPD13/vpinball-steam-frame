@@ -104,6 +104,7 @@ public:
    // A request made while a scan is running triggers another scan afterward, so that no change is missed.
    void RescanAsync(int settleSeconds = 0);
    bool IsScanning() const { return m_scanning.load(); }
+   bool HasScanned() const { return m_scanned.load(); } // At least once, since the application started
 
    // Tables sorted by name (case insensitive)
    std::vector<Table> GetTables(bool ascending = true) const;
@@ -160,7 +161,13 @@ public:
    };
    std::vector<UnknownGame> GetUnknownGames();
 
+   // Merge the tables.json and table-stats.json of a backup (see steamframe/Backup.h) into the library, for the tables whose file is in the
+   // tables folder, matched by path: names given by the user, favorites, play counts. A table registered since 'restoreStartedAt' (by this restore)
+   // gets back its uuid, unless the library already uses it. Returns the uuid of each table on the device, by its uuid in the backup.
+   std::map<std::string, std::string> ImportMetadata(const std::string& tablesJson, const std::string& statsJson, int64_t restoreStartedAt);
+
    const std::filesystem::path& GetTablesPath() const { return m_config.tablesPath; }
+   const std::filesystem::path& GetSharedPupVideosPath() const { return m_config.sharedPupVideosPath; }
    std::filesystem::path GetFullPath(const Table& table) const { return BuildPath(table.path); }
    std::filesystem::path GetImagePath(const Table& table) const { return table.image.empty() ? std::filesystem::path() : BuildPath(table.image); }
    std::filesystem::path GetIniPath(const Table& table) const { return BuildPath(table.path).replace_extension(".ini"); }
@@ -235,6 +242,7 @@ private:
    std::mutex m_workerMutex; // Protects m_worker and m_rescanPending
    std::thread m_worker;
    std::atomic<bool> m_scanning { false };
+   std::atomic<bool> m_scanned { false };
    bool m_rescanPending = false;
 };
 
