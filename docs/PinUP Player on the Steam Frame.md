@@ -231,6 +231,8 @@ minute and a half, when it was stopped by hand).
   In 3 of them a decoder blocked during play (the attract video `Intro_Enhancedv2_0.mp4` twice, `BallSaved1v4.mp4` once), was stopped
   2 s later and its video went on in software; in one run that happened twice, so its next videos were decoded in software.
 
+**Played in the headset on Oct 24, 2026**, with the pack set to "4 Screen - Topper DMD Separate" and hardware decoding on: the topper, the backglass and the full DMD show their videos, and the table closes normally.
+
 ## 8. Open points
 
 - Why the iris decoder stops answering is not known: no kernel message accompanies it. Blade Runner 2049 logged `qcom-iris
