@@ -52,4 +52,19 @@ bool IsPack(const std::filesystem::path& folder);
 // ('austin/PuP-Pack_Options/Option 3 - BG Topper Separate/screens.pup'): the pack is the folder of the batch files, not these.
 std::vector<std::filesystem::path> PackSources(const std::filesystem::path& folder);
 
+// A screen of a screens.pup file, as the PUP plugin reads it: the last line of a number replaces the earlier ones, a screen is visible
+// unless its mode is Off, Disable, MusicOnly, ForceHide (or unknown), and a screen with a CustomPos is drawn inside the screen it names
+// (its parent), which the plugin creates when the file does not define it.
+struct Screen
+{
+   int number = -1;
+   bool visible = false;
+   int parent = -1; // Screen of its CustomPos, -1 when it has none or names itself
+};
+std::vector<Screen> ReadScreens(const std::filesystem::path& screensFile);
+
+// Whether the plugin draws its full DMD screen (5) in the score view: the screen, or a visible screen positioned on it (the pack's
+// "Backglass Videos" on a 'Music2' screen 5 that is off), as PUPManager::Render picks screen 5 over the DMD screen (1)
+bool DrawsFullDMD(const std::vector<Screen>& screens);
+
 }
