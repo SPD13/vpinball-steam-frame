@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <optional>
 #include <set>
@@ -341,16 +342,75 @@ int CabinetScore(const string& lower)
 {
    const auto has = [&](const char* text) { return lower.find(text) != string::npos; };
    int score = 0;
-   if (has("separate") || has("3 screen") || has("three screen") || has("cabinet") || has("full cab"))
+   if (has("separate") || has("seperate") || has("3 screen") || has("3screen") || has("three screen") || has("cabinet") || has("full cab"))
       score += 2;
    if (has("on bg") || has("on backglass") || has("on the backglass") || has("on playfield"))
       score -= 2;
    if (has("no dmd") || has("no topper") || has("no backglass") || has("no bg"))
       score -= 1;
-   if (has("desktop") || has("full screen") || has("fullscreen") || has("1 screen") || has("2 screen") || has("single screen") || has("dual screen")
-      || has("two screen"))
+   if (has("desktop") || has("full screen") || has("fullscreen") || has("1 screen") || has("1screen") || has("2 screen") || has("2screen")
+      || has("single screen") || has("dual screen") || has("two screen"))
       score -= 2;
    return score;
+}
+
+// The fields of a line of a .pup file (comma separated, quotes around the fields holding commas)
+vector<string> SplitCsv(const string& line)
+{
+   vector<string> fields(1);
+   bool quoted = false;
+   for (const char c : line)
+   {
+      if (c == '"')
+         quoted = !quoted;
+      else if (c == ',' && !quoted)
+         fields.emplace_back();
+      else
+         fields.back() += c;
+   }
+   return fields;
+}
+
+// The screens.pup an option leaves at the root of the pack: the last one its copies bring there, otherwise the one already there
+fs::path ScreensFileOf(const fs::path& pack, const vector<Step>& steps)
+{
+   fs::path screens = ResolveChild(pack, "screens.pup");
+   std::error_code ec;
+   for (const Step& step : steps)
+   {
+      if (step.type != StepType::Copy || !step.target.empty() || !Matches(step.pattern, "screens.pup"))
+         continue;
+      const fs::path file = ResolveChild(Resolve(pack, step.source), "screens.pup");
+      if (fs::is_regular_file(file, ec))
+         screens = file;
+   }
+   return screens;
+}
+
+// How many displays of the VR cabinet a layout shows its screens on: the topper (0), the DMD (1, or 5, the full DMD, which share the DMD
+// surface) and the backglass (2). A screen is on the display its CustomPos is relative to, otherwise on its own number, and is not
+// counted when it is off. "BG Topper FullDMD Separate" uses 3, "DMD on BG" 1.
+int CabinetDisplayCount(const fs::path& screensFile)
+{
+   std::ifstream file(screensFile, std::ios::binary);
+   std::set<int> displays;
+   string line;
+   while (std::getline(file, line))
+   {
+      const vector<string> fields = SplitCsv(Trim(line));
+      if (fields.size() < 6 || !std::isdigit(static_cast<unsigned char>(Trim(fields[0]).c_str()[0]))) // The header, and broken lines
+         continue;
+      const string active = Lower(Trim(fields[5]));
+      if (active == "off" || active == "musiconly")
+         continue;
+      const string customPos = fields.size() > 7 ? Trim(fields[7]) : string();
+      int display = std::atoi((customPos.empty() ? Trim(fields[0]) : customPos).c_str());
+      if (display == 5)
+         display = 1;
+      if (display >= 0 && display <= 2)
+         displays.insert(display);
+   }
+   return static_cast<int>(displays.size());
 }
 
 }
@@ -402,27 +462,32 @@ vector<Option> List(const fs::path& packFolder)
       options.push_back(option);
    }
    std::sort(options.begin(), options.end(), [](const Option& a, const Option& b) { return Lower(a.name) < Lower(b.name); });
-   // Without a VR layout, the one that best suits the VR cabinet, when a single one does ("BG Topper Separate" among "DMD and Topper
-   // on BG", "DMD on BG No Topper"...)
+   // Without a VR layout, the one that best suits the VR cabinet: first the one showing its screens on the most displays of the cabinet,
+   // then by its name ("BG Topper Separate" among "DMD and Topper on BG", "DMD on BG No Topper"...). A pack with .pup files of its own
+   // already plays: it is only changed for a single best layout made for a cabinet. A pack without, whose .pup files are in its option
+   // folders only, plays nothing until a layout is applied: it gets the first of the best ones.
    if (std::none_of(options.begin(), options.end(), [](const Option& o) { return o.recommended; }))
    {
       Option* best = nullptr;
-      int bestScore = 0, bestCount = 0;
+      std::pair<int, int> bestScore;
+      int bestCount = 0;
       for (Option& option : options)
       {
-         if (!option.supported)
+         string reason;
+         const std::optional<vector<Step>> steps = option.supported ? Parse(option.script, reason) : std::nullopt;
+         if (!steps)
             continue;
-         const int score = CabinetScore(Lower(option.name));
-         if (score > bestScore)
+         const std::pair<int, int> score { CabinetDisplayCount(ScreensFileOf(packFolder, *steps)), CabinetScore(Lower(option.name)) };
+         if (!best || score > bestScore)
          {
             best = &option;
             bestScore = score;
             bestCount = 1;
          }
-         else if (score == bestScore && best)
+         else if (score == bestScore)
             bestCount++;
       }
-      if (best && bestCount == 1)
+      if (best && (!HasPupFiles(packFolder) || (bestCount == 1 && (bestScore.first >= 2 || bestScore.second > 0))))
          best->recommended = true;
    }
    return options;

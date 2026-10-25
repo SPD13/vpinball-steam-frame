@@ -758,6 +758,53 @@ TEST_CASE("TableLibrary: a pack with its .pup files in its option folders only i
    CHECK(Fixture::Read(shared / "austin" / "triggers.pup") == "Option 3 - BG Topper Separate triggers");
 }
 
+TEST_CASE("PupPackOptions: without a VR layout, the layout using the most displays of the cabinet is chosen")
+{
+   // The Aliens pack: "Seperate", option folders named apart from the batch files, and two layouts keeping the screens apart, told
+   // apart by their screens.pup only (the first one adds the full DMD)
+   const string header = "ScreenNum,ScreenDes,PlayList,PlayFile,Loopit,Active,Priority,CustomPos\r\n";
+   const string topper = "13,Topper,,,0,ForceOn,,\"0,0,0,100,100\"\r\n", topperOff = "13,Topper,,,0,off,,\"0,0,0,100,100\"\r\n";
+   const string overlay = "14,Overlay,,,0,ForceOn,,\"2,0,0,100,100\"\r\n", backglass = "15,\"Backglass Videos\",,,0,ForceBack,,\"2,3,6,93.6,83.4\"\r\n";
+   const struct { string bat, folder, screens; } layouts[] {
+      { "Option 1 - Topper BG  with a FULLDMD Video - All Seperate", "Option1-BGTopperFullDMDSeperate", header + topper + overlay + backglass + "16,FULLDMD,,,0,ForceBack,,\"5,0,0,100,100\"\r\n" },
+      { "Option 2 - Topper BG Seperate", "Option2-BGTopperSeperate", header + topper + overlay + backglass + "16,FULLDMD,,,0,off,,\"5,0,0,100,100\"\r\n" },
+      { "Option 3 - PupStyle On FULLDMD use OriginalB2S", "Option3-PupStyleOnFULLDMD", header + topperOff + "14,Overlay,,,0,ForceOn,,\"5,0,0,100,100\"\r\n" },
+      { "Option 4 - 2screen DMD on BG", "Option4-2screenDMDonBG", header + topperOff + overlay + backglass },
+   };
+   Fixture f;
+   const fs::path pack = f.root / "alienspupver";
+   for (const auto& layout : layouts) {
+      Fixture::Touch(pack / "PuP-Pack_Options" / layout.folder / "screens.pup", layout.screens);
+      Fixture::Touch(pack / (layout.bat + ".bat"), "rem echo off\r\nxcopy /y \"PuP-Pack_Options\\" + layout.folder + "\\*.pup\"");
+   }
+   const auto recommended = [&pack]() {
+      std::vector<string> names;
+      for (const PupPackOptions::Option& option : PupPackOptions::List(pack))
+         if (option.recommended)
+            names.push_back(option.name);
+      return names;
+   };
+   CHECK(recommended() == std::vector<string> { layouts[0].bat });
+   string error;
+   CHECK(PupPackOptions::ApplyRecommended(pack, error) == layouts[0].bat);
+   CHECK(error.empty());
+   CHECK(Fixture::Read(pack / "screens.pup") == layouts[0].screens);
+
+   SUBCASE("a pack playing as uploaded is left alone when no layout is better than another")
+   {
+      const fs::path other = f.root / "other";
+      Fixture::Touch(other / "screens.pup", "default screens");
+      for (const string name : { "A", "B" }) {
+         Fixture::Touch(other / "Options" / name / "screens.pup", header + topper + backglass);
+         Fixture::Touch(other / (name + ".bat"), "xcopy /y \"Options\\" + name + "\\*.pup\"\r\n");
+      }
+      for (const PupPackOptions::Option& option : PupPackOptions::List(other))
+         CHECK_FALSE(option.recommended);
+      fs::remove(other / "screens.pup");
+      CHECK(PupPackOptions::List(other)[0].recommended); // Without .pup files of its own, it gets the first of the best layouts
+   }
+}
+
 TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when asked")
 {
    Fixture f;
