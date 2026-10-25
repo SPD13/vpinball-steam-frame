@@ -958,6 +958,18 @@ void Primitive::Render(const unsigned int renderMask)
    // set transform
    m_renderer->UpdateBasicShaderMatrix(m_fullMatrix);
 
+   // Skip parts entirely outside the view (like VR room parts behind the player). The bounds are those of the static mesh: animated
+   // meshes, whose frames may move outside of them, and grouped parts, drawn from a merged buffer, are always drawn.
+   if (!isUIPass && !m_groupdRendering && m_mesh.m_animationFrames.empty())
+   {
+      m_mesh.UpdateBounds();
+      if (!m_renderer->GetMVP().IsBoxVisible(m_mesh.m_minAABound, m_mesh.m_maxAABound))
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         return;
+      }
+   }
+
    if (isUIPass)
    {
       // FIXME use correct point for depth sorting
