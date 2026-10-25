@@ -5,13 +5,15 @@
 #include "imgui/imgui.h"
 
 // Look of the new VR UI. Sizes are given as angles seen from the player (degrees), converted to UI pixels each frame: in VR from the
-// panel the UI is drawn on and the menu distance, so that the menu keeps the same apparent size wherever it is placed, and on the
-// desktop (preview of the VR menu, for tests) by fitting the menu in the window.
+// panel the UI is drawn on, as seen from kVRReferenceDistance, so that the layout does not depend on the menu distance (a farther menu
+// is the same window pushed back, looking smaller), and on the desktop (preview of the VR menu, for tests) by fitting the menu in the window.
 namespace VPX::VRUI::Theme
 {
 
 // Width of the VR UI panel standing in the room, which covers the whole UI display area (see Panel.cpp)
 inline constexpr float kVRPanelWidth = 2.8f; // meters
+// Distance at which the menu has the sizes below: the default of Standalone.VRMenuDistance
+inline constexpr float kVRReferenceDistance = 1.5f; // meters
 
 // Layout, in degrees
 inline constexpr float kMenuWidth = 84.f;

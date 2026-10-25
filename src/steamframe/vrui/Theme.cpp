@@ -25,11 +25,14 @@ void BeginFrame()
    g_vr = g_pplayer && g_pplayer->m_vrDevice;
    if (g_vr)
    {
-      // The panel spreads the UI display width over kVRPanelWidth meters, at the menu distance: one degree at its center is that many pixels
+      // The panel spreads the UI display width over kVRPanelWidth meters: one degree at its center, seen from the reference distance, is
+      // that many pixels. The menu distance only moves the panel, the layout stays the same.
+      const float pxPerMeterAngle = io.DisplaySize.x / kVRPanelWidth * static_cast<float>(M_PI / 180.);
+      g_pxPerDegree = pxPerMeterAngle * kVRReferenceDistance;
+      // The eye views show about 20 pixels per degree at their center, more than the panel pixels at the menu distance: rasterize the
+      // glyphs at that density
       const float distance = clamp(g_settingsService.GetAppSettings().GetStandalone_VRMenuDistance(), 0.3f, 3.f);
-      g_pxPerDegree = io.DisplaySize.x / kVRPanelWidth * distance * static_cast<float>(M_PI / 180.);
-      // The eye views show about 20 pixels per degree at their center, more than the panel pixels: rasterize the glyphs at that density
-      g_pixelDensity = clamp(22.f / g_pxPerDegree, 1.f, 3.f);
+      g_pixelDensity = clamp(22.f / (pxPerMeterAngle * distance), 1.f, 3.f);
    }
    else
    {

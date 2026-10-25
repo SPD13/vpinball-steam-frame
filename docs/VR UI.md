@@ -72,8 +72,8 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
   switches back without clicking (the next one clicks); aiming or scrolling does not. The ray and the dot of the pointer are hidden in
   button navigation. The thumbstick of the pointing controller scrolls in pointer navigation only,
   and not until it gets back to its center after a navigation, so that the sticks do not fight the buttons.
-- Sizes are angles (`Theme.h`): in VR they keep the same apparent size at any menu distance (`Standalone.VRMenuDistance`); on the desktop
-  the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
+- Sizes are angles (`Theme.h`): in VR they are the apparent sizes at 1.5 m (`kVRReferenceDistance`), the layout not depending on
+  the menu distance (`Standalone.VRMenuDistance`), which only moves the window; on the desktop the menu fits the window. In VR, glyphs are rasterized at the density of the eye views (`Theme::ApplyPixelDensity`).
 - Text is typed with the keyboard of the menu in VR (`Keyboard.cpp`): just below the clicked field, over the rest of the menu until Done closes it, it edits the clicked field (search of the Tables
   screen, text settings, names) and updates it at each key. With the buttons, OK (A) on the field gives the focus to the keyboard
   (`Keyboard::Focus`): the directions then select a key, OK presses it and Back (B) gives the focus back to the menu, the keyboard staying
