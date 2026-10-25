@@ -406,6 +406,22 @@ body {
   display: none;
 }
 
+/* Features still in Alpha, shown in the pinupsystem folder */
+.alpha-warning {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #facc15;
+  border-left: 3px solid #eab308;
+  border-radius: var(--radius);
+  background: #fef9c3;
+  font-size: 0.875rem;
+  color: #713f12;
+}
+
+.alpha-warning[hidden] {
+  display: none;
+}
+
 /* ROMs that tables could not find, shown in the pinmame/roms folders */
 .missing-roms {
   margin: 0 0 1rem;
