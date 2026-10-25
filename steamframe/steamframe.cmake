@@ -9,6 +9,8 @@ endif()
 
 target_sources(vpinball PRIVATE
    # Table library, lobby and launcher mode, scores and leaderboards
+   src/steamframe/Backup.h
+   src/steamframe/Backup.cpp
    src/steamframe/CabinetDisplays.h
    src/steamframe/CabinetDisplays.cpp
    src/steamframe/Launcher.h
@@ -30,6 +32,7 @@ target_sources(vpinball PRIVATE
    src/steamframe/TableLibrary.cpp
    src/steamframe/TablePickerPage.h
    src/steamframe/TablePickerPage.cpp
+   src/steamframe/WebServerBackup.cpp
    src/steamframe/WebServerLibrary.cpp
 
    # Web server to manage the tables from a browser (upstream only builds it for the mobile library)
