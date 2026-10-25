@@ -613,7 +613,14 @@ void LiveUI::RenderUI()
          if (cmd->ElemCount != 0)
          {
             m_rd->m_uiShader->SetVector(ShaderUniform::clip_plane, cmd->ClipRect.x, cmd->ClipRect.y, cmd->ClipRect.z, cmd->ClipRect.w);
-            m_rd->m_uiShader->SetTexture(ShaderUniform::tex_base_color, cmd->GetTexID(), SamplerFilter::SF_BILINEAR);
+            #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+            // Images given by the application (table thumbnails) are drawn several times smaller than they are on the panel standing in the
+            // room: without mipmaps, they shimmer as the head moves. ImGui's own textures (font atlas) are drawn at their size.
+            const SamplerFilter filter = (onVRPanel && cmd->TexRef._TexData == nullptr) ? SamplerFilter::SF_TRILINEAR : SamplerFilter::SF_BILINEAR;
+            #else
+            constexpr SamplerFilter filter = SamplerFilter::SF_BILINEAR;
+            #endif
+            m_rd->m_uiShader->SetTexture(ShaderUniform::tex_base_color, cmd->GetTexID(), filter);
             #if !defined(ENABLE_DX9) // DX9 samples raw values (see UIShader.hlsl)
             // ImGui works in sRGB: the shader re-encodes textures that sampling decodes (table images)
             uiParams.y = (cmd->GetTexID() != nullptr && cmd->GetTexID()->IsSRGB()) ? 1.f : 0.f;
