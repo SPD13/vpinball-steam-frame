@@ -9,12 +9,11 @@
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/PupPackOptions.h"
 #include "steamframe/PupPacks.h"
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/InGameUIItem.h"
 #include "ui/live/ingameui/InGameUIPage.h"
-
-#include <fstream>
 
 namespace
 {
@@ -37,7 +36,8 @@ uint64_t NowMs() { return usec() / 1000; }
 
 bool ContainsNoCase(const string& text, const string& lowerNeedle) { return lowerCase(text).find(lowerNeedle) != string::npos; }
 
-// Whether the pack defines its FullDMD screen (5): PuP then draws the score view in 16:9, instead of its 4:1 DMD screen (1)
+// Whether PuP draws its FullDMD screen (5) in the score view, in 16:9, instead of its 4:1 DMD screen (1): the screen itself, or the screens
+// positioned on it even when it is off (The Matrix plays its backglass videos on a screen 5 named 'Music2' that is off)
 bool HasFullDMDScreen(const std::filesystem::path& packFolder, const string& lowerScript)
 {
    std::error_code ec;
@@ -45,27 +45,9 @@ bool HasFullDMDScreen(const std::filesystem::path& packFolder, const string& low
    {
       if (lowerCase(entry.path().filename().string()) != "screens.pup")
          continue;
-      std::ifstream file(entry.path());
-      string line;
-      while (std::getline(file, line))
-      {
-         // ScreenNum,ScreenDes,PlayList,PlayFile,Loopit,Active,Priority,CustomPos
-         vector<string> parts;
-         size_t start = 0;
-         for (size_t comma = line.find(','); comma != string::npos && parts.size() < 6; comma = line.find(',', start))
-         {
-            parts.push_back(line.substr(start, comma - start));
-            start = comma + 1;
-         }
-         parts.push_back(line.substr(start));
-         for (string& part : parts)
-         {
-            part.erase(std::remove_if(part.begin(), part.end(), [](char c) { return c == '"' || c == ' ' || c == '\t' || c == '\r'; }), part.end());
-            part = lowerCase(part);
-         }
-         if (parts.size() >= 6 && parts[0] == "5")
-            return parts[5] != "off" && parts[5] != "disable" && parts[5] != "musiconly" && parts[5] != "forcehide";
-      }
+      const vector<PupPackOptions::Screen> screens = PupPackOptions::ReadScreens(entry.path());
+      if (std::any_of(screens.begin(), screens.end(), [](const PupPackOptions::Screen& s) { return s.number == 5; }))
+         return PupPackOptions::DrawsFullDMD(screens);
    }
    // Screens defined by the script
    return lowerScript.find("pfulldmd") != string::npos;
