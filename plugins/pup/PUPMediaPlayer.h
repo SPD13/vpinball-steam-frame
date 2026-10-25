@@ -17,7 +17,7 @@ public:
    void SetGameTime(double gameTime);
 
    // Decode videos with the hardware decoders of the system when there are (FFmpeg's V4L2 memory to memory decoders, on Linux)
-   static void SetHardwareDecoding(bool enable) { s_hardwareDecoding = enable; }
+   static void SetHardwareDecoding(bool enable) { s_hardwareDecoding = enable; s_hardwareStalls = 0; }
 
    void Play(const std::filesystem::path& filename, float volume);
    const std::filesystem::path& GetFilename() const { return m_filename; }
@@ -44,6 +44,13 @@ private:
    AVCodecContext* OpenCodec(AVFormatContext* pInputFormatContext, int stream, const AVCodec* pCodec);
    static bool IsHardwareDecoder(const AVCodecContext* pContext);
    static std::atomic<bool> s_hardwareDecoding;
+   static std::atomic<int> s_hardwareStalls;
+   int SendVideoPacket(const AVPacket* pPacket);
+   int ReceiveVideoFrame(AVFrame* pFrame);
+   int AfterHardwareCall(int ret);
+   bool SwitchToSoftwareDecoding();
+   void CheckHardwareStall();
+   void UnblockHardwareDecoder();
    void HandleAudioFrame(AVFrame* pFrame, bool sync);
    void HandleVideoFrame(AVFrame* pFrame);
 
@@ -114,6 +121,13 @@ private:
    std::mutex m_mutex;
    std::thread m_thread;
    std::atomic<bool> m_running = false;
+   std::atomic<bool> m_runDone = true; // The decoding thread has left Run
+
+   // A V4L2 decoder of FFmpeg may block forever, waiting for the device without a timeout: the decoding thread tells when it is inside
+   // one of its calls (SDL ticks, 0 when outside), and a call lasting too long is woken up by stopping the device's queues
+   std::atomic<uint64_t> m_hardwareCallStart = 0;
+   std::atomic<bool> m_hardwareUnblocked = false; // The queues were stopped: the decoder is dead, the video goes on in software
+   std::atomic<bool> m_hardwareCheckQueued = false;
 
    const LibAV::LibAV& m_libAv;
 

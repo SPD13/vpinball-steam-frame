@@ -9,6 +9,15 @@
 
 #include <cfloat>
 
+#ifdef __linux__
+#include <climits>
+#include <cstdlib>
+#include <cstring>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif
+
 namespace PUP {
 
 /*
@@ -34,6 +43,17 @@ namespace PUP {
 
 std::atomic<uint32_t> PUPMediaPlayer::m_nextAudioStreamId = 0;
 std::atomic<bool> PUPMediaPlayer::s_hardwareDecoding = false;
+std::atomic<int> PUPMediaPlayer::s_hardwareStalls = 0;
+
+namespace {
+
+// A call into a hardware decoder lasting this long is taken as blocked: FFmpeg's V4L2 decoders return within a frame, or about a hundred
+// milliseconds for the first frames of a video
+constexpr uint64_t kHardwareStallMs = 2000;
+// Stalls after which the hardware decoders are no longer used, until the next table (SetHardwareDecoding)
+constexpr int kMaxHardwareStalls = 2;
+
+}
 
 PUPMediaPlayer::PUPMediaPlayer(const string& name)
    : m_name(name)
@@ -230,6 +250,8 @@ void PUPMediaPlayer::Play(const std::filesystem::path& filename, float volume)
          }
          m_lastDecodedPts = 0.0;
          m_lastRenderTicks = 0;
+         m_hardwareUnblocked = false;
+         m_runDone = false;
          m_running = true;
          m_thread = std::thread(&PUPMediaPlayer::Run, this);
       }
@@ -283,7 +305,17 @@ void PUPMediaPlayer::StopBlocking()
 
    lock.unlock();
    if (m_thread.joinable())
+   {
+      // The thread leaves at its next check of m_running, unless a hardware decoder blocks it: then its device is stopped, which returns
+      // the call and makes the following ones fail at once
+      while (!m_runDone)
+      {
+         if (const uint64_t start = m_hardwareCallStart; start != 0 && SDL_GetTicks() - start > 100 && !m_hardwareUnblocked)
+            UnblockHardwareDecoder();
+         SDL_Delay(5);
+      }
       m_thread.join();
+   }
    lock.lock();
 
    if (m_pFormatContext)
@@ -422,6 +454,8 @@ void PUPMediaPlayer::RenderLastFrame(VPXRenderContext2D* const ctx, const SDL_Re
 
 void PUPMediaPlayer::Render(VPXRenderContext2D* const ctx, const SDL_Rect& destRect, float alpha)
 {
+   CheckHardwareStall();
+
    if (!m_running && m_holdTexture == nullptr && !IsPlaying() && (SDL_GetTicks() - m_endTicks) >= 100)
       return;
 
@@ -512,6 +546,12 @@ void PUPMediaPlayer::Render(VPXRenderContext2D* const ctx, const SDL_Rect& destR
 
 void PUPMediaPlayer::Run()
 {
+   struct RunDone
+   {
+      std::atomic<bool>& done;
+      ~RunDone() { done = true; }
+   } runDone { m_runDone };
+
    AVPacket* pPacket = m_libAv._av_packet_alloc();
    if (!pPacket) {
       LOGE("Unable to allocate packet"s);
@@ -564,8 +604,8 @@ void PUPMediaPlayer::Run()
          // Drain both decoders so the last buffered frames are not dropped at the loop point or at the natural end
          if (m_pVideoContext)
          {
-            m_libAv._avcodec_send_packet(m_pVideoContext, nullptr);
-            while (m_libAv._avcodec_receive_frame(m_pVideoContext, pFrame) >= 0)
+            SendVideoPacket(nullptr);
+            while (ReceiveVideoFrame(pFrame) >= 0)
             {
                pFrame->opaque = reinterpret_cast<void*>(static_cast<uintptr_t>(m_playIndex));
                HandleVideoFrame(pFrame);
@@ -663,20 +703,14 @@ void PUPMediaPlayer::Run()
       }
       else if (pPacket->stream_index == m_videoStream)
       {
-         if (const int ret = m_libAv._avcodec_send_packet(m_pVideoContext, pPacket); ret != 0)
+         if (const int ret = SendVideoPacket(pPacket); ret != 0)
          {
             LOGE("Unable to send video packet"s);
             if (IsHardwareDecoder(m_pVideoContext) && ret != AVERROR(EAGAIN))
             {
                // The hardware decoder does not support this video: continue with a software decoder (from the next key frame)
                LOGE(std::format("Hardware decoder {} failed, using software decoding: file={}", m_pVideoContext->codec->name, PluginStrings::PathToUTF8(m_filename.filename())));
-               AVCodecContext* pVideoContext = OpenStream(m_pFormatContext, m_videoStream, false);
-               {
-                  std::lock_guard lock(m_mutex);
-                  std::swap(m_pVideoContext, pVideoContext);
-               }
-               m_libAv._avcodec_free_context(&pVideoContext);
-               if (m_pVideoContext == nullptr)
+               if (!SwitchToSoftwareDecoding())
                {
                   m_libAv._av_packet_unref(pPacket);
                   break;
@@ -702,7 +736,7 @@ void PUPMediaPlayer::Run()
       }
       if (m_pVideoContext)
       {
-         while (m_libAv._avcodec_receive_frame(m_pVideoContext, pFrame) >= 0)
+         while (ReceiveVideoFrame(pFrame) >= 0)
          {
             pFrame->opaque = reinterpret_cast<void*>(static_cast<uintptr_t>(m_playIndex));
             HandleVideoFrame(pFrame);
@@ -881,6 +915,120 @@ void PUPMediaPlayer::HandleVideoFrame(AVFrame* frame)
 bool PUPMediaPlayer::IsHardwareDecoder(const AVCodecContext* pContext)
 {
    return pContext && pContext->codec && std::string_view(pContext->codec->name).ends_with("_v4l2m2m");
+}
+
+int PUPMediaPlayer::SendVideoPacket(const AVPacket* pPacket)
+{
+   if (!IsHardwareDecoder(m_pVideoContext))
+      return m_libAv._avcodec_send_packet(m_pVideoContext, pPacket);
+   m_hardwareCallStart = std::max<uint64_t>(SDL_GetTicks(), 1);
+   const int ret = m_libAv._avcodec_send_packet(m_pVideoContext, pPacket);
+   m_hardwareCallStart = 0;
+   return AfterHardwareCall(ret);
+}
+
+int PUPMediaPlayer::ReceiveVideoFrame(AVFrame* pFrame)
+{
+   if (m_pVideoContext == nullptr)
+      return AVERROR(EINVAL);
+   if (!IsHardwareDecoder(m_pVideoContext))
+      return m_libAv._avcodec_receive_frame(m_pVideoContext, pFrame);
+   m_hardwareCallStart = std::max<uint64_t>(SDL_GetTicks(), 1);
+   const int ret = m_libAv._avcodec_receive_frame(m_pVideoContext, pFrame);
+   m_hardwareCallStart = 0;
+   return AfterHardwareCall(ret);
+}
+
+// After a call into a hardware decoder: when its device was stopped because the call blocked, the video goes on with a software decoder
+// (from the next key frame), unless the player is stopping
+int PUPMediaPlayer::AfterHardwareCall(int ret)
+{
+   if (!m_hardwareUnblocked || !m_running)
+      return ret;
+   m_hardwareUnblocked = false;
+   LOGE(std::format("Hardware decoder {} stopped decoding, using software decoding: file={}", m_pVideoContext->codec->name, PluginStrings::PathToUTF8(m_filename.filename())));
+   if (!SwitchToSoftwareDecoding())
+      m_running = false;
+   return AVERROR(EAGAIN);
+}
+
+bool PUPMediaPlayer::SwitchToSoftwareDecoding()
+{
+   AVCodecContext* pVideoContext = OpenStream(m_pFormatContext, m_videoStream, false);
+   {
+      std::lock_guard lock(m_mutex);
+      std::swap(m_pVideoContext, pVideoContext);
+   }
+   m_libAv._avcodec_free_context(&pVideoContext);
+   return m_pVideoContext != nullptr;
+}
+
+// Called for each render of the player: a hardware decoder blocked in a call is woken up from the command queue (stopping the device may
+// take a moment, which the render thread should not wait for). After a few stalls, the next videos are decoded in software.
+void PUPMediaPlayer::CheckHardwareStall()
+{
+   const uint64_t start = m_hardwareCallStart;
+   if (start == 0 || SDL_GetTicks() - start < kHardwareStallMs || m_hardwareUnblocked || m_hardwareCheckQueued.exchange(true))
+      return;
+   m_commandQueue.enqueue([this]()
+   {
+      if (const uint64_t start = m_hardwareCallStart; start != 0 && SDL_GetTicks() - start >= kHardwareStallMs && !m_hardwareUnblocked)
+      {
+         UnblockHardwareDecoder();
+         if (++s_hardwareStalls >= kMaxHardwareStalls && s_hardwareDecoding.exchange(false))
+            LOGE(std::format("Hardware decoders stopped decoding {} times: the next videos are decoded in software", kMaxHardwareStalls));
+      }
+      m_hardwareCheckQueued = false;
+   });
+}
+
+#ifdef __linux__
+// The device of an FFmpeg V4L2 memory to memory decoder. FFmpeg does not expose it: the private data of these decoders starts with
+// { const AVClass*, V4L2m2mContext* }, and V4L2m2mContext with { char devname[PATH_MAX]; int fd; } (libavcodec/v4l2_m2m.h, the same since
+// FFmpeg 4.0). The descriptor is only returned when the system says it is open on that device, so another layout is never acted upon.
+static int GetV4L2Device(const AVCodecContext* pContext)
+{
+   if (pContext == nullptr || pContext->priv_data == nullptr)
+      return -1;
+   struct Priv
+   {
+      const void* avClass;
+      const char* context;
+   };
+   const char* m2m = static_cast<const Priv*>(pContext->priv_data)->context;
+   if (m2m == nullptr || strnlen(m2m, PATH_MAX) == PATH_MAX || strncmp(m2m, "/dev/", 5) != 0)
+      return -1;
+   int fd;
+   memcpy(&fd, m2m + PATH_MAX, sizeof(fd));
+   char device[PATH_MAX], opened[PATH_MAX];
+   const ssize_t length = fd >= 0 ? readlink(("/proc/self/fd/" + std::to_string(fd)).c_str(), opened, sizeof(opened) - 1) : -1;
+   if (length <= 0 || realpath(m2m, device) == nullptr)
+      return -1;
+   opened[length] = '\0';
+   return strcmp(opened, device) == 0 ? fd : -1;
+}
+#endif
+
+// Wakes up the decoding thread blocked in a V4L2 decoder: FFmpeg waits for the device with poll() and no timeout, retrying when a signal
+// interrupts it. Stopping both queues of the device wakes the waiting thread with an error, and the decoder fails its next calls at once,
+// instead of waiting. The decoder can not be used afterwards: AfterHardwareCall replaces it.
+void PUPMediaPlayer::UnblockHardwareDecoder()
+{
+   std::lock_guard lock(m_mutex); // m_pVideoContext is only freed after being swapped out under this lock
+   m_hardwareUnblocked = true;
+#ifdef __linux__
+   const int fd = IsHardwareDecoder(m_pVideoContext) ? GetV4L2Device(m_pVideoContext) : -1;
+   if (fd < 0)
+   {
+      LOGE("Hardware decoder blocked, its device was not found: file=" + PluginStrings::PathToUTF8(m_filename.filename()));
+      return;
+   }
+   const uint64_t start = m_hardwareCallStart;
+   LOGE(std::format("Hardware decoder {} blocked for {} ms, stopping its device: file={}", m_pVideoContext->codec->name, start != 0 ? SDL_GetTicks() - start : 0,
+      PluginStrings::PathToUTF8(m_filename.filename())));
+   for (int type : { V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, V4L2_BUF_TYPE_VIDEO_OUTPUT, V4L2_BUF_TYPE_VIDEO_CAPTURE })
+      ioctl(fd, VIDIOC_STREAMOFF, &type);
+#endif
 }
 
 AVCodecContext* PUPMediaPlayer::OpenCodec(AVFormatContext* pInputFormatContext, int stream, const AVCodec* pCodec)
