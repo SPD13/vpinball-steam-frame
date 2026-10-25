@@ -520,6 +520,7 @@ void Primitive::CalculateBuiltinOriginal()
         return;
 
    // this recalculates the Original Vertices -> should be only called, when sides are altered.
+   m_mesh.m_validBounds = false; // The side count changes the extent of the mesh (culling and probe area use its bounds)
    const float outerRadius = -0.5f / (cosf((float)M_PI / (float)m_d.m_Sides));
    const float addAngle = (float)(2.0*M_PI) / (float)m_d.m_Sides;
    const float offsAngle = (float)M_PI / (float)m_d.m_Sides;
