@@ -290,7 +290,8 @@ section 9, which are generic.
 
 - `GetTableUse(script)`: `usesPup` when the script contains `pinupplayer`; the candidate names, in order: the quoted name after
   `PuPlayer.Init`, the `cPuPPack` values, then every `cGameName` value; `rom` is the first `cGameName` not commented out (scripts keep
-  the lines of other versions as comments); `games`, the names given to `.Games("...")` and the other `cGameName` values (used by the
+  the lines of other versions as comments), only when the script loads PinMAME (`LoadVPM`, `VPinMAME.Controller`, `LoadController("VPM")`;
+  original tables set `cGameName` for their pack too); `games`, the names given to `.Games("...")` and the other `cGameName` values (used by the
   ROM aliases). Quotes in comments (`'` outside a string, `Rem`) are skipped.
 - `ReadTableScript(vpx)`: the `.vbs` next to the table when there is one (it replaces the embedded script), otherwise the `GameData`
   stream of the `.vpx`, as `-ExtractVBS` reads it.
@@ -317,7 +318,8 @@ section 9, which are generic.
 
 - **Fields of a table** (`Table`): `usesPup`, `pupPacks` (candidate names), `pupScannedAt`, `rom`, and `hasPupPack` (computed). The
   first four are cached in `table-stats.json` (preferences folder, `~/.local/share/VPinballX/10.8/` on the Frame) with the modification
-  date of the table they were read from: the script is read again only when the table changes. `UpdatePupPacks` computes `hasPupPack`
+  date of the table they were read from and `scanVersion`: the script is read again only when the table changes, or when it was read by
+  an older version of `GetTableUse` (raise `SCRIPT_SCAN_VERSION` in `TableLibrary.cpp` whenever `GetTableUse` finds other things). `UpdatePupPacks` computes `hasPupPack`
   at every scan, from the folders of the shared pack folder and of each table's `pupvideos` folder.
 - **Configuration** (`Config`, filled by `Launcher::GetTableLibrary`): `sharedPupVideosPath` (the `PUPFolder` setting of the plugin, or
   `<tables>/pinupsystem`, plus `/pupvideos`), `readPupUse` (calls `PupPacks`), `applyVrPupOptions` (true; the tests turn it off),
