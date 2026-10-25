@@ -33,7 +33,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and a link to the ROM folder. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables.
 - **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed) or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away.
 - **Missing ROM message** naming the files to add and where.
-- **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** ([details](/docs/PinMAME%20ROM%20Aliases.md)).
+- **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** (see [PinMAME ROM aliases](#pinmame-rom-aliases)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
@@ -124,7 +124,7 @@ In the installer app, after step 1: **Uninstall the game from the Frame...** at 
 | macOS: the app "cannot be opened" or is "Not Opened" | **System Settings > Privacy & Security > Open Anyway** (see step 3). If it cannot find the Frame, allow it in **System Settings > Privacy & Security > Local Network**. |
 | The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
 | The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
-| A table does not start, and its log says "Game name not found" | The table asks PinMAME for a game name it does not know, usually a mod that renames its game. In the browser, open the file manager, **⋮ > Advanced > PinMAME ROM aliases**: the tables in this case are listed at the top. Add a line `name,game` with the game from the table's readme (for example `simpprtyh,simpprty`), save, and start the table again. Its ROM (`game.zip`) must be in the ROM folder. |
+| A table does not start, and its log says "Game name not found" | The table asks PinMAME for a game name it does not know, usually a mod that renames its game. In the browser, open the file manager, **⋮ > Advanced > PinMAME ROM aliases**: the tables in this case are listed at the top. Add a line `name,game` with the game from the table's readme (for example `simpprtyh,simpprty`), save, and start the table again. Its ROM (`game.zip`) must be in the ROM folder. See [PinMAME ROM aliases](#pinmame-rom-aliases). |
 | The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.8/vpinball.log` |
 | Something else | The installer app keeps a log of what it did: `installer.log` in `%LOCALAPPDATA%\vpx-frame-installer` (Windows), `~/Library/Caches/vpx-frame-installer` (macOS) or `~/.cache/vpx-frame-installer` (Linux). Attach it when you [report the problem](https://github.com/SPD13/vpinball-steam-frame/issues). |
 
@@ -244,6 +244,37 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 | `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
+
+## PinMAME ROM aliases
+
+A table that emulates a real machine asks PinMAME for its game by the name written in its script (`cGameName`). Some tables use a name that is not PinMAME's own: an older or shorter name (`simp` for `simp_a27`), or, for many mods, a name of their own (the Simpsons Treehouse of Horror mod asks for `simpprtyh`, which is the game `simpprty`). An **alias** tells PinMAME which game to run for that name. Without one, the table loads but does not play: PinMAME stops with "Game name not found". Original tables, which do not use PinMAME, never need an alias.
+
+### What the game does by itself
+
+- **The standard aliases** of Visual PinMAME (about 120, such as `simp,simp_a27`) are installed with the alias file, the first time the game starts.
+- **Aliases of mods**: when a table asks for a name PinMAME does not know, the game looks for its alias in the table's files: an `alias,game` line in the readme of the download (`.txt`, `.md`, `.nfo`, `.rtf`), a game the script names (`.Games("startrp2")`), a ROM archive or a colorization folder named after a game, or a game the name starts with. It adds the line it found to the alias file, with a comment saying where it came from. A ROM shipped in a folder of its own (`MutedRom/simpprty.zip`) is moved to the ROM folder.
+- **When nothing is found**, the table is reported: a yellow warning on the **Tables** page of the browser names it, its tile gets an **Unknown game** badge, and starting it in the headset shows a message saying it needs an alias.
+
+So upload a table's download as it is (the `.zip` with its readme), and let the game find the alias first.
+
+### Where the aliases are
+
+| File on the Frame | Used by |
+| --- | --- |
+| `~/Documents/VPinballX/Tables/pinmame/alias.txt` | All the tables |
+| `pinmame/alias.txt` in a table's folder | That table only, when its folder has its own `pinmame/roms` folder (PinMAME then uses that folder instead of the shared one) |
+
+The file has one alias per line, `name,game`: `name` is what the table asks for, `game` is the PinMAME game, whose ROM is `game.zip` in the ROM folder (`~/Documents/VPinballX/Tables/pinmame/roms`). Lines starting with `#` are comments. A line can not be longer than 127 characters.
+
+### Setting an alias
+
+1. **Find the game.** The table's readme or download page usually gives it ("add `simpprtyh,simpprty` to `VPMAlias.txt`"). Otherwise, the table's backglass file (`.directb2s`, a text file) often names it in `<GameName Value="...">`.
+2. **Open the alias editor in a browser.** In the game, open the table picker and, under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows. On the **Tables** page, click the yellow warning or a table's **Unknown game** badge. The editor is also in the file manager (**Files**), under **⋮ > Advanced > PinMAME ROM aliases**.
+3. **Add the line.** The editor lists the tables asking for a game PinMAME does not know: **Add a line** next to one adds `name,` at the end of the file; type the game after the comma (for example `simpprtyh,simpprty`).
+4. **Save.** A line PinMAME would misread (a single name, or more than 127 characters) is refused, with its line number. A saved alias applies the next time the table starts.
+5. **Add the ROM** of the game (`game.zip`) if it is missing: upload it in the file manager's **ROMs** tab, or copy it to the ROM folder over ssh.
+
+Over ssh, the file can also be edited directly, for example `ssh steamos@frame.local 'echo "simpprtyh,simpprty" >> Documents/VPinballX/Tables/pinmame/alias.txt'` (the file must end with a new line before you add one). More details: [PinMAME ROM aliases](/docs/PinMAME%20ROM%20Aliases.md).
 
 ## Controllers
 
