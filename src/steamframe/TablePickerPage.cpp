@@ -766,7 +766,7 @@ void AddMenuDistanceItem(InGameUIPage& page)
          {
             g_settingsService.GetAppSettings().SetStandalone_VRMenuDistance(clamp(roundf(value * 10.f) / 10.f, 0.3f, 3.f), false);
             #ifdef ENABLE_XR
-            page.m_player->m_vrDevice->RecenterUIPanel();
+            page.m_player->m_vrDevice->ReplaceUIPanel();
             #endif
          };
          ImGui::AlignTextToFramePadding();
