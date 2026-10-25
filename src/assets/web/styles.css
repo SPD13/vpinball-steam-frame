@@ -553,6 +553,30 @@ body {
   background-color: var(--border-color);
 }
 
+/* A folded group of items (Advanced): its items are indented under it */
+.actions-dropdown-content .dropdown-fold-chevron {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  margin-left: auto;
+  padding-left: 0.75rem;
+  box-sizing: content-box;
+  transition: transform 0.15s ease;
+}
+
+.actions-dropdown-content .dropdown-fold[aria-expanded="true"] .dropdown-fold-chevron {
+  transform: rotate(90deg);
+}
+
+.dropdown-fold-content[hidden] {
+  display: none;
+}
+
+.actions-dropdown-content .dropdown-fold-content a {
+  padding-left: 2.75rem;
+  white-space: nowrap;
+}
+
 .actions-dropdown-content a.disabled {
   color: var(--text-tertiary);
   cursor: not-allowed;
@@ -1496,6 +1520,89 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 
 .tables-dialog-left {
   margin-right: auto;
+}
+
+/* PinMAME ROM aliases (Files page, Advanced menu) */
+.tables-dialog.aliases-dialog {
+  width: min(48rem, calc(100% - 2rem));
+}
+
+.aliases-text {
+  display: block;
+  width: 100%;
+  height: min(50vh, 28rem);
+  min-height: 10rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+  color: var(--text-primary);
+  background: var(--card-background);
+}
+
+.aliases-text:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(253, 52, 35, 0.2);
+}
+
+.aliases-unknown {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--danger-color);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.aliases-unknown[hidden] {
+  display: none;
+}
+
+.aliases-unknown-title {
+  font-weight: 600;
+  color: var(--danger-color);
+}
+
+.aliases-unknown-list {
+  list-style: none;
+  margin-top: 0.25rem;
+}
+
+.aliases-unknown-list li {
+  padding: 0.125rem 0;
+  overflow-wrap: anywhere;
+}
+
+.btn.aliases-add {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.aliases-issues {
+  list-style: none;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.aliases-issue.error {
+  color: var(--danger-color);
+}
+
+.aliases-issue.warning {
+  color: #b45309;
+}
+
+.aliases-issue a {
+  color: inherit;
+  font-weight: 600;
 }
 
 /* Tables page: the search and the "Add table" button, which opens the Files page */

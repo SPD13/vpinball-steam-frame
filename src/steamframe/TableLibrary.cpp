@@ -9,6 +9,7 @@
 #include <climits>
 #include <fstream>
 #include <random>
+#include <sstream>
 
 #include <nlohmann/json.hpp>
 
@@ -78,6 +79,7 @@ bool SameTable(const Table& a, const Table& b)
 
 TableLibrary::TableLibrary(Config config)
    : m_config(std::move(config))
+   , m_gameCatalog(m_config.pinmameCatalogPath)
 {
 }
 
@@ -382,6 +384,7 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
       LoadJson();
    if (!m_rejectedArchivesLoaded)
       LoadRejectedArchives();
+   EnsureAliasFile();
    const bool jsonExists = Exists(m_config.jsonPath);
    std::vector<Table> tables = m_tables;
 
@@ -462,7 +465,9 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
    progress(85, "Looking for PinUP Player packs...");
    UpdatePupPacks(tables);
 
-   // Once the scripts of the new tables are read, for the ROMs they need
+   // Once the scripts of the new tables are read, for the games and ROMs they need
+   progress(87, "Looking for game aliases...");
+   ResolveGameAliases(tables);
    progress(88, "Looking for ROMs...");
    MoveRootRoms(tables);
 
@@ -643,12 +648,8 @@ int TableLibrary::MoveBundleRoms(const fs::path& folder, bool isTableFolder)
    fs::path dest = m_config.romsPath;
    std::set<fs::path> tableDirs;
    if (isTableFolder) {
-      for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
-         if (it->is_directory(ec) && ToLower(it->path().filename().string()) == "pinmame")
-            for (auto sub = fs::directory_iterator(it->path(), ec); !ec && sub != fs::directory_iterator(); sub.increment(ec))
-               if (sub->is_directory(ec) && ToLower(sub->path().filename().string()) == "roms")
-                  dest = sub->path();
-      ec.clear();
+      if (const fs::path tableRoms = FindTableRomsFolder(folder); !tableRoms.empty())
+         dest = tableRoms;
       for (const fs::path& table : ListTableFiles(folder, 0))
          tableDirs.insert(table.parent_path().lexically_normal());
    }
@@ -729,6 +730,205 @@ void TableLibrary::MoveRootRoms(const std::vector<Table>& tables)
    }
    if (changed)
       SaveRejectedArchives();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// PinMAME ROM aliases
+
+fs::path TableLibrary::GetAliasFilePath() const { return m_config.romsPath.empty() ? fs::path() : m_config.romsPath.parent_path() / "alias.txt"; }
+
+// The 'pinmame/roms' folder of a table, which PinMAME uses instead of its own folder (see PinMAMEPlugin.cpp), or an empty path
+fs::path TableLibrary::FindTableRomsFolder(const fs::path& tableFolder) const
+{
+   std::error_code ec;
+   for (auto it = fs::directory_iterator(tableFolder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (it->is_directory(ec) && ToLower(it->path().filename().string()) == "pinmame")
+         for (auto sub = fs::directory_iterator(it->path(), ec); !ec && sub != fs::directory_iterator(); sub.increment(ec))
+            if (sub->is_directory(ec) && ToLower(sub->path().filename().string()) == "roms")
+               return sub->path();
+   return fs::path();
+}
+
+fs::path TableLibrary::GetTableAliasFilePath(const fs::path& tableFolder) const
+{
+   const fs::path tableRoms = FindTableRomsFolder(tableFolder);
+   return tableRoms.empty() ? GetAliasFilePath() : tableRoms.parent_path() / "alias.txt";
+}
+
+// libpinmame only knows the aliases of its alias file, unlike VPinMAME which has its own list built in: a new PinMAME folder gets that list
+void TableLibrary::EnsureAliasFile() const
+{
+   const fs::path aliasFile = GetAliasFilePath();
+   std::error_code ec;
+   if (aliasFile.empty() || m_config.defaultAliasesPath.empty() || fs::exists(aliasFile, ec) || !fs::exists(m_config.defaultAliasesPath, ec))
+      return;
+   std::lock_guard lock(m_aliasFileMutex);
+   fs::create_directories(aliasFile.parent_path(), ec);
+   fs::copy_file(m_config.defaultAliasesPath, aliasFile, ec);
+   if (ec)
+      Log(LogLevel::Error, "Failed to create the PinMAME alias file " + aliasFile.string() + ": " + ec.message());
+   else
+      Log(LogLevel::Info, "PinMAME alias file created with the aliases of VPinMAME: " + aliasFile.string());
+}
+
+// The alias pairs given by the text files of an imported bundle for the unknown games its tables ask for: the instructions may be at the root
+// of the bundle, which is deleted once the table folders are moved out of it
+void TableLibrary::CollectAliasHints(const fs::path& bundleFolder)
+{
+   if (!m_config.readPupUse || m_config.romsPath.empty() || !m_gameCatalog.IsAvailable())
+      return;
+   for (const fs::path& file : ListTableFiles(bundleFolder, 0)) {
+      string rom;
+      try {
+         rom = m_config.readPupUse(file).rom;
+      } catch (const std::exception&) {
+         continue;
+      }
+      if (rom.empty() || m_gameCatalog.IsGame(rom) || m_aliasHints.contains(ToLower(rom)))
+         continue;
+      if (std::optional<RomAliases::Evidence> pair = RomAliases::FindPairInTexts(bundleFolder, rom, m_gameCatalog)) {
+         pair->source += " of the uploaded bundle";
+         m_aliasHints[ToLower(rom)] = *pair;
+      }
+   }
+}
+
+// The tables asking PinMAME for a game it does not know get the alias of the game found along them (see RomAliases::FindGame), written to
+// the alias file. Then the ROM archive of their game, when it is missing from the ROM folder but is somewhere in the table folder, is moved there.
+void TableLibrary::ResolveGameAliases(const std::vector<Table>& tables)
+{
+   if (m_config.romsPath.empty() || !m_gameCatalog.IsAvailable())
+      return;
+   for (const Table& table : tables) {
+      if (table.rom.empty())
+         continue;
+      const string check = table.uuid + '|' + std::to_string(table.modifiedAt) + '|' + table.rom + '|' + std::to_string(m_aliasFileRevision.load());
+      if (!m_aliasChecks.insert(check).second)
+         continue;
+      const fs::path tablePath = BuildPath(table.path);
+      const fs::path tableFolder = tablePath.parent_path();
+      string game = ToLower(table.rom);
+      if (!m_gameCatalog.IsGame(game)) {
+         const fs::path aliasFile = GetTableAliasFilePath(tableFolder);
+         std::lock_guard lock(m_aliasFileMutex);
+         if (const std::optional<string> alias = RomAliases::FindAlias(aliasFile, table.rom)) {
+            game = ToLower(*alias);
+         } else {
+            std::vector<string> scriptGames;
+            if (m_config.readPupUse) {
+               try {
+                  scriptGames = m_config.readPupUse(tablePath).games;
+               } catch (const std::exception&) {
+               }
+            }
+            const std::optional<RomAliases::Evidence> found = RomAliases::FindGame(table.rom, scriptGames, tableFolder, m_aliasHints, m_gameCatalog);
+            if (!found) {
+               Log(LogLevel::Warn, "Table '" + table.name + "' asks PinMAME for the game '" + table.rom + "', which PinMAME does not know, and no alias was found for it: add one to "
+                     + aliasFile.string() + " (web server, Files page, Advanced menu)");
+               continue;
+            }
+            string error;
+            if (!RomAliases::AppendAlias(aliasFile, table.rom, found->game, "From " + found->source + ", for " + table.name, error)) {
+               Log(LogLevel::Error, error);
+               continue;
+            }
+            Log(LogLevel::Info, "Table '" + table.name + "' asks PinMAME for the unknown game '" + table.rom + "': alias '" + table.rom + ',' + found->game + "' added to "
+                  + aliasFile.string() + " (found in " + found->source + ')');
+            game = found->game;
+         }
+      }
+      if (m_gameCatalog.IsGame(game))
+         MoveTableRom(tableFolder, game);
+   }
+}
+
+// The ROM archive of 'game' found in the table folder, moved to the ROM folder when the game has no ROM there: a bundle may keep its ROM in a
+// folder of its own ('MutedRom/simpprty.zip'), where PinMAME does not look. A ROM already installed is never replaced.
+bool TableLibrary::MoveTableRom(const fs::path& tableFolder, const string& game)
+{
+   const fs::path tableRoms = FindTableRomsFolder(tableFolder);
+   const fs::path dest = tableRoms.empty() ? m_config.romsPath : tableRoms;
+   const auto isRomOf = [&game](const fs::path& path) {
+      return (HasExtension(path, ".zip") || HasExtension(path, ".7z")) && ToLower(path.stem().string()) == game;
+   };
+   std::error_code ec;
+   for (auto it = fs::directory_iterator(dest, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (isRomOf(it->path()))
+         return false;
+   ec.clear();
+   for (auto it = fs::recursive_directory_iterator(tableFolder, fs::directory_options::skip_permission_denied, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+      if (it->is_directory(ec)) {
+         if (IsHidden(it->path()) || ToLower(it->path().filename().string()) == "pupvideos")
+            it.disable_recursion_pending();
+         continue;
+      }
+      if (it->is_regular_file(ec) && !IsHidden(it->path()) && isRomOf(it->path())) {
+         const fs::path rom = it->path();
+         Log(LogLevel::Info, "ROM " + rom.filename().string() + " found in " + RelativePath(rom) + ", where PinMAME does not look for it");
+         return MoveRom(rom, dest);
+      }
+   }
+   return false;
+}
+
+string TableLibrary::ReadAliasFile() const
+{
+   std::lock_guard lock(m_aliasFileMutex);
+   std::ifstream file(GetAliasFilePath(), std::ios::binary);
+   std::stringstream content;
+   content << file.rdbuf();
+   return content.str();
+}
+
+bool TableLibrary::SaveAliasFile(const string& content, std::vector<RomAliases::Issue>& errors, std::vector<RomAliases::Issue>& warnings, string& error)
+{
+   const fs::path aliasFile = GetAliasFilePath();
+   if (aliasFile.empty()) {
+      error = "The PinMAME folder is not defined";
+      return false;
+   }
+   const string normalized = RomAliases::Normalize(content, m_gameCatalog, errors, warnings, ReadAliasFile());
+   if (!errors.empty())
+      return false;
+   std::lock_guard lock(m_aliasFileMutex);
+   std::error_code ec;
+   fs::create_directories(aliasFile.parent_path(), ec);
+   fs::path partFile = aliasFile;
+   partFile += ".part";
+   {
+      std::ofstream file(partFile, std::ios::binary | std::ios::trunc);
+      file << normalized;
+      file.close();
+      if (!file)
+         ec = std::make_error_code(std::errc::io_error);
+   }
+   if (!ec)
+      fs::rename(partFile, aliasFile, ec);
+   if (ec) {
+      fs::remove(partFile, ec);
+      error = "Failed to save " + aliasFile.string();
+      Log(LogLevel::Error, error);
+      return false;
+   }
+   m_aliasFileRevision++; // The tables are looked at again by the next scan
+   Log(LogLevel::Info, "PinMAME alias file saved: " + aliasFile.string());
+   return true;
+}
+
+std::vector<TableLibrary::UnknownGame> TableLibrary::GetUnknownGames()
+{
+   std::vector<UnknownGame> unknown;
+   if (m_config.romsPath.empty() || !m_gameCatalog.IsAvailable())
+      return unknown;
+   for (const Table& table : GetTables()) {
+      if (table.rom.empty() || m_gameCatalog.IsGame(table.rom))
+         continue;
+      const fs::path aliasFile = GetTableAliasFilePath(BuildPath(table.path).parent_path());
+      std::lock_guard lock(m_aliasFileMutex);
+      if (!RomAliases::FindAlias(aliasFile, table.rom))
+         unknown.push_back({ table.name, table.rom });
+   }
+   return unknown;
 }
 
 // rejected-archives.json, along tables.json: the archives of the tables folder that hold neither a table nor a pack, so that they are not
@@ -878,6 +1078,7 @@ std::vector<Table> TableLibrary::ImportArchive(const fs::path& path, const std::
    if (!extracted) {
       Log(LogLevel::Error, "Failed to extract " + path.string());
    } else {
+      CollectAliasHints(tempFolder); // Before the table folders are moved: instructions are often at the root of the bundle
       // Each folder holding tables becomes a table folder, moved as a whole to keep backglass, ini, music, ROMs... A folder
       // nested in another one holding tables moves with its parent (folders are sorted, so parents come first).
       std::set<fs::path> tableFolders;

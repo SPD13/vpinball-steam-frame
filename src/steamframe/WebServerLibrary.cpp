@@ -68,6 +68,7 @@ WebServer::RouteHandler WebServer::GetLibraryRoute(struct mg_http_message* hm)
       { "/profile-delete", &WebServer::ProfileDelete },
       { "/profile-active", &WebServer::ProfileActive },
       { "/pup-options", &WebServer::PupOptions },
+      { "/pinmame-aliases", &WebServer::PinmameAliases },
    };
    for (const auto& [uri, handler] : routes)
       if (mg_match(hm->uri, mg_str(uri), NULL))
@@ -135,6 +136,39 @@ void WebServer::PupOptions(struct mg_connection *c, struct mg_http_message* hm)
       options.push_back({ { "name", option.name }, { "supported", option.supported }, { "reason", option.reason }, { "recommended", option.recommended } });
    const string response = json { { "isPack", true }, { "applied", PupPackOptions::GetApplied(pack) }, { "options", options }, { "error", error } }.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
+}
+
+// GET: the alias file of PinMAME, and the tables asking for a game that PinMAME does not know and that has no alias. POST: save the body as
+// the alias file, normalized, unless libpinmame would misread some of its lines (see RomAliases::Normalize)
+void WebServer::PinmameAliases(struct mg_connection *c, struct mg_http_message* hm)
+{
+   VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
+   json response = json::object();
+   if (mg_strcmp(hm->method, mg_str("POST")) == 0) {
+      const auto toJson = [](const std::vector<VPinballLib::RomAliases::Issue>& issues) {
+         json list = json::array();
+         for (const VPinballLib::RomAliases::Issue& issue : issues)
+            list.push_back({ { "line", issue.line }, { "message", issue.message } });
+         return list;
+      };
+      std::vector<VPinballLib::RomAliases::Issue> errors, warnings;
+      string error;
+      const bool saved = library.SaveAliasFile(string(hm->body.buf, hm->body.len), errors, warnings, error);
+      response["saved"] = saved;
+      response["errors"] = toJson(errors);
+      response["warnings"] = toJson(warnings);
+      response["error"] = error;
+      if (saved)
+         SetLastUpdate(); // Rescans the library: the tables of the new aliases get their ROM moved from their folder
+   }
+   json unknownGames = json::array();
+   for (const VPinballLib::TableLibrary::UnknownGame& unknown : library.GetUnknownGames())
+      unknownGames.push_back({ { "table", unknown.table }, { "rom", unknown.rom } });
+   response["path"] = library.GetAliasFilePath().string();
+   response["content"] = library.ReadAliasFile();
+   response["unknownGames"] = unknownGames;
+   const string body = response.dump(-1, ' ', false, json::error_handler_t::replace); // The file may not be UTF-8
+   mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", body.c_str());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
