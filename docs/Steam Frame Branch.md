@@ -25,6 +25,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and Tables and ROMs tabs to switch between the two folders. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables (sections 5 and 8).
 - **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed) or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away (section 5).
 - **Missing ROM message** naming the files to add and where (section 8).
+- **Game aliases of mods found automatically**: a table asking PinMAME for a game it does not know (a mod renaming its game, `simpprtyh` for `simpprty`) gets the alias it needs, found in its readme, script or files, and the ROM it ships outside of a `roms` folder is moved where PinMAME looks. The alias file can be edited from the browser, under an Advanced menu, with the lines PinMAME would misread refused (section 6).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
@@ -166,6 +167,20 @@ Known gaps: plain HTTP; the static pages and `/assets/*` are served without pair
 `Launcher::SetupSharedPinMAMEFolder()` (`src/steamframe/Launcher.cpp`), called before each table loads because the PinMAME plugin reads its setting when it is loaded.
 
 The plugin looks for ROMs in `pinmame/roms` next to the table, then in its `PinMAMEPath` setting, then in `~/.pinmame`. When the setting is empty (or equal to the default below) and `~/.pinmame/roms` does not exist, the setting is pointed at `<tables folder>/pinmame` and `pinmame/roms` is created, so ROMs can be uploaded from the browser. The value is reset when the application closes, but it can still be written to `VPinballX.ini` if a settings page saves while it is applied. Desktop standalone builds only.
+
+### Game aliases (branch `pup`, 2026-10-24)
+
+A table script asks PinMAME for a game by name (`cGameName`). Mods often give their game a name of their own and tell the user to map it to the real game in VPinMAME's `VPMAlias.txt`: Simpsons Treehouse of Horror MOD v2023.3 asks for `simpprtyh` ("set an alias ... to `simpprtyh,simpprty`" in its readme), Aliens PuP asks for `alienspupver` (`alienspupver,sorcr_l1` in its installation instructions). The PinMAME plugin resolves aliases through libpinmame, which reads `alias.txt` in the PinMAME folder (`CheckGameAlias` in `libpinmame.cpp`), so on the Frame these tables stopped with "Game name not found" and a cascade of script errors (the script aborts its init, then its timers use objects it never created). The library now handles it (`TableLibrary::ResolveGameAliases`, `src/steamframe/RomAliases.cpp`):
+
+- **The game names PinMAME knows** come from the driver catalog shipped with the plugin (`plugins/pinmame/gamedefs/catalog/pinmame.json`, 2955 drivers). Without it, nothing is done.
+- **Alias file**: `alias.txt` beside the ROM folder (`Tables/pinmame/alias.txt`), or in the table's own `pinmame` folder when it has `pinmame/roms`, which PinMAME then uses instead. When the shared file does not exist, it is created from VPinMAME's built-in aliases (`src/assets/pinmame/VPMAlias.txt`, a copy of PinMAME's `release/VPMAlias.txt`): unlike VPinMAME, libpinmame knows no alias by itself.
+- **Finding the game** of a table whose `cGameName` is neither a game nor an alias, in this order: an `alias,game` pair naming it in the text files (`.txt`, `.md`, `.nfo`, `.rtf`) of the uploaded bundle, read before the table folders are moved out of it as instructions are often at its root, or of the table folder; the games the script quotes (`Controller.Games("sorcr_l1")`, `cGameName` values of other, commented, lines); the files and folders of the table folder named after a game (ROM archive, NVRAM, `altcolor/<game>`, `pupvideos/<game>`) that the name starts with, or the only one there is; the longest game the name starts with, if it is at least half of it (`simpprty` for `simpprtyh`). The game must be in the catalog. The alias is appended after a comment telling where it was found (`# From readme.txt of the uploaded bundle, for <table>`), and the log says the same. A table without any clue is logged, and listed in the web page (below).
+- **The ROM**: when the game has no ROM in the ROM folder and its archive is somewhere in the table folder (`MutedRom/simpprty.zip`), it is moved to the ROM folder. An installed ROM is never replaced: the Treehouse of Horror bundle ships a muted ROM, which must not overwrite the user's original. (Imports already move the archives of `roms` folders and those next to the table, see section 15.)
+- **When**: at each library scan, after the scripts of new tables are read, for the tables not looked at yet in this session (their date, ROM and the alias file's revision are part of the check), so tables imported before this change are fixed at the next start.
+- **The script's ROM** is now its first `cGameName` that is not commented out (`'Const cGameName = "..."` lines of other versions came first in some scripts).
+- **Editing the aliases from the browser**: the file manager's actions menu (⋮) has an **Advanced** item which unfolds **PinMAME ROM aliases**: a dialog with the alias file in a text area, the path of the file, and the tables asking for a game PinMAME does not know with an **Add a line** button (it adds `name,` for the user to type the game). **Save** checks the file first (`RomAliases::Normalize`): libpinmame reads lines of up to 127 characters and dereferences the second name without checking that there is one, so a longer line or a line with a single name is refused, with the line numbers (clicking one selects the line). Unknown games, names given twice and aliases replacing a game are warnings, only for the lines the user added or changed (VPinMAME's own list has a few). Lines are trimmed and the file ends with a new line. Route: `/pinmame-aliases` (GET: path, content, unknown games; POST: the body is the new content), behind the pairing like the other routes. A save rescans the library, which moves the ROMs of the new aliases.
+
+Tests: `tests/test-table-library.cpp` (the alias file as libpinmame reads it, the clues in order, Treehouse of Horror and Aliens bundles, a table without clue, an installed ROM kept, the web save). Checked on macOS with the real Treehouse of Horror bundle dropped in a scratch library (alias from its readme, muted ROM moved) and the dialog in Chrome. Not checked yet: the table started on the Frame with the alias.
 
 ## 7. OpenXR
 
@@ -310,6 +325,8 @@ src/steamframe/PlayerTableImage.cpp     Player members for the table images
 src/steamframe/WebServerLibrary.cpp     WebServer routes of the tables and scores pages
 src/steamframe/TableLibrary.h
 src/steamframe/TableLibrary.cpp
+src/steamframe/RomAliases.h
+src/steamframe/RomAliases.cpp           game aliases of the tables (section 6)
 src/steamframe/ScoreStore.h
 src/steamframe/ScoreStore.cpp
 src/steamframe/ScoreTracker.h
@@ -319,6 +336,7 @@ src/steamframe/ScoresPage.h
 src/steamframe/ScoresPage.cpp
 src/assets/scores/score-rules.json
 src/assets/pinmame/memmaps/
+src/assets/pinmame/VPMAlias.txt         VPinMAME's built-in aliases, the default alias file (section 6)
 src/assets/web/scores.html
 src/assets/web/scores.js
 src/assets/web/tables.html
@@ -351,9 +369,9 @@ steamframe/patches/bgfx/03-fragment-shading-rate.patch   fragment shading rate a
 platforms/linux-x64/external.sh         steamframe/deps scripts
 platforms/windows-mingw-x64/external.sh steamframe/deps scripts
 lib/src/WebServer.h, WebServer.cpp      desktop use, pairing, staged uploads, tables page as home page, dispatch to the routes of WebServerLibrary.cpp
-src/assets/web/app.js, vpx.html         pairing prompt, Upload Folder, missing ROMs, ROM folder link, Tables | Scores | Files switch
+src/assets/web/app.js, vpx.html         pairing prompt, Upload Folder, missing ROMs, ROM folder link, Tables | Scores | Files switch, Advanced menu and PinMAME ROM aliases
 src/assets/web/tables.html, tables.js   Scores link, "Show scores" in the table menu
-src/assets/web/styles.css               missing ROMs, ROM folder link, upload banner, tables page, scores page
+src/assets/web/styles.css               missing ROMs, ROM folder link, upload banner, tables page, scores page, aliases dialog
 src/core/ScriptGlobalTable.cpp          SaveValue forwarded to the score tracker
 plugins/flexdmd/FlexDMD.h, .cpp, UltraDMD.cpp   UltraDMD scoreboard broadcast for the scores
 plugins/pinmame/PinMAMEPlugin.cpp       bundled memory maps as last resort

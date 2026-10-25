@@ -50,5 +50,20 @@ A check of every table on the Frame (its `cGameName`, resolved through `alias.tx
 ## Follow-ups
 
 - [ ] Add `simp_a27.zip` to the Frame and check that The Simpsons starts.
-- [ ] Have the release installer (`Doc/steam-frame-build/release/install.sh`) create `pinmame/alias.txt` from `VPMAlias.txt` when it is missing, so that new installs get the aliases.
-- [ ] The web upload's list of missing ROMs could resolve aliases too, so that it asks for `simp_a27` rather than `simp`.
+- [x] New installs get the aliases (2026-10-24): the application creates `pinmame/alias.txt` from its copy of `VPMAlias.txt` (`assets/pinmame/VPMAlias.txt`) when the file is missing, instead of the installer.
+- [ ] The web upload's list of missing ROMs could resolve aliases too, so that it asks for `simp_a27` rather than `simp`. (The missing ROM reports come from PinMAME after it resolved the alias, so they should already name `simp_a27`; not checked.)
+
+## Mods with a game name of their own (Oct 24, 2026)
+
+Two more tables stopped with "Game name not found", for another reason: their game name is not in VPinMAME's list at all. Mods rename their game and their readme asks the user to add the alias to `VPMAlias.txt`:
+
+| Table | `cGameName` | Alias given by the download | Where |
+| --- | --- | --- | --- |
+| Simpsons Treehouse of Horror MOD v2023.3 (VPW 2.0.3 base) | `simpprtyh` | `simpprtyh,simpprty` | `readme.txt` in the table folder |
+| Aliens PuP 1.0.1.7 | `alienspupver` | `alienspupver,sorcr_l1` | `INSTALLATION INSTRUCTIONS.txt`, beside the table |
+
+On the Frame the Simpsons log showed `Game name not found: 'simpprtyh'` on line 1399 (`.GameName = cGameName` in `Table1_Init`), then `Object required` on line 262 at every frame: `Table1_Init` stops before it creates the captive ball, which a timer moves (`bart1a.X = capBall.X`). Its ROM was not installed either: the bundle ships a muted `simpprty.zip` in a `MutedRom` folder, where the import did not look, and `pinmame/roms` only had `simp_a27.zip` (the Data East Simpsons, another game).
+
+There is no list of such aliases to download: PinMAME's `release/VPMAlias.txt` is the only official one (identical to the Frame's `alias.txt`), and mod names are made up by each author. The library now finds them in the table's files and writes them to `alias.txt`, moves a ROM it finds in the table folder when none is installed, and the file can be edited from the browser (file manager, **⋮ > Advanced > PinMAME ROM aliases**), where a save is refused for lines libpinmame would misread. Details in section 6 of `docs/Steam Frame Branch.md`.
+
+- [ ] Start both tables on the Frame with the new build (the Simpsons gets its alias from its readme and the muted ROM; Aliens gets its alias from `INSTALLATION INSTRUCTIONS.txt`, which is in its table folder on the Frame, and still needs `sorcr_l1.zip`, which is not on the Frame).

@@ -33,6 +33,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and a link to the ROM folder. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables.
 - **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed) or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away.
 - **Missing ROM message** naming the files to add and where.
+- **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** ([details](/docs/PinMAME%20ROM%20Aliases.md)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
@@ -97,7 +98,7 @@ On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Editio
 
 ### 5. Add tables
 
-- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder.
+- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder. Upload a table's download as it is: when its readme asks to add an alias to `VPMAlias.txt`, the game does it.
 - **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
   `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
 
@@ -123,6 +124,7 @@ In the installer app, after step 1: **Uninstall the game from the Frame...** at 
 | macOS: the app "cannot be opened" or is "Not Opened" | **System Settings > Privacy & Security > Open Anyway** (see step 3). If it cannot find the Frame, allow it in **System Settings > Privacy & Security > Local Network**. |
 | The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
 | The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
+| A table does not start, and its log says "Game name not found" | The table asks PinMAME for a game name it does not know, usually a mod that renames its game. In the browser, open the file manager, **⋮ > Advanced > PinMAME ROM aliases**: the tables in this case are listed at the top. Add a line `name,game` with the game from the table's readme (for example `simpprtyh,simpprty`), save, and start the table again. Its ROM (`game.zip`) must be in the ROM folder. |
 | The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.8/vpinball.log` |
 | Something else | The installer app keeps a log of what it did: `installer.log` in `%LOCALAPPDATA%\vpx-frame-installer` (Windows), `~/Library/Caches/vpx-frame-installer` (macOS) or `~/.cache/vpx-frame-installer` (Linux). Attach it when you [report the problem](https://github.com/SPD13/vpinball-steam-frame/issues). |
 
