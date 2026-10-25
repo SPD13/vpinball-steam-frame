@@ -13,6 +13,8 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 
 **▶ [Watch the trailer](https://youtu.be/YvKycmiTYIY)** (2:11): the VR version, with the VR menu and table search, Steam Frame tuning and eye-tracked foveated rendering, uploading tables over Wi-Fi, player profiles and online scores, the installer and one-click updates.
 
+**▶ [Get help with the tutorials](/docs/tutorials/tutorials.md)**: step-by-step guides with screenshots and videos, starting with adding tables and ROMs.
+
 ## What the player gets
 
 In the standalone builds (the Steam Frame app, and the standalone desktop builds):
@@ -33,8 +35,10 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Lobby** in launcher mode, from which tables are started and to which they return, in the room chosen with the lobby room selector.
 - **Web upload**: add tables and ROMs from a browser on the local network, with a pairing code that can be switched off, missing ROMs listed, and a link to the ROM folder. It can be on for the session only or always on (started with the application), and stays on while switching between the lobby and the tables.
 - **Tables page in the browser**, the home page of the web server: the library as a grid of thumbnails with the picker's tabs and search, a star to add or remove a favorite, and a "..." menu on each table to set its **display name** (the name the picker shows, the files are not renamed), **upload a thumbnail** from the computer, or **delete** it with all its files. With an empty library it links to the file manager, which stays one click away.
+- **Full backup of tables, ROMs, settings and scores**: a Backup page in the browser, next to Files, downloads everything the Frame holds to your computer (tables with their backglasses and PuP packs, table images, ROMs, machine saves, favorites and names, settings, scores and players, ROM aliases), or only the items and tables you choose. Restore it after a fresh installation or onto another Frame, item by item and table by table: scores, players and favorites are merged with the ones already there ([how it works](#backup-and-restore)).
 - **Missing ROM message** naming the files to add and where.
 - **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** (see [PinMAME ROM aliases](#pinmame-rom-aliases)).
+- **Fixes for broken tables and ROMs**: some tables and games do not work as they are, because of a bug in their script or a setting of their ROM. The game ships fixes for the ones found so far, each with the record of what it changes and why. Tables you add get the fixes they need by themselves; the ones already on the Frame get them with **Patch table** in their menu, in the headset or in the browser. The table files themselves are never changed (see [How to patch a broken table?](#how-to-patch-a-broken-table)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
@@ -111,7 +115,7 @@ Or update from the headset: when a newer version is out, select the yellow **New
 
 ### Uninstalling
 
-In the installer app, after step 1: **Uninstall the game from the Frame...** at the bottom of step 2, then **Uninstall**. It removes the game, its library entry and artwork; tick **Also delete its settings, scores and play statistics** to remove those too. The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted.
+In the installer app, after step 1: **Uninstall the game from the Frame...** at the bottom of step 2, then **Uninstall**. It removes the game, its library entry and artwork; tick **Also delete its settings, scores and play statistics** to remove those too. The tables and ROMs in `~/Documents/VPinballX/Tables` are never deleted. To keep everything for a new installation, make a [backup](#backup-and-restore) first.
 
 ### Troubleshooting
 
@@ -246,6 +250,45 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
 
+## Backup and restore
+
+A fresh installation of the Frame, or a new headset, starts with an empty library. Back up what you keep on the Frame to your computer, and restore it there later.
+
+### What a backup holds
+
+| Item | Content |
+| --- | --- |
+| Tables | The tables and the files along them: backglasses, music, PinUP Player packs |
+| Table images | The images shown by the table picker |
+| ROMs | PinMAME ROMs, with the colorizations and the sound packs of the games |
+| Machine saves | High scores and settings saved by the games (PinMAME nvram, VPReg) |
+| Library | Favorites, table names and play counts |
+| Settings | Settings of the application and of the tables, the lobby room |
+| Scores and players | Leaderboards and player profiles |
+| ROM aliases | The PinMAME alias file |
+
+### Making a backup
+
+1. In the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a computer on the same network.
+2. Open **Backup**, next to Files. Tick the items to save; each one shows its size. Keep **All tables**, or pick **Choose tables** to select them one by one (a table's ROM, saves and settings follow it).
+3. Select **Create backup**. The page checks the files, then the browser downloads `VPX-Backup-<date>.vpxbackup`.
+
+The backup is made while it downloads, so it takes no space on the Frame, even for tens of gigabytes. A broken download can be resumed from the browser's downloads list. The file is a zip. It is named `.vpxbackup` so that browsers do not extract it. Restore the file as it was downloaded: a zip made again from its content is refused.
+
+### Restoring a backup
+
+1. On the **Backup** page, under **Restore a backup**, select **Choose a backup...** and pick the `.vpxbackup` file. The browser reads it, without uploading it whole, and shows its items and tables.
+2. Tick what to bring back: all of it, some items, or only some tables.
+3. Select **Restore**, then confirm. Only the selected files are uploaded.
+
+What happens to what is already on the Frame:
+
+- **Files** (tables, images, ROMs, saves) replace the ones with the same name. Files already there with the same size and date are skipped, so an interrupted restore can simply be started again.
+- **Scores, players, favorites and table names** are merged with the Frame's. Tables are matched by their file, so scores find their table again after a reinstallation.
+- **Settings** apply when the next table or the lobby loads. The Frame's own settings are kept: folders, displays, audio, controllers, the position of the table in the room, and the Wi-Fi upload settings.
+
+The page refuses to back up or restore while a table is being played: close it first (the lobby is fine). Keep the headset awake during a backup or a restore, because it leaves the network when it sleeps. The game also asks the Frame not to sleep while a transfer runs. More details: [Steam Frame Branch](/docs/Steam%20Frame%20Branch.md), section 16.
+
 ## PinMAME ROM aliases
 
 A table that emulates a real machine asks PinMAME for its game by the name written in its script (`cGameName`). Some tables use a name that is not PinMAME's own: an older or shorter name (`simp` for `simp_a27`), or, for many mods, a name of their own (the Simpsons Treehouse of Horror mod asks for `simpprtyh`, which is the game `simpprty`). An **alias** tells PinMAME which game to run for that name. Without one, the table loads but does not play: PinMAME stops with "Game name not found". Original tables, which do not use PinMAME, never need an alias.
@@ -277,6 +320,106 @@ The file has one alias per line, `name,game`: `name` is what the table asks for,
 
 Over ssh, the file can also be edited directly, for example `ssh steamos@frame.local 'echo "simpprtyh,simpprty" >> Documents/VPinballX/Tables/pinmame/alias.txt'` (the file must end with a new line before you add one). More details: [PinMAME ROM aliases](/docs/PinMAME%20ROM%20Aliases.md).
 
+## How to patch a broken table?
+
+Some tables do not work on the Frame as they are, even with their ROM: they close as soon as they start, or a game can not be started. Often the cause is not the game: a bug in the table script that recent versions of Visual Pinball refuse, or a ROM that needs to be set up from its service menu before it gives credits. For the ones found so far, the game ships a **fix**: a recipe that says which tables or ROMs it applies to, what it changes and why. New fixes come with the updates of the game.
+
+The fixes shipped today:
+
+| Table or ROM | Without the fix | What the fix does |
+| --- | --- | --- |
+| VR ROOM Back to the Future (Data East 1990) | The table closes as soon as it starts, back to the lobby, as if it crashed | Removes a second `vpmInit me` from its script, which made the table stop itself |
+| Gottlieb System 3 games: Street Fighter II (`sfight2`), Stargate (`stargat5`), Super Mario Bros (`smb`), Super Mario Bros Mushroom World (`smbmush`) | Coins are accepted, but the display stays at CREDITS 0 | Loads the factory settings of the game from its service menu, as an operator would |
+
+The full record of each fix (the cause, the exact change, how it was checked) is in [Table and ROM Fixes](/docs/Table%20and%20ROM%20Fixes.md).
+
+### Tables you add
+
+Nothing to do: a table added to the library, from the browser or by copying it over ssh, gets the fixes it needs as soon as the game finds it. Its tile on the **Tables** page of the browser then shows a green **Patched** badge.
+
+### Tables already on the Frame
+
+The tables that were on the Frame before a fix was released are not changed by themselves: you choose when to patch them. A table that has a fix available shows it:
+
+- **In the headset**: open the table's page in the table picker. It shows **Patch table** (a wrench), and **Patched for compatibility: ...** once applied. Point at **Patch table** to read, in its tooltip, which fixes it applies and their state.
+- **In the browser** (turn **Wi-Fi upload** on under **Add tables from a browser** in the table picker, then open the address it shows): on the **Tables** page, the table's tile shows a purple **Fix available** badge, and its **...** menu has **Patch table**.
+
+To patch it:
+
+1. Select **Patch table**, in the headset or in the browser. A message says what was applied.
+2. Start the table (or restart it, if it was being played: a fix applies when the table starts).
+
+That's all for a script fix. For a ROM fix (the Gottlieb System 3 games), the next start does the rest:
+
+3. The table starts normally, then a notice says *"Patching this table for compatibility: its game loads its factory settings (one time only, about 40 seconds). Please don't press any button until the game restarts."* The game goes through its service menu by itself: the display shows its test and adjustment screens.
+4. Don't press anything until the notice says *"Table patched for compatibility: the game restarts"*. The flippers and Start are not passed to the game meanwhile, so a press by mistake does not change a setting.
+5. The game boots again, with its new settings: insert coins and play. If the table is closed before the end, the fix runs again at its next start.
+
+A ROM fix keeps a copy of the machine's previous save (high scores, settings) as `<rom>.nv.bak-<date>` in `~/Documents/VPinballX/Tables/pinmame/nvram/`. A ROM without any save yet (a game never played on the Frame) gets its fix by itself, at its first start.
+
+### Seeing every fix and its state
+
+In the browser, the file manager (**Files**) has **⋮ > Advanced > Table and ROM fixes**. It lists:
+
+- **Tables**: each table of the library that a fix applies to, with the state of each fix and a **Patch table** or **Re-patch table** button.
+- **Available fixes**: every fix shipped with the game (and your own, below), with its symptom, its cause, what it changes, the tables or ROMs it applies to, and a link to its full record.
+
+The state of a fix for a table:
+
+| State | Meaning |
+| --- | --- |
+| Available | The fix applies to this table and is not applied yet: use **Patch table** |
+| Applied | Applied, with the latest version of the fix |
+| Update available | A newer version of the fix came with an update of the game: use **Re-patch table** |
+| At the next start | A ROM fix waiting for the table to start |
+| Not needed | The table looks like one the fix is for, but its script does not have the bug: often a newer version of the table, fixed by its author. Nothing is changed |
+
+**Re-patch table** applies the fixes again. It is safe: a script fix is rebuilt from the table's original script, and a ROM fix loads the factory settings again (after keeping a copy of the save).
+
+### What a fix changes on the Frame
+
+- **A script fix** never changes the `.vpx` file. It writes the patched script next to the table as `<table name>.vbs`, a file that Visual Pinball always loads instead of the script inside the table. When the table came with its own `.vbs`, that one is kept as `<table name>.vbs.orig`, and the fix applies to it.
+- **A table replaced by a new version** (uploaded again) is checked again: the patched script made for the old version is removed, so it never replaces the new script, and the fix is applied again only if the new version still needs it.
+- **What was applied** is kept in `table-fixes.json`, in the game's settings folder (`~/.local/share/VPinballX/10.8/` on the Frame).
+- **The log** (`~/.local/share/VPinballX/10.8/vpinball.log`) has a line for everything the fixes do, starting with `[Fixes]` or `ROM fix`.
+
+To undo a script fix, delete the table's `.vbs` over ssh or in the file manager, and rename `.vbs.orig` back to `.vbs` if there is one. To undo a ROM fix, close the table and rename the `.nv.bak-<date>` file back to `<rom>.nv`.
+
+### A table that is still broken
+
+1. **Check the usual causes first**: a missing ROM (the game says so when the table starts, and the **ROMs** tab of the file manager lists the missing ones), or a game PinMAME does not know (an **Unknown game** badge, see [PinMAME ROM aliases](#pinmame-rom-aliases)).
+2. **Read the end of the log** after the table failed: `ssh steamos@frame.local tail -200 .local/share/VPinballX/10.8/vpinball.log`, or the **Log Stream** of the file manager. A table that "crashes" at start is often a script that stops itself: look for a `MsgBox prompt=` line or a script error just before `Closing player`. The message a table shows on a computer only goes to the log on the Frame.
+3. **Report it**, with the name and version of the table, where it comes from, and the end of the log: a fix found for one table is shipped to everyone with the next update.
+
+### Writing your own fix
+
+Fixes can also be added on your Frame, without waiting for an update: write them in `fixes.json` in the game's settings folder (`~/.local/share/VPinballX/10.8/fixes.json` on the Frame), then restart the game. A script fix replaces a text of the table script with another one:
+
+```json
+{
+  "recipes": [
+    {
+      "id": "my-table-double-init",
+      "version": 1,
+      "title": "My table: vpmInit called twice",
+      "symptom": "The table closes as soon as it starts",
+      "cause": "Its init calls vpmInit twice, which core.vbs refuses",
+      "change": "The second call is commented out",
+      "match": { "files": ["my table"] },
+      "script": [ { "find": "\tBackdrop_Init\n\n\tvpmInit me\n", "replace": "\tBackdrop_Init\n\n\t' vpmInit me\n" } ]
+    }
+  ],
+  "disable": []
+}
+```
+
+- `match.files`: a part of the table's file name, ignoring case (or `match.roms`, the PinMAME ROM names).
+- `find` must be found exactly once in the script (or `count` times), otherwise nothing is changed and the fix shows as **Not needed**. Write line ends as `\n` and tabs as `\t`: they match the script whatever its line ends. To get the script of a table, run the table once on a computer with Visual Pinball (`-ExtractVBS <table.vpx>` writes it next to the table).
+- A fix with the `id` of a shipped one replaces it, and `"disable": ["gts3-zero-settings"]` turns a shipped fix off.
+- The file is saved by the **Backup** page, with the settings.
+
+Your fixes show in **⋮ > Advanced > Table and ROM fixes**, marked **local**, and apply like the shipped ones: by themselves to the tables you add, with **Patch table** to the others. The format, including ROM fixes, is described in [Table and ROM Fixes](/docs/Table%20and%20ROM%20Fixes.md#how-it-works). A fix that works for you is worth sharing, so that it ships with the game.
+
 ## Controllers
 
 The Steam Frame controllers work out of the box. Each button has a default role, shown below; the roles can be changed in the menu, under **Input Settings**.
@@ -300,6 +443,17 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 | B | Right | Insert a coin | Settings pages: undo the changes |
 | X, Y | Right | Not used: free to map to another action | |
 | Steam button | Left / right | Kept by SteamOS, not used by the game | |
+
+## Candidates for merge upstream
+
+Changes of the fork that are not specific to the Steam Frame and could be proposed to the upstream projects. Each document describes the change, how it was checked, and what a pull request could take.
+
+- **Spatial audio crackle when turning the head** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Spatial%20Audio%20Crackle%20When%20Turning%20the%20Head.md)): a fix to the soundfield rotator of libspatialaudio, which skipped the fade of the coefficients that start at zero, so that the sound crackled in VR when the head turned on heavy tables. It would go to libspatialaudio first, then to Visual Pinball as a version bump (section 7).
+- **Culling parts outside the view** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Culling%20Parts%20Outside%20the%20View.md)): primitives entirely outside the view are no longer drawn, with every renderer and in every view and stereo mode. The commit applies to upstream `master` unchanged; section 7 has a draft of the pull request.
+- **Specular anti-aliasing** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)): the material shader widens the glossy highlights by the variation of the normal inside the pixel, which stops the chrome parts from sparkling, at a negligible cost, on every platform (section 6). Section 8 describes dynamic resolution, which suits any VR headset.
+- **PinUP Player plugin fixes** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinUP%20Player%20on%20the%20Steam%20Frame.md)): five fixes to upstream's PUP plugin, listed in section 9: the root folder the scripts add the pack to, label images relative to the pack, hardware video decoding with a software fallback, recovery from a blocked hardware decoder, and backgrounds that replace a looping media.
+- **PinMAME memory maps on 4-bit memory** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinMAME%20Memory%20Maps%20on%204-bit%20Memory.md)): libpinmame applies the mask of a memory map field to the whole byte, where the format takes the nibble of a 4-bit memory first, so the game over lamps of the Bally AS-2518-17/-35 and Stern MPU-100 maps (43 maps, 169 ROMs) read "in game" forever and their games never end. A change of a few lines in libpinmame, checked against the format's reference parser and in VPX with Evel Knievel; the document has a draft of the pull request. Until it is merged, the fork carries the change as a patch of libpinmame (`steamframe/patches/pinmame/`).
+- **Eye-tracked foveated rendering** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Foveated%20Rendering%20on%20the%20Steam%20Frame.md)): the bgfx patch works with any Vulkan driver that has fragment density maps, and the OpenXR part with any runtime that has the Meta foveation extensions (Quest). It would go to bgfx first; until then it stays in the Linux ARM64 build (section 9).
 
 ## More details
 

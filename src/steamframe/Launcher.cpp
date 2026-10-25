@@ -4,6 +4,7 @@
 #include "Launcher.h"
 
 #include "core/editablereg.h"
+#include "steamframe/Backup.h"
 #include "steamframe/CabinetDisplays.h"
 #include "steamframe/PupPacks.h"
 #include "core/VPApp.h"
@@ -641,6 +642,7 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
 
 void Launcher::OnBeforeLoadTable()
 {
+   Backup::ApplyPendingSettings(); // Restored from the browser, before the folders below are defined again
    SetupSharedPinMAMEFolder();
    SetupSharedPupFolder();
 }

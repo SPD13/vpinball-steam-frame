@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Pinball Backup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-container">
+        <div class="logo-title">
+          <img src="/assets/vpinball.png" alt="Visual Pinball Logo">
+          <h1>Visual Pinball Backup</h1>
+        </div>
+        <div id="version-info" class="version-info"></div>
+      </div>
+      <nav class="page-nav">
+        <a href="/" class="page-nav-item">Tables</a>
+        <a href="scores.html" class="page-nav-item">Scores</a>
+        <a href="vpx.html" class="page-nav-item">Files</a>
+        <a href="backup.html" class="page-nav-item current">Backup</a>
+      </nav>
+    </header>
+
+    <main class="main-container backup-page">
+      <div id="backup-playing" class="backup-warning" hidden>A table is being played: close it in the headset to make a backup or restore one.</div>
+      <div class="tables-scroll backup-columns">
+        <section class="backup-card" aria-labelledby="backup-title">
+          <h2 id="backup-title">Create a backup</h2>
+          <p class="backup-hint">Download what you keep on the device to your computer, to bring it back after a new installation or onto another device.</p>
+          <div id="backup-selector" class="backup-selector"></div>
+          <div class="backup-footer">
+            <span id="backup-total" class="backup-total"></span>
+            <button type="button" id="backup-start" class="btn btn-primary">Create backup</button>
+          </div>
+          <div id="backup-progress" class="backup-progress" hidden>
+            <div class="backup-progress-label"><span id="backup-progress-text"></span><button type="button" id="backup-cancel" class="btn btn-secondary backup-progress-cancel">Cancel</button></div>
+            <div class="backup-progress-bar"><div id="backup-progress-fill" class="backup-progress-fill"></div></div>
+          </div>
+          <p id="backup-message" class="backup-message" hidden></p>
+          <details id="backup-skipped" class="backup-skipped" hidden>
+            <summary id="backup-skipped-summary"></summary>
+            <ul id="backup-skipped-list"></ul>
+          </details>
+        </section>
+
+        <section class="backup-card" aria-labelledby="restore-title">
+          <h2 id="restore-title">Restore a backup</h2>
+          <p class="backup-hint">Choose a backup made from this page (<code>.vpxbackup</code>), then what to bring back. Files already on the device with the same size and date are skipped, so an interrupted restore can be started again.</p>
+          <label class="btn btn-secondary backup-file-button">
+            <input type="file" id="restore-file" accept=".vpxbackup,.zip" hidden>
+            Choose a backup...
+          </label>
+          <div id="restore-details" hidden>
+            <p id="restore-summary" class="tables-dialog-path restore-summary"></p>
+            <div id="restore-selector" class="backup-selector"></div>
+            <div class="backup-footer">
+              <span id="restore-total" class="backup-total"></span>
+              <button type="button" id="restore-start" class="btn btn-primary">Restore</button>
+            </div>
+          </div>
+          <div id="restore-progress" class="backup-progress" hidden>
+            <div class="backup-progress-label"><span id="restore-progress-text"></span><button type="button" id="restore-cancel" class="btn btn-secondary backup-progress-cancel">Stop</button></div>
+            <div class="backup-progress-bar"><div id="restore-progress-fill" class="backup-progress-fill"></div></div>
+          </div>
+          <p id="restore-message" class="backup-message" hidden></p>
+          <ul id="restore-report" class="restore-report" hidden></ul>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="restore-confirm-dialog" class="tables-dialog">
+    <form id="restore-confirm-form" method="dialog">
+      <h2>Restore this backup?</h2>
+      <ul id="restore-confirm-list" class="restore-confirm-list"></ul>
+      <p class="tables-dialog-hint">Files of the device with the same name are replaced by the ones of the backup. Scores, players, favorites and table names are merged with the ones of the device. The settings of the device itself (displays, audio, controllers, folders) are kept.</p>
+      <p class="tables-dialog-hint">Keep the headset awake until the restore is over: it leaves the network when it sleeps.</p>
+      <div class="tables-dialog-actions">
+        <button type="button" id="restore-confirm-cancel" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-danger">Restore</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="backup.js"></script>
+</body>
+</html>
