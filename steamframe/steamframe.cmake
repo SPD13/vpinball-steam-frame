@@ -18,6 +18,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/PupPackOptions.cpp
    src/steamframe/PupPacks.h
    src/steamframe/PupPacks.cpp
+   src/steamframe/RomAliases.h
+   src/steamframe/RomAliases.cpp
    src/steamframe/ScoresPage.h
    src/steamframe/ScoresPage.cpp
    src/steamframe/ScoreStore.h
