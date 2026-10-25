@@ -80,7 +80,7 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       config.readPupUse = [](const std::filesystem::path& tablePath)
       {
          const PupPacks::TableUse use = PupPacks::GetTableUse(PupPacks::ReadTableScript(tablePath));
-         return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names, use.rom };
+         return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names, use.rom, use.games };
       };
       // Where ROMs found in uploads go: the ROM folder of PinMAME, as SetupSharedPinMAMEFolder chooses it (the user's PinMAME folder, the
       // one of the home folder, or the shared one of the tables)
@@ -89,6 +89,10 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
          config.romsPath = std::filesystem::path(home) / ".pinmame" / "roms";
       else
          config.romsPath = (pinmameFolder.empty() ? config.tablesPath / "pinmame" : std::filesystem::path(pinmameFolder)) / "roms";
+      // The game names PinMAME knows, to give an alias to the games of mods (see RomAliases.h), and VPinMAME's built-in aliases, which
+      // libpinmame only knows from its alias file
+      config.pinmameCatalogPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Plugins, std::filesystem::path("pinmame") / "gamedefs" / "catalog" / "pinmame.json");
+      config.defaultAliasesPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, std::filesystem::path("pinmame") / "VPMAlias.txt");
 #ifdef VPX_TABLE_WEBSERVER
       config.zip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Zip(source, dest, callback); };
       config.unzip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Extract(source, dest, callback); };

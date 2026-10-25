@@ -651,6 +651,137 @@ function clearMissingRoms() {
     .catch((error) => console.error('Error clearing missing ROMs:', error));
 }
 
+// PinMAME ROM aliases (Advanced menu of the main actions): the alias file of PinMAME, saved by the application only when PinMAME can read
+// all its lines (see RomAliases::Normalize), and the tables asking for a game that PinMAME does not know
+function toggleAdvancedMenu() {
+  const menu = DOMCache.get('advanced-menu');
+  menu.hidden = !menu.hidden;
+  DOMCache.get('advanced-menu-item').setAttribute('aria-expanded', String(!menu.hidden));
+}
+
+let _aliasesSaved = '';
+
+function renderAliases(data, replaceText) {
+  DOMCache.get('aliases-path').textContent = data.path || 'The PinMAME folder is not defined';
+  const text = DOMCache.get('aliases-text');
+  if (replaceText) {
+    text.value = data.content || '';
+    _aliasesSaved = text.value;
+  }
+  const unknownGames = data.unknownGames || [];
+  const list = DOMCache.get('aliases-unknown-list');
+  list.innerHTML = '';
+  for (const unknown of unknownGames) {
+    const item = document.createElement('li');
+    const rom = document.createElement('span');
+    rom.className = 'missing-rom-name';
+    rom.textContent = unknown.rom;
+    item.appendChild(rom);
+    item.appendChild(document.createTextNode(` for ${unknown.table} `));
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-secondary aliases-add';
+    add.textContent = 'Add a line';
+    add.onclick = () => addAliasLine(unknown.rom);
+    item.appendChild(add);
+    list.appendChild(item);
+  }
+  DOMCache.get('aliases-unknown').hidden = unknownGames.length === 0;
+}
+
+// A line 'rom,' at the end of the file, with the cursor after the comma for the user to type the game
+function addAliasLine(rom) {
+  const text = DOMCache.get('aliases-text');
+  if (text.value.length > 0 && !text.value.endsWith('\n'))
+    text.value += '\n';
+  text.value += `${rom},`;
+  text.focus();
+  text.setSelectionRange(text.value.length, text.value.length);
+  text.scrollTop = text.scrollHeight;
+}
+
+// Select a line of the text area (numbered from 1), for the issues of the last save
+function selectAliasLine(number) {
+  const text = DOMCache.get('aliases-text');
+  const lines = text.value.split('\n');
+  let start = 0;
+  for (let i = 0; i < number - 1 && i < lines.length; i++)
+    start += lines[i].length + 1;
+  const end = start + (lines[number - 1] || '').length;
+  text.focus();
+  text.setSelectionRange(start, end);
+  // Bring the line into view: the text area has no API for it, a line is about its line height
+  const lineHeight = parseFloat(getComputedStyle(text).lineHeight) || 18;
+  text.scrollTop = Math.max(0, (number - 3) * lineHeight);
+}
+
+function renderAliasIssues(errors, warnings) {
+  const list = DOMCache.get('aliases-issues');
+  list.innerHTML = '';
+  const issues = [...errors.map(issue => ({ ...issue, type: 'error' })), ...warnings.map(issue => ({ ...issue, type: 'warning' }))];
+  issues.sort((a, b) => a.line - b.line);
+  for (const issue of issues) {
+    const item = document.createElement('li');
+    item.className = `aliases-issue ${issue.type}`;
+    const link = document.createElement('a');
+    link.href = '#';
+    link.textContent = `Line ${issue.line}`;
+    link.onclick = (event) => {
+      event.preventDefault();
+      selectAliasLine(issue.line);
+    };
+    item.appendChild(link);
+    item.appendChild(document.createTextNode(`: ${issue.message}`));
+    list.appendChild(item);
+  }
+}
+
+function openAliasesDialog() {
+  renderAliasIssues([], []);
+  DOMCache.get('aliases-status').textContent = '';
+  fetch('pinmame-aliases')
+    .then((response) => response.json())
+    .then((data) => {
+      renderAliases(data, true);
+      const dialog = DOMCache.get('aliases-dialog');
+      if (!dialog.open)
+        dialog.showModal();
+    })
+    .catch((error) => showStatusMessage('main-status', `Failed to read the PinMAME aliases: ${error.message}`, 'error'));
+}
+
+function saveAliases() {
+  fetch('pinmame-aliases', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: DOMCache.get('aliases-text').value })
+    .then((response) => response.json())
+    .then((data) => {
+      renderAliasIssues(data.errors || [], data.warnings || []);
+      if (data.saved) {
+        renderAliases(data, true);
+        const warnings = (data.warnings || []).length;
+        showStatusMessage('aliases-status', warnings ? `Saved, with ${warnings} warning(s)` : 'Saved', 'success');
+      } else {
+        renderAliases(data, false);
+        showStatusMessage('aliases-status', data.error || 'Not saved: PinMAME can not read the lines listed below', 'error', true);
+      }
+    })
+    .catch((error) => showStatusMessage('aliases-status', `Failed to save: ${error.message}`, 'error', true));
+}
+
+function closeAliasesDialog() {
+  if (DOMCache.get('aliases-text').value !== _aliasesSaved && !confirm('Discard the changes to the aliases?'))
+    return;
+  DOMCache.get('aliases-dialog').close();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const dialog = DOMCache.get('aliases-dialog');
+  if (dialog) // Escape closes the dialog: keep it open if the user wants the changes
+    dialog.addEventListener('cancel', (event) => {
+      if (DOMCache.get('aliases-text').value !== _aliasesSaved && !confirm('Discard the changes to the aliases?'))
+        event.preventDefault();
+    });
+});
+
 function fetchFiles(directory) {
   const filesPromise = fetch(`files?q=${encodeURIComponent(directory)}`)
     .then((response) => response.json());

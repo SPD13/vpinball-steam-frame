@@ -15,8 +15,28 @@ namespace PupPacks
 namespace
 {
 
+// Whether the position is in a comment: after a quote (') which is not inside a string, or on a line starting with 'Rem'
+bool IsCommented(const string& script, size_t pos)
+{
+   const size_t lineStart = script.rfind('\n', pos) == string::npos ? 0 : script.rfind('\n', pos) + 1;
+   size_t i = lineStart;
+   while (i < pos && (script[i] == ' ' || script[i] == '\t'))
+      i++;
+   if (pos - i >= 4 && lowerCase(script.substr(i, 4)) == "rem ")
+      return true;
+   bool inString = false;
+   for (; i < pos; i++)
+   {
+      if (script[i] == '"')
+         inString = !inString;
+      else if (script[i] == '\'' && !inString)
+         return true;
+   }
+   return false;
+}
+
 // The quoted string after 'key' on its line: 'key = "value"' for assignments, 'key x, "value"' for calls taking the name second
-void FindQuotedValues(const string& script, const string& lowerScript, const string& lowerKey, bool afterComma, vector<string>& values)
+void FindQuotedValues(const string& script, const string& lowerScript, const string& lowerKey, bool afterComma, vector<string>& values, vector<bool>* commented = nullptr)
 {
    for (size_t pos = lowerScript.find(lowerKey); pos != string::npos; pos = lowerScript.find(lowerKey, pos + 1))
    {
@@ -45,6 +65,29 @@ void FindQuotedValues(const string& script, const string& lowerScript, const str
          continue;
       string value = script.substr(i + 1, end - i - 1);
       if (std::find(values.begin(), values.end(), value) == values.end())
+      {
+         values.push_back(std::move(value));
+         if (commented)
+            commented->push_back(IsCommented(script, pos));
+      }
+   }
+}
+
+// The strings given to the calls 'lowerCall("value")', like Controller.Games("name")
+void FindCallValues(const string& script, const string& lowerScript, const string& lowerCall, vector<string>& values)
+{
+   for (size_t pos = lowerScript.find(lowerCall); pos != string::npos; pos = lowerScript.find(lowerCall, pos + 1))
+   {
+      size_t i = pos + lowerCall.size();
+      while (i < script.size() && (script[i] == ' ' || script[i] == '\t'))
+         i++;
+      if (i >= script.size() || script[i] != '"')
+         continue;
+      const size_t end = script.find('"', i + 1);
+      if (end == string::npos || end == i + 1 || script.find('\n', i) < end)
+         continue;
+      string value = script.substr(i + 1, end - i - 1);
+      if (std::find(values.begin(), values.end(), value) == values.end())
          values.push_back(std::move(value));
    }
 }
@@ -59,12 +102,22 @@ TableUse GetTableUse(const string& script)
    FindQuotedValues(script, lowerScript, "puplayer.init"s, true, use.names);
    FindQuotedValues(script, lowerScript, "cpuppack"s, false, use.names);
    std::vector<string> roms;
-   FindQuotedValues(script, lowerScript, "cgamename"s, false, roms);
+   std::vector<bool> commented;
+   FindQuotedValues(script, lowerScript, "cgamename"s, false, roms, &commented);
    for (const string& rom : roms)
       if (std::find(use.names.begin(), use.names.end(), rom) == use.names.end())
          use.names.push_back(rom);
-   if (!roms.empty())
-      use.rom = roms.front();
+   // The ROM is the first name which is not commented out ('Const cGameName = "..." lines of other versions are often kept as comments),
+   // for the tables starting PinMAME only: original tables name themselves with cGameName too, for their PuP pack or their backglass
+   const bool usesPinMame = lowerScript.find("loadvpm") != string::npos || lowerScript.find("vpinmame.controller") != string::npos
+      || lowerScript.find("loadcontroller(\"vpm\"") != string::npos;
+   const auto active = std::find(commented.begin(), commented.end(), false);
+   if (usesPinMame && !roms.empty())
+      use.rom = active != commented.end() ? roms[active - commented.begin()] : roms.front();
+   FindCallValues(script, lowerScript, ".games("s, use.games);
+   for (const string& rom : roms)
+      if (rom != use.rom && std::find(use.games.begin(), use.games.end(), rom) == use.games.end())
+         use.games.push_back(rom);
    return use;
 }
 

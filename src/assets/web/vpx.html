@@ -132,6 +132,33 @@
                 </span>
                 Log Stream
               </a>
+              <!-- Rarely needed settings, folded under one item -->
+              <a href="#" id="advanced-menu-item" class="dropdown-fold" aria-expanded="false" aria-controls="advanced-menu" onclick="event.preventDefault(); toggleAdvancedMenu(); return false;">
+                <span class="dropdown-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="21" x2="4" y2="14"></line>
+                    <line x1="4" y1="10" x2="4" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12" y2="3"></line>
+                    <line x1="20" y1="21" x2="20" y2="16"></line>
+                    <line x1="20" y1="12" x2="20" y2="3"></line>
+                    <line x1="1" y1="14" x2="7" y2="14"></line>
+                    <line x1="9" y1="8" x2="15" y2="8"></line>
+                    <line x1="17" y1="16" x2="23" y2="16"></line>
+                  </svg>
+                </span>
+                Advanced
+                <span class="dropdown-fold-chevron" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </span>
+              </a>
+              <div id="advanced-menu" class="dropdown-fold-content" hidden>
+                <a href="#" onclick="event.preventDefault(); openAliasesDialog(); hideMainActionsDropdown(); return false;">
+                  PinMAME ROM aliases
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -403,6 +430,28 @@
       </div>
     </div>
   </div>
+
+  <!-- The alias file of PinMAME (Advanced menu), checked by the application before it is saved -->
+  <dialog id="aliases-dialog" class="tables-dialog aliases-dialog">
+    <h2>PinMAME ROM aliases</h2>
+    <p class="tables-dialog-hint">
+      Some tables ask PinMAME for their game under another name, often a mod ('simpprtyh' for the game 'simpprty'). Each line maps a name
+      to a PinMAME game, as <code>alias,game</code>, and <code>#</code> starts a comment. The application adds the aliases it finds in the
+      files of the tables (readme, script, ROM). An alias saved here applies the next time the table starts.
+    </p>
+    <p id="aliases-path" class="tables-dialog-path"></p>
+    <div id="aliases-unknown" class="aliases-unknown" hidden>
+      <div class="aliases-unknown-title">Tables asking for a game that PinMAME does not know</div>
+      <ul id="aliases-unknown-list" class="aliases-unknown-list"></ul>
+    </div>
+    <textarea id="aliases-text" class="aliases-text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Content of the alias file"></textarea>
+    <ul id="aliases-issues" class="aliases-issues"></ul>
+    <div class="tables-dialog-actions">
+      <span id="aliases-status" class="status-message tables-dialog-left"></span>
+      <button type="button" class="btn btn-secondary" onclick="closeAliasesDialog()">Close</button>
+      <button type="button" class="btn btn-primary" onclick="saveAliases()">Save</button>
+    </div>
+  </dialog>
 
   <div id="upload-banner" class="upload-banner" hidden>
     <div id="upload-banner-text" class="upload-banner-text"></div>
