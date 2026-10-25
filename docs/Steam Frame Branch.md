@@ -17,6 +17,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Table picker** in the in-game menu ("Tables"), which is also the start screen in launcher mode: choose and switch tables without leaving the player (section 3).
 - **Lists of tables** as tabs: All, Recent, Newly added, Most played, Favorites, plus a MENU tab for the library and application options. The tabs are large buttons, easy to hit with a mouse or a VR pointer.
 - **Thumbnails**: a grid of table images, loaded in the background with a spinner on each tile meanwhile; a list view is also available. A table without an image gets a screenshot when it is closed, and "Replace table image" takes a new one (sections 4 and 8).
+- **Custom thumbnails**: give any table the picture you want in the table picker, such as the wheel image of a front-end setup, its backglass, a flyer or your own artwork. In the Tables page of the browser, "..." > **Upload thumbnail** on the table picks an image file on your computer; it is resized for the picker and replaces the table's image in the headset at once (section 5).
 - **Favorites**: a star on each thumbnail, or "Add to favorites" in the table's page; the Favorites tab lists them.
 - **One list** of all the tables, without pages: only the tables on screen are drawn and only their images are loaded, so libraries of thousands of tables stay fast.
 - **Search** as you type (a virtual keyboard in VR), a letter filter and A–Z / Z–A sort in the All tab, and play statistics (added, last played, times played) for the hovered table.
