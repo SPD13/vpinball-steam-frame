@@ -9,6 +9,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace fs = std::filesystem;
 using std::string;
@@ -387,30 +388,40 @@ fs::path ScreensFileOf(const fs::path& pack, const vector<Step>& steps)
    return screens;
 }
 
-// How many displays of the VR cabinet a layout shows its screens on: the topper (0), the DMD (1, or 5, the full DMD, which share the DMD
-// surface) and the backglass (2). A screen is on the display its CustomPos is relative to, otherwise on its own number, and is not
-// counted when it is off. "BG Topper FullDMD Separate" uses 3, "DMD on BG" 1.
-int CabinetDisplayCount(const fs::path& screensFile)
+// The screen a screen is finally drawn in: the end of its chain of CustomPos parents (bounded, as a pack may loop them)
+int RootScreen(const vector<Screen>& screens, int number)
 {
-   std::ifstream file(screensFile, std::ios::binary);
-   std::set<int> displays;
-   string line;
-   while (std::getline(file, line))
+   for (int depth = 0; depth < 16; depth++)
    {
-      const vector<string> fields = SplitCsv(Trim(line));
-      if (fields.size() < 6 || !std::isdigit(static_cast<unsigned char>(Trim(fields[0]).c_str()[0]))) // The header, and broken lines
+      const auto it = std::find_if(screens.begin(), screens.end(), [number](const Screen& s) { return s.number == number; });
+      if (it == screens.end() || it->parent < 0)
+         break;
+      number = it->parent;
+   }
+   return number;
+}
+
+// How a layout suits the displays of the VR cabinet: the topper (0), the DMD (1, or 5, the full DMD, which share the DMD surface) and
+// the backglass (2). A screen is on the display of the screen its CustomPos is relative to, otherwise on its own number, and is not
+// counted when it is off. First, how many displays it uses ("BG Topper FullDMD Separate" 3, "DMD on BG" 1), then how many of them are
+// the topper and the backglass: the cabinet's DMD surface stands in front of the table's DMD, so a layout playing its backglass videos
+// on the full DMD screen ("3screen - FullDMD" of The Matrix) suits it less than one playing them on the backglass and its topper videos
+// on the topper ("4screen - Topper DMD Separate"), although both use two displays.
+std::pair<int, int> CabinetDisplayScore(const fs::path& screensFile)
+{
+   const vector<Screen> screens = ReadScreens(screensFile);
+   std::set<int> displays;
+   for (const Screen& screen : screens)
+   {
+      if (!screen.visible)
          continue;
-      const string active = Lower(Trim(fields[5]));
-      if (active == "off" || active == "musiconly")
-         continue;
-      const string customPos = fields.size() > 7 ? Trim(fields[7]) : string();
-      int display = std::atoi((customPos.empty() ? Trim(fields[0]) : customPos).c_str());
+      int display = RootScreen(screens, screen.number);
       if (display == 5)
          display = 1;
       if (display >= 0 && display <= 2)
          displays.insert(display);
    }
-   return static_cast<int>(displays.size());
+   return { static_cast<int>(displays.size()), static_cast<int>(displays.count(0) + displays.count(2)) };
 }
 
 }
@@ -444,6 +455,60 @@ vector<fs::path> PackSources(const fs::path& folder)
    return sources;
 }
 
+vector<Screen> ReadScreens(const fs::path& screensFile)
+{
+   vector<Screen> screens;
+   std::ifstream file(screensFile, std::ios::binary);
+   string line;
+   while (std::getline(file, line))
+   {
+      // ScreenNum,ScreenDes,PlayList,PlayFile,Loopit,Active,Priority,CustomPos
+      const vector<string> fields = SplitCsv(Trim(line));
+      if (fields.size() < 6 || !std::isdigit(static_cast<unsigned char>(Trim(fields[0]).c_str()[0]))) // The header, and broken lines
+         continue;
+      Screen screen;
+      screen.number = std::atoi(Trim(fields[0]).c_str());
+      const string mode = Lower(Trim(fields[5]));
+      screen.visible = mode == "show" || mode == "forceon" || mode == "forcepop" || mode == "forceback" || mode == "forcepopback";
+      const string customPos = fields.size() > 7 ? Trim(fields[7]) : string();
+      if (!customPos.empty() && std::isdigit(static_cast<unsigned char>(customPos[0])) && std::atoi(customPos.c_str()) != screen.number)
+         screen.parent = std::atoi(customPos.c_str());
+      std::erase_if(screens, [&screen](const Screen& s) { return s.number == screen.number; });
+      screens.push_back(screen);
+   }
+   // Parents named by a CustomPos and not defined: created by the plugin, visible except the playfield (3) and the music (4) screens
+   for (size_t i = 0; i < screens.size(); i++)
+      if (const int parent = screens[i].parent; parent >= 0 && std::none_of(screens.begin(), screens.end(), [parent](const Screen& s) { return s.number == parent; }))
+         screens.push_back({ parent, parent != 3 && parent != 4, -1 });
+   return screens;
+}
+
+bool DrawsFullDMD(const vector<Screen>& screens)
+{
+   const auto fullDMD = std::find_if(screens.begin(), screens.end(), [](const Screen& s) { return s.number == 5; });
+   if (fullDMD == screens.end())
+      return false;
+   // A screen 5 drawn inside another screen is only a canvas when screens are positioned on it (see isUsableRoot in PUPManager::Render)
+   const bool hasChildren = std::any_of(screens.begin(), screens.end(), [](const Screen& s) { return s.parent == 5; });
+   if (fullDMD->parent >= 0 && !hasChildren)
+      return false;
+   // Something visible in its tree: itself, or a screen positioned on it, directly or through other screens
+   return std::any_of(screens.begin(), screens.end(), [&screens](const Screen& s)
+   {
+      if (!s.visible)
+         return false;
+      int number = s.number;
+      for (int depth = 0; depth < 16 && number >= 0; depth++)
+      {
+         if (number == 5)
+            return true;
+         const auto it = std::find_if(screens.begin(), screens.end(), [number](const Screen& p) { return p.number == number; });
+         number = it != screens.end() ? it->parent : -1;
+      }
+      return false;
+   });
+}
+
 vector<Option> List(const fs::path& packFolder)
 {
    vector<Option> options;
@@ -463,13 +528,13 @@ vector<Option> List(const fs::path& packFolder)
    }
    std::sort(options.begin(), options.end(), [](const Option& a, const Option& b) { return Lower(a.name) < Lower(b.name); });
    // Without a VR layout, the one that best suits the VR cabinet: first the one showing its screens on the most displays of the cabinet,
-   // then by its name ("BG Topper Separate" among "DMD and Topper on BG", "DMD on BG No Topper"...). A pack with .pup files of its own
-   // already plays: it is only changed for a single best layout made for a cabinet. A pack without, whose .pup files are in its option
-   // folders only, plays nothing until a layout is applied: it gets the first of the best ones.
+   // then on its topper and backglass, then by its name ("BG Topper Separate" among "DMD and Topper on BG", "DMD on BG No Topper"...). A
+   // pack with .pup files of its own already plays: it is only changed for a single best layout made for a cabinet. A pack without,
+   // whose .pup files are in its option folders only, plays nothing until a layout is applied: it gets the first of the best ones.
    if (std::none_of(options.begin(), options.end(), [](const Option& o) { return o.recommended; }))
    {
       Option* best = nullptr;
-      std::pair<int, int> bestScore;
+      std::tuple<int, int, int> bestScore;
       int bestCount = 0;
       for (Option& option : options)
       {
@@ -477,7 +542,8 @@ vector<Option> List(const fs::path& packFolder)
          const std::optional<vector<Step>> steps = option.supported ? Parse(option.script, reason) : std::nullopt;
          if (!steps)
             continue;
-         const std::pair<int, int> score { CabinetDisplayCount(ScreensFileOf(packFolder, *steps)), CabinetScore(Lower(option.name)) };
+         const auto [displays, topperAndBackglass] = CabinetDisplayScore(ScreensFileOf(packFolder, *steps));
+         const std::tuple<int, int, int> score { displays, topperAndBackglass, CabinetScore(Lower(option.name)) };
          if (!best || score > bestScore)
          {
             best = &option;
@@ -487,7 +553,7 @@ vector<Option> List(const fs::path& packFolder)
          else if (score == bestScore)
             bestCount++;
       }
-      if (best && (!HasPupFiles(packFolder) || (bestCount == 1 && (bestScore.first >= 2 || bestScore.second > 0))))
+      if (best && (!HasPupFiles(packFolder) || (bestCount == 1 && (std::get<0>(bestScore) >= 2 || std::get<2>(bestScore) > 0))))
          best->recommended = true;
    }
    return options;
