@@ -805,6 +805,52 @@ TEST_CASE("PupPackOptions: without a VR layout, the layout using the most displa
    }
 }
 
+TEST_CASE("PupPackOptions: between layouts using as many displays, the one using the topper and the backglass is chosen")
+{
+   // The Matrix pack, uploaded with its "3screen - FullDMD" layout at its root: its videos on a screen 5 that is off ('Music2'), and the
+   // "4screen - Topper DMD Separate" layout, with its videos on the backglass and on the topper. Both use two displays of the cabinet.
+   const string header = "ScreenNum,ScreenDes,PlayList,PlayFile,Loopit,Active,Priority,CustomPos\r\n";
+   const string fullDMD = header + "0,Topper,,,0,off,,\r\n1,DMD,,,0,off,,\r\n2,\"Backglass Underlay\",,,0,ForceBack,,\r\n"
+      "11,\"Backglass Videos\",,,0,ForceBack,,\"5, 16.6, 5.1, 66.7, 66.8\"\r\n12,\"BG Overlay\",,,0,ForceOn,,\"5,0,0,100,100\"\r\n"
+      "13,\"Topper Videos\",,,0,ForcePop,,\"5, 54.8, 77.2, 28.5, 16.1\"\r\n5,Music2,,,0,off,,\r\n";
+   const string separate = header + "0,Topper,,,0,ForcePop,,\r\n1,DMD,,,0,off,,\r\n2,\"Backglass Underlay\",,,0,ForceBack,,\r\n"
+      "11,\"Backglass Videos\",,,0,ForceBack,,\"2, 17.0, 13.5, 66.8, 66.7\"\r\n12,\"BG Overlay\",,,0,ForceOn,,\"2,0,0,100,100\"\r\n"
+      "13,\"Topper Videos\",,,0,off,,\"2, 31.4, 79.9, 37.2, 15.6\"\r\n5,Music2,,,0,off,,\r\n";
+   Fixture f;
+   const fs::path pack = f.root / "TheMatrix";
+   Fixture::Touch(pack / "screens.pup", fullDMD);
+   Fixture::Touch(pack / "PuP-Pack_Options" / "3screen - FullDMD" / "screens.pup", fullDMD);
+   Fixture::Touch(pack / "PuP-Pack_Options" / "4screen - Topper DMD Separate" / "screens.pup", separate);
+   Fixture::Touch(pack / "3 Screen - FullDMD.bat", "rem echo off\r\nxcopy /y \"PuP-Pack_Options\\3screen - FullDMD\\*.pup\"\r\ndel pupinit.bat\r\necho 2 > ScreenType.txt");
+   Fixture::Touch(pack / "4 Screen - Topper DMD Separate.bat", "rem echo off\r\nxcopy /y \"PuP-Pack_Options\\4screen - Topper DMD Separate\\*.pup\"\r\ndel pupinit.bat\r\necho 2 > ScreenType.txt");
+   std::vector<string> recommended;
+   for (const PupPackOptions::Option& option : PupPackOptions::List(pack))
+      if (option.recommended)
+         recommended.push_back(option.name);
+   CHECK(recommended == std::vector<string> { "4 Screen - Topper DMD Separate" });
+   string error;
+   CHECK(PupPackOptions::ApplyRecommended(pack, error) == "4 Screen - Topper DMD Separate");
+   CHECK(error.empty());
+   CHECK(Fixture::Read(pack / "screens.pup") == separate);
+
+   SUBCASE("the full DMD screen is drawn when screens are positioned on it, even when it is off")
+   {
+      CHECK(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(pack / "PuP-Pack_Options" / "3screen - FullDMD" / "screens.pup")));
+      CHECK_FALSE(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(pack / "screens.pup"))); // The applied "4screen" layout
+      const fs::path screens = f.root / "screens.pup";
+      Fixture::Touch(screens, header + "5,FullDMD,,,0,ForceBack,,\r\n");
+      CHECK(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(screens)));
+      Fixture::Touch(screens, header + "5,FullDMD,,,0,ForceBack,,\r\n5,Music2,,,0,off,,\r\n"); // The last line of a screen wins
+      CHECK_FALSE(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(screens)));
+      Fixture::Touch(screens, header + "11,Videos,,,0,ForceBack,,\"5,0,0,100,100\"\r\n"); // Screen 5 created by the plugin for its child
+      CHECK(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(screens)));
+      Fixture::Touch(screens, header + "11,Videos,,,0,off,,\"5,0,0,100,100\"\r\n5,FullDMD,,,0,MusicOnly,,\r\n");
+      CHECK_FALSE(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(screens)));
+      Fixture::Touch(screens, header + "5,FullDMD,,,0,ForceBack,,\"2,0,0,50,50\"\r\n"); // Positioned on the backglass, nothing on it
+      CHECK_FALSE(PupPackOptions::DrawsFullDMD(PupPackOptions::ReadScreens(screens)));
+   }
+}
+
 TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when asked")
 {
    Fixture f;
