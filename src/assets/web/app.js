@@ -534,6 +534,9 @@ function updateMissingPups(directory) {
   const help = DOMCache.get('pup-help');
   if (help)
     help.hidden = !isPupFolder(directory);
+  const alpha = DOMCache.get('pup-alpha');
+  if (alpha)
+    alpha.hidden = !isPupFolder(directory);
   const panel = DOMCache.get('missing-pups');
   if (!panel)
     return;
