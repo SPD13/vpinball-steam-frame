@@ -49,6 +49,7 @@ struct Runner
    vector<vector<Command>> scenes;
    bool parsed = false;
    const Player* player = nullptr;
+   bool playerClosing = false; // The next player may be allocated at the address of the closing one
    int scene = -1;
    uint32_t start = 0;
    size_t next = 0;
@@ -177,9 +178,10 @@ void UpdateScript(Player* player)
       r.parsed = true;
       Parse(r, path);
    }
-   if (r.player != player)
+   if (r.player != player || (r.playerClosing && player->GetCloseState() == Player::CS_PLAYING))
    {
       r.player = player;
+      r.playerClosing = false;
       r.start = 0;
       r.next = 0;
       r.autoflip = false;
@@ -188,6 +190,8 @@ void UpdateScript(Player* player)
       r.keyReleases.clear();
       r.panelPlaced = false;
    }
+   if (player->GetCloseState() != Player::CS_PLAYING)
+      r.playerClosing = true;
    InputManager& im = player->m_pininput;
    const uint32_t now = msec();
    if (r.start == 0 && !player->m_liveUI->IsLoadingScreenShown() && player->GetCloseState() == Player::CS_PLAYING)
