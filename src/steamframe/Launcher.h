@@ -91,6 +91,9 @@ public:
    int UseTableRoomInLobby(PinTable* table); // Returns the number of room parts kept, 0 if the table has no VR room (then nothing changes)
    void ResetLobbyRoom();
    static vector<IEditable*> GetRoomParts(PinTable* table); // All the parts of its VR room, visible or not
+   // Whether a table has a VR room or cabinet: the tables made for desktops and cabinets only show their playfield in a headset
+   static bool IsMadeForVR(PinTable* table);
+   static bool ReadMadeForVR(const std::filesystem::path& tablePath); // Same, from the file, without loading the table
    // The 'Visible' property that scripts use, for the parts which have one
    static std::optional<bool> GetPartVisible(IEditable* part);
    static void SetPartVisible(IEditable* part, bool visible);

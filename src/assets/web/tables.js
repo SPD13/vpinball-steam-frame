@@ -18,6 +18,9 @@ const THUMBNAIL_MIN_SIZE = 256;
 const THUMBNAIL_MAX_BYTES = 2.5 * 1024 * 1024;
 const THUMBNAIL_QUALITY = 0.9;
 
+// Files that "Thumbnail from table directory" offers, the formats that browsers decode
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
+
 const ICONS = {
   star: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
   threeDots: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>',
@@ -25,6 +28,8 @@ const ICONS = {
   rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>',
   scores: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path><path d="M17 5h3v2a3 3 0 0 1-3 3"></path><path d="M7 5H4v2a3 3 0 0 0 3 3"></path></svg>',
   patch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>',
   delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
 };
 
@@ -36,7 +41,8 @@ const State = {
   search: '',
   tiles: new Map(), // uuid -> tile elements, kept between renders so that images are not loaded again
   menu: null, // Open '...' menu: { element, uuid }
-  editedUuid: null // Table of the open dialog
+  editedUuid: null, // Table of the open dialog
+  folder: null // "Thumbnail from table directory" dialog: { root, current, selected, request } (folders relative to the tables folder)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -147,6 +153,26 @@ function getFileName(path) {
   return path.split('/').pop();
 }
 
+function getParentFolder(path) {
+  return path.split('/').slice(0, -1).join('/');
+}
+
+function joinPath(folder, name) {
+  return folder ? `${folder}/${name}` : name;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024)
+    return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
+
 function getUnknownGameText(table) {
   return `PinMAME doesn't know the game '${table.unknownGame}': it needs an alias. Click to edit the aliases.`;
 }
@@ -197,6 +223,7 @@ function createTile(uuid) {
       <span class="table-tile-badge" hidden>Playing</span>
       <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
       <a class="table-tile-unknown" href="vpx.html?aliases" hidden>&#9888; Unknown game</a>
+      <span class="table-tile-novr" hidden title="No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset">No VR room</span>
       <a class="table-tile-fix" href="vpx.html?fixes" hidden></a>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>
@@ -214,6 +241,7 @@ function createTile(uuid) {
     badge: tile.querySelector('.table-tile-badge'),
     pup: tile.querySelector('.table-tile-pup'),
     unknown: tile.querySelector('.table-tile-unknown'),
+    noVr: tile.querySelector('.table-tile-novr'),
     fix: tile.querySelector('.table-tile-fix'),
     star: tile.querySelector('.table-tile-star'),
     name: tile.querySelector('.table-tile-name'),
@@ -240,6 +268,7 @@ function updateTile(refs, table) {
   refs.pup.hidden = !table.hasPupPack;
   refs.unknown.hidden = !table.unknownGame;
   refs.unknown.title = table.unknownGame ? getUnknownGameText(table) : '';
+  refs.noVr.hidden = table.madeForVR !== false;
   // A fix available for the table, or applied to it (see the Table and ROM fixes of the Files page)
   refs.fix.hidden = !!table.unknownGame || (!table.fixesAvailable && !table.fixesApplied);
   refs.fix.classList.toggle('available', table.fixesAvailable > 0);
@@ -362,6 +391,7 @@ function openMenu(uuid, anchor) {
     { icon: ICONS.scores, text: 'Show scores', action: () => { location.href = `scores.html?uuid=${encodeURIComponent(uuid)}`; } },
     { icon: ICONS.rename, text: 'Display name', action: () => openNameDialog(uuid) },
     { icon: ICONS.image, text: 'Upload thumbnail', action: () => pickThumbnail(uuid) },
+    { icon: ICONS.folder, text: 'Thumbnail from table directory', action: () => openFolderDialog(uuid) },
     ...(table.fixesAvailable || table.fixesApplied
       ? [{ icon: ICONS.patch, text: table.fixesAvailable ? 'Patch table' : 'Re-patch table', action: () => patchTable(uuid) }] : []),
     { icon: ICONS.delete, text: 'Delete', danger: true, disabled: table.playing, hint: 'The table is being played', action: () => openDeleteDialog(uuid) }
@@ -476,30 +506,45 @@ function hasTransparency(canvas) {
   return false;
 }
 
-// The image resized for the table picker, as a JPEG blob, or a PNG one when it has transparent parts
+// A decoded image resized for the table picker, as a JPEG blob, or a PNG one when it has transparent parts
+async function encodeThumbnail(image) {
+  for (let maxSize = THUMBNAIL_MAX_SIZE; ; maxSize /= 2) {
+    const canvas = scaleImage(image, maxSize);
+    const transparent = hasTransparency(canvas);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, transparent ? 'image/png' : 'image/jpeg', THUMBNAIL_QUALITY));
+    if (!blob)
+      throw new Error('Image encoding failed');
+    if (blob.size <= THUMBNAIL_MAX_BYTES || maxSize <= THUMBNAIL_MIN_SIZE)
+      return blob;
+  }
+}
+
 async function resizeThumbnail(file) {
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
     image.src = url;
     await image.decode(); // The orientation of photos (EXIF) is applied
-    for (let maxSize = THUMBNAIL_MAX_SIZE; ; maxSize /= 2) {
-      const canvas = scaleImage(image, maxSize);
-      const transparent = hasTransparency(canvas);
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, transparent ? 'image/png' : 'image/jpeg', THUMBNAIL_QUALITY));
-      if (!blob)
-        throw new Error('Image encoding failed');
-      if (blob.size <= THUMBNAIL_MAX_BYTES || maxSize <= THUMBNAIL_MIN_SIZE)
-        return blob;
-    }
+    return await encodeThumbnail(image);
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
+// Replaces the image of the table, the server copies it next to the table (see WebServer::TableImage)
+async function saveThumbnail(table, blob) {
+  showStatus(`Uploading the thumbnail of ${table.name}...`, 'info');
+  try {
+    await post(`table-image?uuid=${encodeURIComponent(table.uuid)}`, blob);
+    showStatus(`Thumbnail of ${table.name} replaced`, 'success');
+  } catch (error) {
+    showStatus(error.status === 404 ? 'This table no longer exists' : `Failed to replace the thumbnail of ${table.name}`, 'error');
+    await fetchTables();
+  }
+}
+
 async function uploadThumbnail(file) {
-  const uuid = State.editedUuid;
-  const table = findTable(uuid);
+  const table = findTable(State.editedUuid);
   if (!table || !file)
     return;
   let blob;
@@ -510,14 +555,132 @@ async function uploadThumbnail(file) {
     showStatus(`${file.name} is not an image that the browser can read`, 'error');
     return;
   }
-  showStatus(`Uploading the thumbnail of ${table.name}...`, 'info');
+  await saveThumbnail(table, blob);
+}
+
+// "Thumbnail from table directory": the images of the folder of the table, often in its package (wheel, backglass, flyer), and of its
+// subfolders, listed by the file manager routes. The chosen one is resized like an uploaded one: the file itself is left as it is.
+function openFolderDialog(uuid) {
+  const table = findTable(uuid);
+  if (!table)
+    return;
+  State.editedUuid = uuid;
+  const root = getParentFolder(table.path);
+  State.folder = { root, current: root, selected: null, request: 0 };
+  $('folder-title').textContent = `Thumbnail of “${table.name}”`;
+  showFolderPreview(null);
+  $('folder-dialog').showModal();
+  loadFolder(root);
+}
+
+function closeFolderDialog() {
+  $('folder-dialog').close();
+  State.folder = null;
+  showFolderPreview(null); // Stops the loading of a large image
+}
+
+async function loadFolder(folder) {
+  const state = State.folder;
+  const request = ++state.request;
+  state.current = folder;
+  const relative = folder.substring(state.root.length).replace(/^\//, '');
+  $('folder-path').textContent = relative ? `Table directory / ${relative.split('/').join(' / ')}` : 'Table directory';
+  const list = $('folder-list');
+  list.replaceChildren();
+  $('folder-empty').hidden = false;
+  $('folder-empty').textContent = 'Loading...';
+  let files;
   try {
-    await post(`table-image?uuid=${encodeURIComponent(uuid)}`, blob);
-    showStatus(`Thumbnail of ${table.name} replaced`, 'success');
+    const response = await fetch(`files?q=${encodeURIComponent(folder)}`, { cache: 'no-store' });
+    if (!response.ok)
+      throw new Error(`HTTP ${response.status}`);
+    files = await response.json();
   } catch (error) {
-    showStatus(error.status === 404 ? 'This table no longer exists' : `Failed to replace the thumbnail of ${table.name}`, 'error');
-    await fetchTables();
+    if (request === state.request)
+      $('folder-empty').textContent = 'The directory could not be read';
+    return;
   }
+  if (State.folder !== state || request !== state.request)
+    return;
+
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  const folders = files.filter(file => file.isDir).sort(byName);
+  const images = files.filter(file => !file.isDir && IMAGE_EXTENSIONS.includes((file.ext || '').toLowerCase())).sort(byName);
+  const items = [];
+  // Never above the folder of the table
+  if (folder !== state.root)
+    items.push(createFolderItem(ICONS.up, 'Back', '', () => loadFolder(getParentFolder(folder))));
+  for (const entry of folders)
+    items.push(createFolderItem(ICONS.folder, entry.name, '', () => loadFolder(joinPath(folder, entry.name))));
+  for (const entry of images) {
+    const path = joinPath(folder, entry.name);
+    const item = createFolderItem(ICONS.image, entry.name, formatBytes(entry.size), () => selectFolderImage(path, entry.size));
+    item.dataset.path = path;
+    item.classList.toggle('selected', path === state.selected?.path);
+    items.push(item);
+  }
+  list.replaceChildren(...items);
+  $('folder-empty').hidden = images.length > 0;
+  $('folder-empty').textContent = folders.length > 0 ? 'No image here: open a folder' : 'No image in this directory';
+}
+
+function createFolderItem(icon, name, detail, action) {
+  const item = document.createElement('li');
+  item.innerHTML = `<button type="button" class="folder-item"><span class="folder-item-icon">${icon}</span><span class="folder-item-name"></span><span class="folder-item-detail"></span></button>`;
+  item.querySelector('.folder-item-name').textContent = name;
+  item.querySelector('.folder-item-name').title = name;
+  item.querySelector('.folder-item-detail').textContent = detail;
+  item.querySelector('button').onclick = action;
+  return item;
+}
+
+function selectFolderImage(path, size) {
+  const state = State.folder;
+  state.selected = { path, size };
+  for (const item of $('folder-list').children)
+    item.classList.toggle('selected', item.dataset.path === path);
+  showFolderPreview(state.selected);
+}
+
+// The image chosen in the list, at full size: saving encodes it from this element, without loading it again
+function showFolderPreview(selected) {
+  const image = $('folder-image');
+  const info = $('folder-info');
+  $('folder-save').disabled = true;
+  image.onload = image.onerror = null;
+  image.classList.remove('loaded');
+  if (!selected) {
+    image.removeAttribute('src');
+    info.textContent = 'Click an image to see it here';
+    return;
+  }
+  info.textContent = `Loading ${getFileName(selected.path)}...`;
+  image.onload = () => {
+    image.classList.add('loaded');
+    info.textContent = `${getFileName(selected.path)}: ${image.naturalWidth} × ${image.naturalHeight}, ${formatBytes(selected.size)}`;
+    $('folder-save').disabled = false;
+  };
+  image.onerror = () => { info.textContent = `${getFileName(selected.path)} is not an image that the browser can read`; };
+  image.src = `download?q=${encodeURIComponent(selected.path)}`;
+}
+
+async function saveFolderImage() {
+  const table = findTable(State.editedUuid);
+  const selected = State.folder?.selected;
+  const image = $('folder-image');
+  if (!table || !selected || !image.classList.contains('loaded'))
+    return;
+  let blob;
+  try {
+    await image.decode();
+    blob = await encodeThumbnail(image);
+  } catch (error) {
+    console.error('Error reading the thumbnail:', error);
+    showStatus(`${getFileName(selected.path)} is not an image that the browser can read`, 'error');
+    return;
+  }
+  closeFolderDialog();
+  await saveThumbnail(table, blob);
 }
 
 function openDeleteDialog(uuid) {
@@ -564,6 +727,12 @@ function setupDialogs() {
   $('delete-cancel').onclick = () => $('delete-dialog').close();
 
   $('thumbnail-input').onchange = (e) => uploadThumbnail(e.target.files[0]);
+
+  $('folder-form').onsubmit = (e) => {
+    e.preventDefault();
+    saveFolderImage();
+  };
+  $('folder-cancel').onclick = closeFolderDialog;
 
   // Only their buttons close the dialogs: not a click outside of the fields (the padding of the dialog is the dialog itself, like
   // its backdrop), nor the Escape key

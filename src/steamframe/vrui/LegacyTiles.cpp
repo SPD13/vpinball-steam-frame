@@ -78,6 +78,15 @@ void InGameUIPage::RenderTile(int index, const ImVec2& pos, const ImVec2& size, 
          drawList->AddText(ImVec2(badgeMin.x + padding.x, badgeMin.y + 0.5f * padding.y), IM_COL32_WHITE, item->m_tileBadge.c_str());
       }
 
+      // Warning, in the top left corner of the image
+      if (!item->m_tileWarning.empty())
+      {
+         const ImVec2 textSize = ImGui::CalcTextSize(item->m_tileWarning.c_str());
+         const ImVec2 badgeMin(imagePos.x + padding.x, imagePos.y + padding.y);
+         drawList->AddRectFilled(badgeMin, badgeMin + textSize + ImVec2(2.f * padding.x, padding.y), IM_COL32(234, 179, 8, 240), 0.25f * textSize.y);
+         drawList->AddText(ImVec2(badgeMin.x + padding.x, badgeMin.y + 0.5f * padding.y), IM_COL32(66, 32, 6, 255), item->m_tileWarning.c_str());
+      }
+
       if (hovered)
          ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
       ImGui::SetCursorScreenPos(ImVec2(imagePos.x, imagePos.y + imageSize.y + padding.y));

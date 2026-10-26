@@ -662,6 +662,8 @@ void TablePickerPage::BuildPage()
          label = ICON_FK_STAR " "s + label;
       if (!gridView && table.hasPupPack)
          label += "  [PuP]";
+      if (!gridView && !table.madeForVR)
+         label += "  [No VR room]";
       const string path = "tables/" + table.uuid;
       const string uuid = table.uuid;
       displayedTables.insert(uuid);
@@ -677,6 +679,8 @@ void TablePickerPage::BuildPage()
          item.m_tileToggleAction = [uuid, favorite = table.favorite]() { g_launcher->GetTableLibrary().SetFavorite(uuid, !favorite); }; // The page is rebuilt as the library changes
          if (table.hasPupPack)
             item.m_tileBadge = "PuP"s;
+         if (!table.madeForVR)
+            item.m_tileWarning = "No VR room"s;
       }
    }
 
@@ -1312,6 +1316,10 @@ void TableActionsPage::BuildPage()
          g_launcher->m_nextTableFilename = tablePath;
          m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
+
+   if (!table->madeForVR)
+      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Error,
+         "No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset"s));
 
    // PinUP Player pack: installed, or missing (only for the tables whose script uses PinUP Player, a PinMAME game may have none)
    if (table->hasPupPack)
