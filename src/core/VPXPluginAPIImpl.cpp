@@ -12,6 +12,7 @@
 #include "physics/cabinet/NudgeHandler.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
+#include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
 #endif
 
@@ -94,6 +95,36 @@ void MSGPIAPI VPXPluginAPIImpl::ReportMissingFile(const char* package, const cha
    const PinTable* const table = g_pplayer ? g_pplayer->m_ptable : nullptr;
    const string tableName = table == nullptr ? string() : !table->m_tableName.empty() ? table->m_tableName : table->m_filename.stem().string();
    g_launcher->GetTableLibrary().AddMissingRom(package, std::filesystem::path(reinterpret_cast<const char8_t*>(folder)), fileList, tableName);
+#endif
+}
+
+const char* MSGPIAPI VPXPluginAPIImpl::GetRomFix(const char* rom, int hasNvram)
+{
+   if (rom == nullptr)
+   {
+      PLOGE << "Invalid VPX API call 'GetRomFix'";
+      return nullptr;
+   }
+#ifdef VPX_STEAM_FRAME
+   // The fixes of the table library (see steamframe/TableFixes.h), for the table being played
+   static string fix; // Valid until the next call
+   const std::filesystem::path tablePath = g_pplayer && g_pplayer->m_ptable ? g_pplayer->m_ptable->m_filename : std::filesystem::path();
+   fix = g_launcher->GetTableFixes().GetRomFix(rom, hasNvram != 0, tablePath);
+   return fix.empty() ? nullptr : fix.c_str();
+#else
+   return nullptr;
+#endif
+}
+
+void MSGPIAPI VPXPluginAPIImpl::ReportRomFix(const char* rom, const char* id, int version, int completed)
+{
+   if (rom == nullptr || id == nullptr)
+   {
+      PLOGE << "Invalid VPX API call 'ReportRomFix'";
+      return;
+   }
+#ifdef VPX_STEAM_FRAME
+   g_launcher->GetTableFixes().ReportRomFix(rom, id, version, completed != 0);
 #endif
 }
 
@@ -722,6 +753,8 @@ VPXPluginAPIImpl::VPXPluginAPIImpl(MsgPI::MsgPluginManager& pluginManager, Setti
 
    m_api.ShowMessage = ShowMessage;
    m_api.ReportMissingFile = ReportMissingFile;
+   m_api.GetRomFix = GetRomFix;
+   m_api.ReportRomFix = ReportRomFix;
 
    m_vpxPlugin = pluginManager.RegisterPlugin(
       "vpx"s, "VPX"s, "Visual Pinball X"s, ""s, ""s, "https://github.com/vpinball/vpinball"s, //

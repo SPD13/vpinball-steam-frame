@@ -74,6 +74,9 @@ private:
    void PupOptions(struct mg_connection *c, struct mg_http_message* hm);
    // The alias file of PinMAME, edited from the advanced menu of the Files page (see RomAliases.h)
    void PinmameAliases(struct mg_connection *c, struct mg_http_message* hm);
+   // The fixes of the tables and ROMs (see steamframe/TableFixes.h): the recipes and the tables they match, from the advanced menu of the Files
+   // page, and the patch of a table, from it and from the tables page
+   void TableFixes(struct mg_connection *c, struct mg_http_message* hm);
    // Backup of the user's data and its restore, for the backup page (steamframe/WebServerBackup.cpp)
    void BackupItems(struct mg_connection *c, struct mg_http_message* hm);
    void BackupPrepare(struct mg_connection *c, struct mg_http_message* hm);

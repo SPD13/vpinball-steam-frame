@@ -9,6 +9,7 @@
 #include "steamframe/PupPacks.h"
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
+#include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
 #include "steamframe/TablePickerPage.h"
 #include "steamframe/vrui/VRUI.h"
@@ -101,6 +102,8 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       for (const string& ext : ZipUtils::GetExtractableExtensions()) // .zip and .vpxz, and .rar and .7z when built with libarchive
          config.archiveExtensions.push_back('.' + ext);
 #endif
+      // The tables added to the library, or changed, get the fixes matching them
+      config.onScanned = [](const std::vector<VPinballLib::Table>& tables) { g_launcher->GetTableFixes().OnTablesScanned(tables); };
       config.log = [](VPinballLib::TableLibrary::LogLevel level, const string& message)
       {
          switch (level)
@@ -113,6 +116,32 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       m_tableLibrary = std::make_unique<VPinballLib::TableLibrary>(std::move(config));
    }
    return *m_tableLibrary;
+}
+
+VPinballLib::TableFixes& Launcher::GetTableFixes()
+{
+   static std::mutex creationMutex; // Used by the scans of the library, from their worker thread
+   std::lock_guard lock(creationMutex);
+   if (m_tableFixes == nullptr)
+   {
+      VPinballLib::TableFixes::Config config;
+      config.shippedRecipesPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, std::filesystem::path("fixes") / "fixes.json");
+      config.localRecipesPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "fixes.json");
+      config.statePath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "table-fixes.json");
+      config.tablesPath = GetTableLibrary().GetTablesPath(); // The paths of the tables are relative to it
+      config.readEmbeddedScript = [](const std::filesystem::path& vpxPath) { return PupPacks::ReadEmbeddedScript(vpxPath); };
+      config.log = [](VPinballLib::TableFixes::LogLevel level, const string& message)
+      {
+         switch (level)
+         {
+         case VPinballLib::TableFixes::LogLevel::Info: PLOGI << "[Fixes] " << message; break;
+         case VPinballLib::TableFixes::LogLevel::Warn: PLOGW << "[Fixes] " << message; break;
+         case VPinballLib::TableFixes::LogLevel::Error: PLOGE << "[Fixes] " << message; break;
+         }
+      };
+      m_tableFixes = std::make_unique<VPinballLib::TableFixes>(std::move(config));
+   }
+   return *m_tableFixes;
 }
 
 VPinballLib::ScoreStore& Launcher::GetScoreStore()

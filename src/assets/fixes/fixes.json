@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "Fixes of the tables and ROMs that do not work as they are, applied by the application (see src/steamframe/TableFixes.h).",
+    "Each recipe has its section in docs/Table and ROM Fixes.md ('doc'), which tells why it exists and how it was checked. Raise 'version' when a recipe changes: the tables patched with an older version offer to be patched again.",
+    "match: 'files' (parts of the table file name, ignoring case) and/or 'roms' (PinMAME ROM names); when both are given, both must match.",
+    "script: text replacements in the table script, written as the table's .vbs. 'find' must be found exactly 'count' times (default 1), or the recipe does not apply. Line ends are '\\n', and match the '\\r\\n' of the script.",
+    "rom: switch presses run by the PinMAME plugin once the emulation started, per ROM ('sequences'), then a reset of the machine. Runs by itself when the ROM has no NVRAM yet ('runWithoutNvram'), otherwise when requested.",
+    "Users can add their own recipes in fixes.json in the preferences folder, and turn shipped ones off with \"disable\": [\"id\", ...]."
+  ],
+  "recipes": [
+    {
+      "id": "bttf-vr-room-double-vpminit",
+      "version": 1,
+      "title": "Back to the Future VR Room: vpmInit called twice",
+      "symptom": "The table closes as soon as it starts, back to the lobby, as if it crashed.",
+      "cause": "Its init routine bttf_Init calls 'vpmInit Me' twice, the second time after Backdrop_Init. core.vbs refuses a second init of the flippers (cvpmFlips2.Init): it shows a message, which only goes to the log on the Steam Frame, and stops the table (QuitPlayer).",
+      "change": "The second 'vpmInit me' of bttf_Init is commented out.",
+      "doc": "bttf-vr-room-double-vpminit",
+      "match": { "files": ["vr room back to the future"] },
+      "script": [
+        {
+          "find": "\tBackdrop_Init\n\n\tvpmInit me\n",
+          "replace": "\tBackdrop_Init\n\n\t' vpmInit me ' Removed by the Steam Frame Edition (fix bttf-vr-room-double-vpminit): already called at the start of bttf_Init\n"
+        }
+      ]
+    },
+    {
+      "id": "gts3-zero-settings",
+      "version": 1,
+      "title": "Gottlieb System 3: factory settings of the game",
+      "symptom": "Coins are accepted, but the display stays at CREDITS 0 and no game can be started.",
+      "cause": "PinMAME creates the NVRAM of a Gottlieb System 3 game filled with zeros. The ROM does not check it and takes the zeros as its settings: every price is 0 coin per credit.",
+      "change": "The game loads its factory settings from its own service menu, as an operator would: Self Test, Game Adjustments, Start (load factory settings), Start (English), then the machine is reset. The NVRAM it had is kept as <rom>.nv.bak-<date>.",
+      "doc": "gts3-zero-settings",
+      "rom": {
+        "bootMs": 25000,
+        "holdMs": 100,
+        "waitMs": 1200,
+        "reset": true,
+        "runWithoutNvram": true,
+        "notice": "Patching this table for compatibility: its game loads its factory settings (one time only, about 40 seconds). Please don't press any button until the game restarts.",
+        "sequences": [
+          { "_menu": "Long menu: Self Test twice, left flipper 3 times down to Game Adjustments, right flipper, Start twice", "roms": ["sfight2", "stargat5", "waterwld"], "switches": [-8, -8, 143, 143, 143, 141, 4, 4] },
+          { "_menu": "Short menu: Self Test, left flipper to 'load factory settings', Start twice", "roms": ["smb", "smbmush"], "switches": [-8, 143, 4, 4] }
+        ]
+      }
+    },
+    {
+      "id": "city-hunter-ultradmd",
+      "version": 1,
+      "title": "City Hunter: scores on the cabinet's DMD",
+      "symptom": "The DMD of the cabinet stays black. The scores only show on the backglass, under the videos of the PuP pack.",
+      "cause": "The pack puts all its screens on the backglass, its DMD screen included, and the table's DMD only shows what the script sends to it. The script can send a scoreboard to UltraDMD, but it ships with UseUltraDMD = 0.",
+      "change": "UseUltraDMD is set to 1: the DMD of the cabinet shows the UltraDMD scoreboard (players' scores, ball, credits) and the script's messages (ball saved, extra ball, modes). The scoreboard is refreshed every second instead of every 5 s. The backglass is unchanged.",
+      "doc": "city-hunter-ultradmd",
+      "match": { "files": ["cityhunter"] },
+      "script": [
+        {
+          "find": "Const UseUltraDMD = 0\t\t\t\t'0 = Don't use UltraDMD, 1=Use it\n",
+          "replace": "Const UseUltraDMD = 1\t\t\t\t'0 = Don't use UltraDMD, 1=Use it ' Set to 1 by the Steam Frame Edition (fix city-hunter-ultradmd): the pack leaves the cabinet's DMD black\n"
+        },
+        {
+          "find": "Const UltraDMDUpdateTime\t= 5000\t",
+          "replace": "Const UltraDMDUpdateTime\t= 1000\t' 5000 before the Steam Frame Edition (fix city-hunter-ultradmd): the plugin's UltraDMD does not stutter, and the score followed 5 s late\t"
+        }
+      ]
+    }
+  ]
+}

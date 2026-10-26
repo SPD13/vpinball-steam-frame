@@ -776,6 +776,151 @@ function closeAliasesDialog() {
   DOMCache.get('aliases-dialog').close();
 }
 
+// Table and ROM fixes (Advanced menu of the main actions): the tables of the library that fixes match, with their state and a button to patch
+// them, and the recipes shipped with the application (see TableFixes.h). Each recipe has its full record in the documentation of the fork.
+const FIXES_DOC_URL = 'https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Table%20and%20ROM%20Fixes.md';
+const FIX_STATUS_LABELS = {
+  available: 'Available',
+  applied: 'Applied',
+  outdated: 'Update available',
+  pending: 'At the next start',
+  notApplicable: 'Not needed'
+};
+
+function createFixElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className)
+    element.className = className;
+  if (text !== undefined)
+    element.textContent = text;
+  return element;
+}
+
+function renderFixes(data) {
+  const recipes = new Map(data.recipes.map(recipe => [recipe.id, recipe]));
+  DOMCache.get('fixes-path').textContent = data.localPath || '';
+
+  const tables = DOMCache.get('fixes-tables');
+  tables.replaceChildren();
+  if (data.tables.length === 0)
+    tables.appendChild(createFixElement('li', 'fixes-empty', 'No table of the library needs a fix.'));
+  for (const table of data.tables) {
+    const item = createFixElement('li', 'fixes-item');
+    const header = createFixElement('div', 'fixes-item-header');
+    const name = createFixElement('div', 'fixes-item-title');
+    name.appendChild(createFixElement('strong', '', table.name));
+    name.appendChild(createFixElement('div', 'fixes-item-path', table.path + (table.rom ? ` (ROM ${table.rom})` : '')));
+    header.appendChild(name);
+    const canPatch = table.fixes.some(fix => fix.status === 'available' || fix.status === 'outdated');
+    const canRepatch = table.fixes.some(fix => fix.status === 'applied' || fix.status === 'pending');
+    if (canPatch || canRepatch) {
+      const button = createFixElement('button', 'btn ' + (canPatch ? 'btn-primary' : 'btn-secondary'), canPatch ? 'Patch table' : 'Re-patch table');
+      button.type = 'button';
+      button.onclick = () => patchTable(table.uuid, table.name, button);
+      header.appendChild(button);
+    }
+    item.appendChild(header);
+    const list = createFixElement('ul', 'fixes-item-fixes');
+    for (const fix of table.fixes) {
+      const recipe = recipes.get(fix.id);
+      const line = createFixElement('li');
+      line.appendChild(createFixElement('span', `fixes-status ${fix.status}`, FIX_STATUS_LABELS[fix.status] || fix.status));
+      line.appendChild(document.createTextNode(' ' + (recipe ? recipe.title : fix.id)));
+      if (fix.appliedAt)
+        line.appendChild(createFixElement('span', 'fixes-detail', ` - applied ${new Date(fix.appliedAt * 1000).toLocaleString()} (version ${fix.appliedVersion})`));
+      if (fix.detail)
+        line.appendChild(createFixElement('div', 'fixes-detail', fix.detail));
+      list.appendChild(line);
+    }
+    item.appendChild(list);
+    tables.appendChild(item);
+  }
+
+  const recipeList = DOMCache.get('fixes-recipes');
+  recipeList.replaceChildren();
+  for (const recipe of data.recipes) {
+    const item = createFixElement('li', 'fixes-item');
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.appendChild(createFixElement('strong', '', recipe.title));
+    summary.appendChild(createFixElement('span', 'fixes-tag', recipe.kind === 'rom' ? 'ROM procedure' : 'Script patch'));
+    summary.appendChild(createFixElement('span', 'fixes-tag', `version ${recipe.version}`));
+    if (recipe.local)
+      summary.appendChild(createFixElement('span', 'fixes-tag', 'local'));
+    if (recipe.disabled)
+      summary.appendChild(createFixElement('span', 'fixes-tag off', 'turned off'));
+    details.appendChild(summary);
+    const fields = createFixElement('dl', 'fixes-fields');
+    const addField = (label, value) => {
+      if (!value)
+        return;
+      fields.appendChild(createFixElement('dt', '', label));
+      fields.appendChild(createFixElement('dd', '', value));
+    };
+    addField('Symptom', recipe.symptom);
+    addField('Cause', recipe.cause);
+    addField('Change', recipe.change);
+    const targets = [];
+    if (recipe.files.length)
+      targets.push(`tables whose file name contains '${recipe.files.join("', '")}'`);
+    if (recipe.roms.length)
+      targets.push(`ROMs ${recipe.roms.join(', ')}`);
+    addField('Applies to', targets.join(', with the '));
+    for (const sequence of recipe.romSequences)
+      addField(`Switches (${sequence.roms.join(', ')})`, sequence.switches.join(', '));
+    addField('Id', recipe.id);
+    details.appendChild(fields);
+    if (recipe.doc && !recipe.local) {
+      const link = createFixElement('a', 'fixes-doc', 'Full record of this fix');
+      link.href = `${FIXES_DOC_URL}#${encodeURIComponent(recipe.doc)}`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      details.appendChild(link);
+    }
+    item.appendChild(details);
+    recipeList.appendChild(item);
+  }
+}
+
+function loadFixes() {
+  return fetch('table-fixes')
+    .then((response) => {
+      if (!response.ok)
+        throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(renderFixes);
+}
+
+function openFixesDialog() {
+  DOMCache.get('fixes-status').textContent = '';
+  loadFixes()
+    .then(() => {
+      const dialog = DOMCache.get('fixes-dialog');
+      if (!dialog.open)
+        dialog.showModal();
+    })
+    .catch((error) => showStatusMessage('main-status', `Failed to read the table fixes: ${error.message}`, 'error'));
+}
+
+function patchTable(uuid, name, button) {
+  button.disabled = true;
+  fetch(`table-fixes?uuid=${encodeURIComponent(uuid)}`, { method: 'POST' })
+    .then((response) => {
+      if (!response.ok)
+        throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then((result) => {
+      showStatusMessage('fixes-status', `${name}: ${result.messages.join('. ')}`, result.patched ? 'success' : 'error', true);
+      return loadFixes();
+    })
+    .catch((error) => {
+      button.disabled = false;
+      showStatusMessage('fixes-status', `Failed to patch ${name}: ${error.message}`, 'error', true);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const dialog = DOMCache.get('aliases-dialog');
   if (dialog) // Escape closes the dialog: keep it open if the user wants the changes
@@ -2449,6 +2594,11 @@ function startup() {
   if (new URLSearchParams(window.location.search).has('aliases')) {
     history.replaceState(history.state, '', window.location.pathname + window.location.hash);
     openAliasesDialog();
+  }
+  // 'vpx.html?fixes': the same for the badges of the patched tables
+  if (new URLSearchParams(window.location.search).has('fixes')) {
+    history.replaceState(history.state, '', window.location.pathname + window.location.hash);
+    openFixesDialog();
   }
 
   fetchInfo()

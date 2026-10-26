@@ -92,6 +92,59 @@ void FindCallValues(const string& script, const string& lowerScript, const strin
    }
 }
 
+// Name of the Sub or Function whose body holds the position, empty outside of them: the closest line before it starting with 'Sub'/'Function'
+// (or 'Private'/'Public' ones), if no 'End Sub'/'End Function' line comes between them
+string GetEnclosingProcedure(const string& lowerScript, size_t pos)
+{
+   size_t lineStart = lowerScript.rfind('\n', pos) == string::npos ? 0 : lowerScript.rfind('\n', pos) + 1;
+   while (true)
+   {
+      size_t i = lineStart;
+      while (i < lowerScript.size() && (lowerScript[i] == ' ' || lowerScript[i] == '\t'))
+         i++;
+      const auto startsWith = [&](const char* word) { return lowerScript.compare(i, strlen(word), word) == 0; };
+      if (startsWith("end sub") || startsWith("end function"))
+         return {};
+      for (const char* prefix : { "private ", "public " })
+         if (startsWith(prefix))
+            i += strlen(prefix);
+      for (const char* keyword : { "sub ", "function " })
+         if (startsWith(keyword))
+         {
+            i += strlen(keyword);
+            while (i < lowerScript.size() && (lowerScript[i] == ' ' || lowerScript[i] == '\t'))
+               i++;
+            size_t end = i;
+            while (end < lowerScript.size() && (isalnum(static_cast<unsigned char>(lowerScript[end])) || lowerScript[end] == '_'))
+               end++;
+            return lowerScript.substr(i, end - i);
+         }
+      if (lineStart == 0)
+         return {};
+      const size_t previousEnd = lineStart < 2 ? string::npos : lowerScript.rfind('\n', lineStart - 2);
+      lineStart = previousEnd == string::npos ? 0 : previousEnd + 1;
+   }
+}
+
+// Whether the script starts PinMAME: a call to LoadVPM (the loader of Controller.vbs), or PinMAME's controller created or loaded by the table
+// itself. Many original tables paste Controller.vbs in their script for its DOF helpers and only call LoadEM: its procedures quoting
+// PinMAME (LoadVPM, LoadVPinMAME, LoadController) do not count, nor the declaration of LoadVPM.
+bool StartsPinMame(const string& script, const string& lowerScript)
+{
+   static const char* const controllerVbsProcedures[] = { "loadvpm", "loadvpmalt", "loadvpinmame", "loadcontroller", "loadproc" };
+   for (const char* key : { "loadvpm", "vpinmame.controller", "loadcontroller(\"vpm" })
+      for (size_t pos = lowerScript.find(key); pos != string::npos; pos = lowerScript.find(key, pos + 1))
+      {
+         if (IsCommented(script, pos))
+            continue;
+         const string procedure = GetEnclosingProcedure(lowerScript, pos);
+         if (std::find_if(std::begin(controllerVbsProcedures), std::end(controllerVbsProcedures), [&](const char* name) { return procedure == name; })
+            == std::end(controllerVbsProcedures))
+            return true;
+      }
+   return false;
+}
+
 }
 
 TableUse GetTableUse(const string& script)
@@ -109,8 +162,7 @@ TableUse GetTableUse(const string& script)
          use.names.push_back(rom);
    // The ROM is the first name which is not commented out ('Const cGameName = "..." lines of other versions are often kept as comments),
    // for the tables starting PinMAME only: original tables name themselves with cGameName too, for their PuP pack or their backglass
-   const bool usesPinMame = lowerScript.find("loadvpm") != string::npos || lowerScript.find("vpinmame.controller") != string::npos
-      || lowerScript.find("loadcontroller(\"vpm\"") != string::npos;
+   const bool usesPinMame = StartsPinMame(script, lowerScript);
    const auto active = std::find(commented.begin(), commented.end(), false);
    if (usesPinMame && !roms.empty())
       use.rom = active != commented.end() ? roms[active - commented.begin()] : roms.front();
@@ -131,7 +183,11 @@ string ReadTableScript(const std::filesystem::path& vpxPath)
       std::ifstream file(vbsPath, std::ios::binary);
       return string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
    }
+   return ReadEmbeddedScript(vpxPath);
+}
 
+string ReadEmbeddedScript(const std::filesystem::path& vpxPath)
+{
    // Same reading as ExportVBSCommand (core/AppCommands.cpp): only the GameData stream, not the whole table
    string script;
    POLE::Storage rootStorage(POLE::PathToFilename(vpxPath).c_str());
