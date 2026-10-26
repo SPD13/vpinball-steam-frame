@@ -15,6 +15,9 @@ class Game;
 class GameSettings;
 class Roms;
 class Settings;
+#ifdef VPX_STEAM_FRAME
+class RomFix;
+#endif
 
 class Controller final
 {
@@ -162,6 +165,9 @@ public:
    void SetCheat(bool cheat) { m_cheat = cheat; }
 
 private:
+#ifdef VPX_STEAM_FRAME
+   std::unique_ptr<RomFix> m_romFix; // The procedure of a ROM fix of VPX, run once the emulation started (see RomFix.h)
+#endif
    string m_vpmPath;
    std::filesystem::path m_memmapPath;
    std::filesystem::path m_gamedefPath;

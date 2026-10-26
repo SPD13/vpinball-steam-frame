@@ -12,7 +12,7 @@
 #include <memory>
 #include <optional>
 
-namespace VPinballLib { class TableLibrary; class ScoreStore; }
+namespace VPinballLib { class TableFixes; class TableLibrary; class ScoreStore; }
 class WebServer; // Only with VPX_TABLE_WEBSERVER, defined by the macOS, Linux and windows-mingw builds (mobile builds have their own instance)
 class PinTable;
 class IEditable;
@@ -27,6 +27,8 @@ public:
 
    // Tables managed by the application (in-game table picker), created on first use
    VPinballLib::TableLibrary& GetTableLibrary();
+   // Fixes of the tables and ROMs that do not work as they are (assets/fixes/fixes.json), applied to the tables of the library
+   VPinballLib::TableFixes& GetTableFixes();
 
    // Player profiles and the scores of their games (profiles.json, scores.json), created on first use
    VPinballLib::ScoreStore& GetScoreStore();
@@ -116,6 +118,7 @@ public:
    static void AddHomePageTableItems(VPX::InGameUI::InGameUIPage& page);
 
 private:
+   std::unique_ptr<VPinballLib::TableFixes> m_tableFixes; // Before the library, which calls it from its scans
    std::unique_ptr<VPinballLib::TableLibrary> m_tableLibrary;
    std::unique_ptr<VPinballLib::ScoreStore> m_scoreStore;
    bool m_isSharedPinMAMEFolderApplied = false;

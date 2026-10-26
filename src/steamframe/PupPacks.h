@@ -27,6 +27,8 @@ TableUse GetTableUse(const std::string& script);
 
 // Script of a table: its .vbs when there is one along it (it replaces the embedded script), otherwise the one of the .vpx file
 std::string ReadTableScript(const std::filesystem::path& vpxPath);
+// Script stored inside the .vpx file, ignoring a .vbs along it
+std::string ReadEmbeddedScript(const std::filesystem::path& vpxPath);
 
 // Folder of a directory named 'name', ignoring case, or an empty path
 std::filesystem::path FindFolderNoCase(const std::filesystem::path& parent, const std::string& name);
