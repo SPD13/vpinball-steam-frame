@@ -94,6 +94,10 @@ reset of the machine, so that the game starts again with what the procedure chan
   - **Menu of the table** in VR: "Patched for compatibility: ..." and **Patch table** / **Re-patch table**, its tooltip listing the fixes
     and their state.
 - **ROM procedures** run by themselves at the first start of a game without NVRAM; Patch requests them for the next start.
+- **Other ROMs without NVRAM** show a notice for 10 s at their first start: "First launch. The table is initializing, you may need
+  to restart the table after the initialization is complete". Many ROMs initialize a new NVRAM, then only work from the next start:
+  the WPC games stay on "Factory settings restored", the Spinball games (Verne's World) wait for a watchdog reset that PinMAME does
+  not emulate.
 
 The state of a fix for a table:
 

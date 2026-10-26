@@ -43,12 +43,16 @@ void RomFix::Prepare(const string& rom, const string& vpmPath)
 {
    Stop();
    m_procedure.reset();
+   m_firstStart = false;
    VPXPluginAPI* const vpxApi = GetVpxApi();
-   if (vpxApi == nullptr || vpxApi->GetRomFix == nullptr || rom.empty())
+   if (vpxApi == nullptr || rom.empty())
       return;
    const std::filesystem::path nvramPath = vpmPath.empty() ? std::filesystem::path() : std::filesystem::path(vpmPath) / "nvram"sv / (rom + ".nv");
    std::error_code ec;
    const bool hasNvram = !nvramPath.empty() && std::filesystem::is_regular_file(nvramPath, ec);
+   m_firstStart = !nvramPath.empty() && !hasNvram;
+   if (vpxApi->GetRomFix == nullptr)
+      return;
    const char* const fix = vpxApi->GetRomFix(rom.c_str(), hasNvram ? 1 : 0);
    if (fix == nullptr)
       return;
@@ -91,7 +95,20 @@ void RomFix::Prepare(const string& rom, const string& vpmPath)
 
 void RomFix::Start()
 {
-   if (!m_procedure || m_running)
+   if (!m_procedure)
+   {
+      // Many ROMs initialize a new NVRAM, then only work from the next start: WPC games stay on "Factory settings restored", Spinball games
+      // wait for a watchdog reset that PinMAME does not emulate (a procedure shows its own notice instead)
+      if (m_firstStart)
+         if (VPXPluginAPI* const vpxApi = GetVpxApi(); vpxApi && vpxApi->PushNotification)
+         {
+            LOGI("First start of a ROM without NVRAM: showing the first launch notice");
+            vpxApi->PushNotification("First launch. The table is initializing, you may need to restart the table after the initialization is complete", 10000);
+         }
+      m_firstStart = false;
+      return;
+   }
+   if (m_running)
       return;
    m_running = true;
    m_heldSwitches = std::set<int>(m_procedure->switches.begin(), m_procedure->switches.end());

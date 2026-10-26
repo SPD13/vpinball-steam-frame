@@ -20,6 +20,8 @@ class Controller;
 //
 // The steps run on the main thread (RunOnMainThread), like the table script. While the procedure runs, the switches it presses are held:
 // their changes from the table script (a player pressing a flipper would change a setting) are applied at its end.
+//
+// Without a procedure, the first start of a ROM without NVRAM shows a notice: many ROMs only work from the start after their NVRAM init.
 class RomFix final
 {
 public:
@@ -59,6 +61,7 @@ private:
    Controller* const m_controller;
    std::optional<Procedure> m_procedure;
    bool m_running = false;
+   bool m_firstStart = false; // The ROM had no NVRAM before this start
    uint64_t m_generation = 0; // Steps scheduled before a Stop do nothing
    std::set<int> m_heldSwitches;
    std::map<int, bool> m_heldStates;
