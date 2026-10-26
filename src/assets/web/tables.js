@@ -24,6 +24,7 @@ const ICONS = {
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
   rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>',
   scores: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path><path d="M17 5h3v2a3 3 0 0 1-3 3"></path><path d="M7 5H4v2a3 3 0 0 0 3 3"></path></svg>',
+  patch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>',
   delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
 };
 
@@ -196,6 +197,7 @@ function createTile(uuid) {
       <span class="table-tile-badge" hidden>Playing</span>
       <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
       <a class="table-tile-unknown" href="vpx.html?aliases" hidden>&#9888; Unknown game</a>
+      <a class="table-tile-fix" href="vpx.html?fixes" hidden></a>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>
     <div class="table-tile-footer">
@@ -212,6 +214,7 @@ function createTile(uuid) {
     badge: tile.querySelector('.table-tile-badge'),
     pup: tile.querySelector('.table-tile-pup'),
     unknown: tile.querySelector('.table-tile-unknown'),
+    fix: tile.querySelector('.table-tile-fix'),
     star: tile.querySelector('.table-tile-star'),
     name: tile.querySelector('.table-tile-name'),
     file: tile.querySelector('.table-tile-file'),
@@ -237,6 +240,12 @@ function updateTile(refs, table) {
   refs.pup.hidden = !table.hasPupPack;
   refs.unknown.hidden = !table.unknownGame;
   refs.unknown.title = table.unknownGame ? getUnknownGameText(table) : '';
+  // A fix available for the table, or applied to it (see the Table and ROM fixes of the Files page)
+  refs.fix.hidden = !!table.unknownGame || (!table.fixesAvailable && !table.fixesApplied);
+  refs.fix.classList.toggle('available', table.fixesAvailable > 0);
+  refs.fix.textContent = table.fixesAvailable > 0 ? 'Fix available' : 'Patched';
+  refs.fix.title = table.fixesAvailable > 0 ? 'A fix is available for this table: use "Patch table" in its menu. Click for the details.'
+    : 'This table was patched to work on the Steam Frame. Click for the details.';
   refs.tile.classList.toggle('playing', table.playing);
 
   refs.star.classList.toggle('on', table.favorite);
@@ -322,6 +331,22 @@ async function toggleFavorite(uuid) {
   }
 }
 
+// Apply the fixes matching the table, or apply them again (see TableFixes::Patch)
+async function patchTable(uuid) {
+  const table = findTable(uuid);
+  try {
+    const response = await fetch(`table-fixes?uuid=${encodeURIComponent(uuid)}`, { method: 'POST' });
+    if (!response.ok)
+      throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
+    showStatus(`${table ? table.name + ': ' : ''}${result.messages.join('. ')}`, result.patched ? 'success' : 'error');
+    State.lastResponse = null;
+    await fetchTables();
+  } catch (error) {
+    showStatus(`Failed to patch the table: ${error.message}`, 'error');
+  }
+}
+
 function openMenu(uuid, anchor) {
   const wasOpen = State.menu && State.menu.uuid === uuid;
   closeMenu();
@@ -337,6 +362,8 @@ function openMenu(uuid, anchor) {
     { icon: ICONS.scores, text: 'Show scores', action: () => { location.href = `scores.html?uuid=${encodeURIComponent(uuid)}`; } },
     { icon: ICONS.rename, text: 'Display name', action: () => openNameDialog(uuid) },
     { icon: ICONS.image, text: 'Upload thumbnail', action: () => pickThumbnail(uuid) },
+    ...(table.fixesAvailable || table.fixesApplied
+      ? [{ icon: ICONS.patch, text: table.fixesAvailable ? 'Patch table' : 'Re-patch table', action: () => patchTable(uuid) }] : []),
     { icon: ICONS.delete, text: 'Delete', danger: true, disabled: table.playing, hint: 'The table is being played', action: () => openDeleteDialog(uuid) }
   ];
   for (const item of items) {

@@ -159,6 +159,9 @@
                 <a href="#" onclick="event.preventDefault(); openAliasesDialog(); hideMainActionsDropdown(); return false;">
                   PinMAME ROM aliases
                 </a>
+                <a href="#" onclick="event.preventDefault(); openFixesDialog(); hideMainActionsDropdown(); return false;">
+                  Table and ROM fixes
+                </a>
               </div>
             </div>
           </div>
@@ -455,6 +458,27 @@
       <span id="aliases-status" class="status-message tables-dialog-left"></span>
       <button type="button" class="btn btn-secondary" onclick="closeAliasesDialog()">Close</button>
       <button type="button" class="btn btn-primary" onclick="saveAliases()">Save</button>
+    </div>
+  </dialog>
+
+  <!-- The fixes of the tables and ROMs (Advanced menu): the tables they apply to, and the recipes shipped with the application -->
+  <dialog id="fixes-dialog" class="tables-dialog fixes-dialog">
+    <h2>Table and ROM fixes</h2>
+    <p class="tables-dialog-hint">
+      Some tables and ROMs need a change to work on the Steam Frame. Each fix is a recipe shipped with the application, which tells what it
+      changes and why. Tables added to the library get the fixes matching them; the tables added before a fix was released are patched with
+      their <strong>Patch table</strong> button, here or in the menu of the table. The table files are never changed: a script fix is saved
+      as a <code>.vbs</code> next to the table.
+    </p>
+    <h3 class="fixes-heading">Tables</h3>
+    <ul id="fixes-tables" class="fixes-list"></ul>
+    <h3 class="fixes-heading">Available fixes</h3>
+    <ul id="fixes-recipes" class="fixes-list"></ul>
+    <p class="tables-dialog-hint">Your own recipes, and the shipped ones to turn off, go in:</p>
+    <p id="fixes-path" class="tables-dialog-path"></p>
+    <div class="tables-dialog-actions">
+      <span id="fixes-status" class="status-message tables-dialog-left"></span>
+      <button type="button" class="btn btn-secondary" onclick="DOMCache.get('fixes-dialog').close()">Close</button>
     </div>
   </dialog>
 

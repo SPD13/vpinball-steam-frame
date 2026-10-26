@@ -14,6 +14,9 @@
 
 #include "plugins/ColorSpace.h"
 #include "plugins/VPXPlugin.h" // Only used for optional feature (visual feedback on error)
+#ifdef VPX_STEAM_FRAME
+#include "RomFix.h"
+#endif
 #include <climits>
 
 #include "plugins/PluginStrings.h"
@@ -313,6 +316,11 @@ void Controller::Run(long hParentWnd, int nMinVersion)
 
    // Trigger startup, status will be either 2 (starting), 1 (running), 0 (stopped, likely after failure)
    TakeRomLoadErrors(); // Only keep the errors of this start
+#ifdef VPX_STEAM_FRAME
+   if (m_romFix == nullptr)
+      m_romFix = std::make_unique<RomFix>(m_msgApi, m_endpointId, this);
+   m_romFix->Prepare(m_szRomName, m_vpmPath);
+#endif
    PINMAME_STATUS status = PinmameRun(m_szGameName.c_str());
    while (PinmameIsRunning() == 2) // Wait until the machine is either running or stopped
       std::this_thread::sleep_for(std::chrono::milliseconds(75));
@@ -321,6 +329,9 @@ void Controller::Run(long hParentWnd, int nMinVersion)
    {
       if (m_onGameStartHandler)
          m_onGameStartHandler(this);
+#ifdef VPX_STEAM_FRAME
+      m_romFix->Start();
+#endif
    }
    else
    {
@@ -367,6 +378,10 @@ void Controller::Run(long hParentWnd, int nMinVersion)
 
 void Controller::Stop()
 {
+#ifdef VPX_STEAM_FRAME
+   if (m_romFix)
+      m_romFix->Stop(); // Before the flush below, which runs its pending steps
+#endif
    PinmameSetTimeFence(0.0);
 
    // libpinmame defers message dispatch to the main thread through RunOnMainThread, queueing callbacks from its game thread.
@@ -607,6 +622,10 @@ bool Controller::GetSwitch(int switchNo) const
 
 void Controller::SetSwitch(int switchNo, bool state)
 {
+#ifdef VPX_STEAM_FRAME
+   if (m_romFix && m_romFix->HoldsSwitch(switchNo, state))
+      return;
+#endif
    const int switchNoOfs = switchNo + SWITCH_OFFSET;
    if (switchNoOfs < 0)
       return;

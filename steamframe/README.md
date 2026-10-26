@@ -12,9 +12,12 @@ upstream's files only get small, guarded hooks into it.
 | Build of the fork: sources, compile definitions, libraries | `steamframe/steamframe.cmake`, included by one line of the root `CMakeLists.txt` |
 | Dependencies the fork adds (libzip for the web server, libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
-| Tools to sync with upstream and regenerate the shaders | `steamframe/tools/` |
+| Patches of libspatialaudio (soundfield rotation fade, see `docs/Spatial Audio Crackle When Turning the Head.md`) | `steamframe/patches/libspatialaudio/`, applied by the `external.sh` of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 |
+| Patches of libpinmame (memory maps of 4-bit memory: nibble before mask, see `docs/PinMAME Memory Maps on 4-bit Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
+| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
+| Fixes of the tables and ROMs that do not work as they are: the recipes, and their record | `src/assets/fixes/fixes.json`, `docs/Table and ROM Fixes.md` |
 | Documentation of the fork | `docs/` (new files only) |
 
 ## Rules for upstream files
@@ -37,8 +40,8 @@ upstream's files only get small, guarded hooks into it.
    rendering, dynamic resolution, controller models, web server pairing, PinMAME messages...) are not guarded: they are kept as
    their own commits and proposed to upstream as pull requests. Once merged upstream, our commit becomes empty at the next sync and
    is dropped.
-5. **Generated files are never merged.** The shader headers (`src/shaders/bgfx_*.h`) are regenerated from the shader sources
-   (`steamframe/tools/regen-shaders.sh`). Change the `.sc`/`.sh` sources, never the headers by hand.
+5. **Shaders are compiled by the build.** Since upstream 0e4e80d92 (2026-10-27), the build generates the bgfx shader headers
+   (`make/CMakeLists_shaders.txt`, in `build/gen/shaders/`, with the `shaderc` built by `platforms/*/external.sh`). Change the `.sc`/`.sh` sources.
 6. **Line endings.** `src/core/player.cpp` uses CRLF: scripted edits must keep it, or the whole file shows as changed.
 
 ## Syncing with upstream
@@ -48,16 +51,16 @@ OpenXR code the fork builds on, and its 10.8.1 builds are pre-releases made from
 can carry regressions (libwinevbs on 2026-10-18), hence a Frame test before every publication.
 
 The fork is a short series of commits rebased on upstream at every sync, **one commit per area** (build, OpenXR, renderer, in-game UI,
-core hooks, PinMAME, web, launcher, documentation and tools, regenerated shader headers), each file belonging to one commit only, so
+core hooks, PinMAME, web, launcher, documentation and tools), each file belonging to one commit only, so
 that an upstream change to a file conflicts with one of our commits at most. The rebase rewrites the history: the fork's `master` is
 force-pushed after each sync, and the previous state stays reachable through the `pre-sync-<date>` tags (and `pre-squash-20261018`, the
 history before the squash). A change of the fork made between two syncs is committed with `git commit --fixup=<the commit of its area>`,
-then folded in with `git rebase -i --autosquash origin/master` (no editor needed: `GIT_SEQUENCE_EDITOR=true`); a new file goes to the
-commit of its area.
+then folded in by the sync (`steamframe/tools/fold-fixups.py`: the part of each file goes to the commit which last touched the file, so
+that folding cannot conflict); a new file goes to the commit of its area.
 
 ```sh
 steamframe/tools/upstream-report.sh                 # optional: preview the upstream commits to review (VR/XR first)
-steamframe/tools/sync-upstream.sh                   # fetch, rebase our commits on origin/master, regenerate the shaders, report
+steamframe/tools/sync-upstream.sh                   # fetch, fold the fixups, rebase our commits on origin/master, report
 # on conflicts: resolve, git add, then run the --continue command the script prints (it runs from a copy in the git folder)
 <git folder>/steamframe-sync/sync-upstream.sh --continue    # or --abort
 ```
@@ -83,7 +86,7 @@ The workspace folder holds, side by side:
 | `Doc/` | github.com/SPD13/vp_vr-steam-frame-docs: Frame build, deploy and release scripts (`steam-frame-build/`), plans |
 | `steam-frame-package/` | the last Frame build, as deployed |
 
-1. **Start from the published state.** In `vpinball-sync/`, with a clean tree: `git fetch fork origin && git reset --hard fork/master`
+1. **Start from the published state.** In `vpinball-sync/`, with a clean tree: `git fetch --multiple fork origin && git reset --hard fork/master`
    (the branch is `steamframe-squash`). `steamframe/tools/upstream-report.sh` previews what comes in.
 2. **Sync.** `steamframe/tools/sync-upstream.sh`. Resolve conflicts with the rules above (our lines in the `VPX_STEAM_FRAME` branch,
    upstream's line kept as it is in the `#else`), keeping CRLF files CRLF, then `--continue`.
@@ -109,6 +112,30 @@ The workspace folder holds, side by side:
    (`Doc/steam-frame-build/make-release.sh <major.minor.patch>`): numbered since 0.5.0 (the minor number for new features, the patch number
    for fixes only), tagged `v<version>` and titled "Visual Pinball X: Steam Frame Edition <version>" on GitHub.
 
+### Patches of the dependencies
+
+The fork patches three dependencies that upstream downloads and builds in `platforms/*/external.sh`: bgfx, libspatialaudio and
+libpinmame (table above). Each block applies the `*.patch` of its folder in `steamframe/patches/` after the download, and its cache key
+carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency builds rebuild. At each sync:
+
+- **Upstream changed the block** (a conflict on the `Steam Frame Edition` lines): keep upstream's new lines and put our two lines back
+  (the patch loop after the `cd` into the source, the tag at the end of the `*_EXPECTED_SHA`).
+- **Upstream moved to another version** (`platforms/config.sh`: `BGFX_CMAKE_VERSION`, `LIBSPATIALAUDIO_SHA`, `PINMAME_SHA`): the
+  dependency scripts of steps 4 and 6 apply the patches to it. A patch that does not apply stops the script (`set -e`). Then:
+  - if upstream has the fix (the libpinmame loop uses `patch --forward`, which reports `Ignoring previously applied (or reversed)
+    patch`), drop the patch file, the two lines of each `external.sh` and the tag, and the entry of `.github/README.md`
+    ("Candidates for merge upstream");
+  - otherwise make the patch again on the new version (download it like the script, apply the hunks by hand, `diff -u` from the
+    source folder with `a/` and `b/` prefixes), and keep the tag.
+- **A patch of the fork changes**: increase its tag (`-memmap2`), or the dependency builds already made keep the old library.
+
+libpinmame (`01-memmap-nibble-then-mask.patch`, 2026-10-28): `SetMemMapImpl` of `src/libpinmame/libpinmame.cpp` applied the mask of a
+memory map field to the raw byte, before the nibble of the platform, so the game over and tilt of the Bally AS-2518-17/-35 and Stern
+MPU-100 maps (43 maps, 169 ROMs) read constant "in game" and their scores were never recorded. The patch takes the nibbles first, as
+the format and its reference parser do. It is proposed upstream; once merged, the bundled maps need no change (they are upstream's,
+`system-rom-20.map.json` included). After a sync that changes `PINMAME_SHA`, check that `SetMemMapImpl` still has the code the patch
+replaces, and play Evel Knievel (checklist).
+
 ### When upstream builds what the fork has
 
 Upstream develops VR for the Quest and for OpenXR on the desktop: it may add a feature the fork already has, differently. Git sees no
@@ -130,16 +157,11 @@ test: add each one found to the checklist.
 - Image sharpness as before: render resolution (`ResFactor` semantics, 2026-10-18), foveated rendering and dynamic resolution.
 - VR menu, in a table and in the lobby; the table picker (imgui updates).
 - Scores recorded after a game; sound.
+- Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
+  (libpinmame patch, 2026-10-28). It can be checked on macOS too.
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
-
-### Shader headers
-
-`regen-shaders.sh` runs upstream's `src/shaders/bgfx/shaders.sh` for the headers listed in its `HEADERS` (the ones built from shader
-sources that the fork changes), with a `shaderc` built once from the bgfx sources of `external/`. The DirectX blobs cannot be
-compiled on macOS or Linux: they are copied from upstream's headers, so the Direct3D builds keep upstream's shaders until the
-headers are regenerated on Windows (`src/shaders/bgfx/shaders.ps1`). On 2026-10-18 it reproduced `bgfx_basic.h` and `bgfx_ball.h`
-exactly; `bgfx_imgui.h`, last generated with the Windows `shaderc.exe`, gets different but equivalent SPIR-V and Metal blobs from the
-macOS `shaderc`: check the in-game menu on the Frame after the first sync that regenerates it.
+- The loading message stays steady in the headset while a table loads, from the lobby and from another table: no doubled or moving
+  image (frames without anything to present keep the swapchain image, in upstream's frame gate since 2026-10-30, `m_frameRequested`).
 
 ### First sync (2026-10-18)
 

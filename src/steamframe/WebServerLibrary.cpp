@@ -13,6 +13,7 @@
 #include "steamframe/Launcher.h"
 #include "steamframe/PupPackOptions.h"
 #include "steamframe/ScoreStore.h"
+#include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
 #include "steamframe/vrui/UpdateCheck.h"
 
@@ -70,6 +71,7 @@ WebServer::RouteHandler WebServer::GetLibraryRoute(struct mg_http_message* hm)
       { "/profile-active", &WebServer::ProfileActive },
       { "/pup-options", &WebServer::PupOptions },
       { "/pinmame-aliases", &WebServer::PinmameAliases },
+      { "/table-fixes", &WebServer::TableFixes },
       { "/backup-items", &WebServer::BackupItems },
       { "/backup-prepare", &WebServer::BackupPrepare },
       { "/backup-status", &WebServer::BackupStatus },
@@ -215,8 +217,10 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
    for (const VPinballLib::TableLibrary::UnknownGame& unknown : library.GetUnknownGames())
       unknownGames[unknown.uuid] = unknown.rom;
    json tables = json::array();
+   VPinballLib::TableFixes& fixes = g_launcher->GetTableFixes();
    for (const VPinballLib::Table& table : library.GetTables()) {
       const auto unknownGame = unknownGames.find(table.uuid);
+      const VPinballLib::TableFixes::Summary fixSummary = fixes.GetSummary(table);
       tables.push_back({
          { "uuid", table.uuid },
          { "name", table.name },
@@ -232,9 +236,65 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
          { "pupPack", table.pupPacks.empty() ? ""s : table.pupPacks.front() },
          { "hasPupPack", table.hasPupPack },
          { "unknownGame", unknownGame == unknownGames.end() ? ""s : unknownGame->second },
+         { "fixesAvailable", fixSummary.available },
+         { "fixesApplied", fixSummary.applied },
          { "playing", IsPlayed(library, table) } });
    }
    const string response = json { { "revision", library.GetRevision() }, { "scanning", library.IsScanning() }, { "tables", tables } }.dump();
+   mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
+}
+
+// GET: the recipes of the table fixes, and the tables of the library they match with their status. POST with 'uuid': patch that table, or patch it
+// again (see TableFixes::Patch)
+void WebServer::TableFixes(struct mg_connection *c, struct mg_http_message* hm)
+{
+   VPinballLib::TableLibrary& library = g_launcher->GetTableLibrary();
+   VPinballLib::TableFixes& fixes = g_launcher->GetTableFixes();
+   if (mg_strcmp(hm->method, mg_str("POST")) == 0) {
+      const std::optional<VPinballLib::Table> table = GetRequestedTable(c, hm);
+      if (!table)
+         return;
+      std::vector<string> messages;
+      const bool patched = fixes.Patch(*table, messages);
+      if (patched && IsPlayed(library, *table))
+         messages.push_back("The table is being played: the fixes apply when it starts again");
+      const string response = json { { "patched", patched }, { "messages", messages } }.dump();
+      mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
+      return;
+   }
+
+   json recipes = json::array();
+   for (const VPinballLib::TableFixes::Recipe& recipe : fixes.GetRecipes()) {
+      json roms = json::array();
+      if (recipe.rom)
+         for (const VPinballLib::TableFixes::RomSequence& sequence : recipe.rom->sequences)
+            roms.push_back({ { "roms", sequence.roms }, { "switches", sequence.switches } });
+      recipes.push_back({
+         { "id", recipe.id },
+         { "version", recipe.version },
+         { "title", recipe.title },
+         { "symptom", recipe.symptom },
+         { "cause", recipe.cause },
+         { "change", recipe.change },
+         { "doc", recipe.doc },
+         { "local", recipe.local },
+         { "disabled", recipe.disabled },
+         { "kind", recipe.script.empty() ? "rom" : "script" },
+         { "files", recipe.files },
+         { "roms", recipe.roms },
+         { "scriptPatches", recipe.script.size() },
+         { "romSequences", roms } });
+   }
+   json tables = json::array();
+   for (const VPinballLib::Table& table : library.GetTables()) {
+      json tableFixes = json::array();
+      for (const VPinballLib::TableFixes::TableFix& fix : fixes.GetTableFixes(table))
+         tableFixes.push_back({ { "id", fix.id }, { "status", VPinballLib::TableFixes::GetStatusName(fix.status) }, { "detail", fix.detail },
+            { "appliedVersion", fix.appliedVersion }, { "appliedAt", fix.appliedAt } });
+      if (!tableFixes.empty())
+         tables.push_back({ { "uuid", table.uuid }, { "name", table.name }, { "path", table.path }, { "rom", table.rom }, { "playing", IsPlayed(library, table) }, { "fixes", tableFixes } });
+   }
+   const string response = json { { "localPath", fixes.GetLocalRecipesPath().string() }, { "recipes", recipes }, { "tables", tables } }.dump(-1, ' ', false, json::error_handler_t::replace);
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }
 
