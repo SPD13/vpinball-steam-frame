@@ -235,6 +235,7 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
          { "usesPup", table.usesPup },
          { "pupPack", table.pupPacks.empty() ? ""s : table.pupPacks.front() },
          { "hasPupPack", table.hasPupPack },
+         { "madeForVR", table.madeForVR },
          { "unknownGame", unknownGame == unknownGames.end() ? ""s : unknownGame->second },
          { "fixesAvailable", fixSummary.available },
          { "fixesApplied", fixSummary.applied },

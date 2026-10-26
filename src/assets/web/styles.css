@@ -1323,7 +1323,8 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 .table-tile-placeholder[hidden],
 .table-tile-badge[hidden],
 .table-tile-pup[hidden],
-.table-tile-unknown[hidden] {
+.table-tile-unknown[hidden],
+.table-tile-novr[hidden] {
   display: none;
 }
 
@@ -1343,6 +1344,23 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 
 .table-tile-unknown:hover {
   background: #facc15;
+}
+
+/* The table has no VR room or cabinet (bottom right, above the unknown game tag when both show) */
+.table-tile-novr {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: #eab308;
+  color: #422006;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.table-tile-unknown:not([hidden]) ~ .table-tile-novr {
+  bottom: 2rem;
 }
 
 /* Above the tables: the tables that can not start for want of an alias, linked to the alias editor */
@@ -1824,6 +1842,11 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
 
 .table-tile-fix[hidden] {
   display: none;
+}
+
+/* Above the 'No VR room' tag when both show (the fix badge is hidden for the tables with an unknown game) */
+.table-tile-novr:not([hidden]) ~ .table-tile-fix {
+  bottom: 2rem;
 }
 
 /* Tables page: the search and the "Add table" button, which opens the Files page */

@@ -131,6 +131,8 @@ public:
    string m_tileToggleIconOff;
    // Optional short text drawn as a tag in the bottom left corner of the image of a tile (for example 'PuP' for the tables which have their PinUP Player pack)
    string m_tileBadge;
+   // Optional short warning drawn as a tag in the top left corner of the image of a tile (for example 'No VR room' for the tables made for desktops)
+   string m_tileWarning;
 
    // UI behavior
    bool m_customHighlight = false; // CustomRender items which highlight their own parts (like buttons): the page does not highlight their whole row

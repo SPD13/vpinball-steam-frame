@@ -197,6 +197,7 @@ function createTile(uuid) {
       <span class="table-tile-badge" hidden>Playing</span>
       <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
       <a class="table-tile-unknown" href="vpx.html?aliases" hidden>&#9888; Unknown game</a>
+      <span class="table-tile-novr" hidden title="No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset">No VR room</span>
       <a class="table-tile-fix" href="vpx.html?fixes" hidden></a>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>
@@ -214,6 +215,7 @@ function createTile(uuid) {
     badge: tile.querySelector('.table-tile-badge'),
     pup: tile.querySelector('.table-tile-pup'),
     unknown: tile.querySelector('.table-tile-unknown'),
+    noVr: tile.querySelector('.table-tile-novr'),
     fix: tile.querySelector('.table-tile-fix'),
     star: tile.querySelector('.table-tile-star'),
     name: tile.querySelector('.table-tile-name'),
@@ -240,6 +242,7 @@ function updateTile(refs, table) {
   refs.pup.hidden = !table.hasPupPack;
   refs.unknown.hidden = !table.unknownGame;
   refs.unknown.title = table.unknownGame ? getUnknownGameText(table) : '';
+  refs.noVr.hidden = table.madeForVR !== false;
   // A fix available for the table, or applied to it (see the Table and ROM fixes of the Files page)
   refs.fix.hidden = !!table.unknownGame || (!table.fixesAvailable && !table.fixesApplied);
   refs.fix.classList.toggle('available', table.fixesAvailable > 0);

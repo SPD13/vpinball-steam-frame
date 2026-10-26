@@ -24,8 +24,9 @@ namespace {
 constexpr const char* IMPORT_FOLDER = ".import"; // Hidden scratch folder inside the tables folder, so that imported folders are moved instead of copied
 constexpr const char* const SIDECAR_EXTENSIONS[] = { ".ini", ".vbs", ".directb2s", ".png", ".jpg" };
 // Version of what Config::readPupUse finds in the scripts, saved with it in table-stats.json: raised when it finds other things (2: the ROM
-// of the first line which is not commented out, and none for the tables not starting PinMAME), so that the tables are read again
-constexpr int SCRIPT_SCAN_VERSION = 2;
+// of the first line which is not commented out, and none for the tables not starting PinMAME; 3: whether the table is made for VR, see
+// Config::readMadeForVR), so that the tables are read again
+constexpr int SCRIPT_SCAN_VERSION = 3;
 
 string ToLower(string value)
 {
@@ -75,7 +76,7 @@ bool SameTable(const Table& a, const Table& b)
 {
    return a.uuid == b.uuid && a.name == b.name && a.path == b.path && a.image == b.image && a.createdAt == b.createdAt && a.modifiedAt == b.modifiedAt
       && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite && a.usesPup == b.usesPup && a.pupPacks == b.pupPacks
-      && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack && a.rom == b.rom;
+      && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack && a.rom == b.rom && a.madeForVR == b.madeForVR;
 }
 
 }
@@ -304,6 +305,7 @@ static void ParseStats(const nlohmann::json& stats, std::vector<Table>& tables)
          table.pupPacks = it->value("pupPacks", std::vector<string>());
          table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
          table.rom = it->value("rom", ""s);
+         table.madeForVR = it->value("madeForVR", true);
          if (it->value("scanVersion", 0) < SCRIPT_SCAN_VERSION)
             table.pupScannedAt = 0; // Read by an older version, which did not find the same things in the script: read again
       }
@@ -349,6 +351,7 @@ void TableLibrary::SaveJson()
             stats[table.uuid]["pupPacks"] = table.pupPacks;
             stats[table.uuid]["pupScannedAt"] = table.pupScannedAt;
             stats[table.uuid]["rom"] = table.rom;
+            stats[table.uuid]["madeForVR"] = table.madeForVR;
             stats[table.uuid]["scanVersion"] = SCRIPT_SCAN_VERSION;
          }
       }
@@ -582,6 +585,8 @@ void TableLibrary::UpdatePupPacks(std::vector<Table>& tables) const
          } catch (const std::exception& e) {
             Log(LogLevel::Warn, "Failed to read the script of " + tablePath.string() + ": " + e.what());
          }
+         if (m_config.readMadeForVR)
+            table.madeForVR = m_config.readMadeForVR(tablePath);
          table.pupScannedAt = table.modifiedAt != 0 ? table.modifiedAt : 1;
       }
       table.hasPupPack = false;

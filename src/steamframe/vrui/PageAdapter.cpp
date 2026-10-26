@@ -315,6 +315,15 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
                drawList->AddRectFilled(badgeMin, badgeMin + textSize + badgePad * 2.f, Theme::kAccent, Theme::Px(0.3f));
                drawList->AddText(badgeMin + badgePad, IM_COL32_WHITE, item->m_tileBadge.c_str());
             }
+            // Warning, in the top left corner of the image
+            if (!item->m_tileWarning.empty())
+            {
+               const ImVec2 textSize = ImGui::CalcTextSize(item->m_tileWarning.c_str());
+               const ImVec2 badgePad(Theme::Px(0.35f), Theme::Px(0.1f));
+               const ImVec2 badgeMin(imagePos.x + Theme::Px(0.3f), imagePos.y + Theme::Px(0.3f));
+               drawList->AddRectFilled(badgeMin, badgeMin + textSize + badgePad * 2.f, IM_COL32(234, 179, 8, 240), Theme::Px(0.3f));
+               drawList->AddText(badgeMin + badgePad, IM_COL32(66, 32, 6, 255), item->m_tileWarning.c_str());
+            }
          }
          bool toggleHovered = false;
          if (item->m_tileToggleState && item->m_tileToggleAction)
