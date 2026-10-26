@@ -25,8 +25,9 @@ constexpr const char* IMPORT_FOLDER = ".import"; // Hidden scratch folder inside
 constexpr const char* const SIDECAR_EXTENSIONS[] = { ".ini", ".vbs", ".directb2s", ".png", ".jpg" };
 // Version of what Config::readPupUse finds in the scripts, saved with it in table-stats.json: raised when it finds other things (2: the ROM
 // of the first line which is not commented out, and none for the tables not starting PinMAME; 3: whether the table is made for VR, see
-// Config::readMadeForVR; 4: no ROM for the tables which paste Controller.vbs but do not call LoadVPM), so that the tables are read again
-constexpr int SCRIPT_SCAN_VERSION = 4;
+// Config::readMadeForVR; 4: no ROM for the tables which paste Controller.vbs but do not call LoadVPM; 5: the tables whose file is named VR
+// are made for VR), so that the tables are read again
+constexpr int SCRIPT_SCAN_VERSION = 5;
 
 string ToLower(string value)
 {

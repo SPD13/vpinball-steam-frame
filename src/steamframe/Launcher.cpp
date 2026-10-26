@@ -337,11 +337,23 @@ vector<IEditable*> Launcher::GetRoomParts(PinTable* table)
 // - in a part group or a layer whose name has the word 'VR' or 'room' (like 'VR', 'VR Room', 'VR_Cab'),
 // - named after VR or the cabinet, the conventions of the VR tables (VR_Floor, VRBackglass, PinCab_Backbox...),
 // - or in a collection named 'VR...'.
+// A table file named with the word 'VR' (like 'VR Room', 'VR_ROOM_', 'VRROOM', 'DT-FS-VR-MR') is taken as made for VR whatever its parts:
+// the authors name their VR versions so, and some build their rooms with none of these conventions (Indiana Jones 'VR_ROOM_... temple room',
+// a 10.6 table: its room and cabinet are parts named Sand, Wall Left, LeftCab... in numbered layers, and its 'VR Room' collection is empty).
 // The same rules apply to a loaded table (IsMadeForVR) and to a table file (ReadMadeForVR, for the table picker).
 static bool IsVRPartName(const string& name)
 {
    const string lowerName = lowerCase(name);
    return lowerName.starts_with("vr") || lowerName.starts_with("pincab");
+}
+
+// The word 'VR', not the letters inside another word
+static bool HasVRWord(const string& lowerName)
+{
+   for (size_t pos = lowerName.find("vr"); pos != string::npos; pos = lowerName.find("vr", pos + 1))
+      if ((pos == 0 || !isalpha(static_cast<unsigned char>(lowerName[pos - 1]))) && (pos + 2 == lowerName.size() || !isalpha(static_cast<unsigned char>(lowerName[pos + 2]))))
+         return true;
+   return false;
 }
 
 static bool IsVRPartGroup(const string& name, PartGroupData::SpaceReference space, unsigned int mask)
@@ -350,10 +362,13 @@ static bool IsVRPartGroup(const string& name, PartGroupData::SpaceReference spac
       || ((mask & PartGroupData::PMVM_VIRTUAL_REALITY) && !(mask & PartGroupData::PMVM_DESKTOP)))
       return true;
    const string lowerName = lowerCase(name);
-   for (size_t pos = lowerName.find("vr"); pos != string::npos; pos = lowerName.find("vr", pos + 1))
-      if ((pos == 0 || !isalpha(static_cast<unsigned char>(lowerName[pos - 1]))) && (pos + 2 == lowerName.size() || !isalpha(static_cast<unsigned char>(lowerName[pos + 2]))))
-         return true;
-   return lowerName.find("room") != string::npos;
+   return HasVRWord(lowerName) || lowerName.find("room") != string::npos;
+}
+
+static bool IsVRTableFile(const std::filesystem::path& tablePath)
+{
+   const string lowerName = lowerCase(tablePath.stem().string());
+   return HasVRWord(lowerName) || lowerName.find("vrroom") != string::npos;
 }
 
 static bool IsVRCollection(const string& name, size_t partCount)
@@ -363,6 +378,8 @@ static bool IsVRCollection(const string& name, size_t partCount)
 
 bool Launcher::IsMadeForVR(PinTable* table)
 {
+   if (IsVRTableFile(table->m_filename))
+      return true;
    for (IEditable* part : table->GetParts())
    {
       if (part->GetItemType() == ItemTypeEnum::eItemPartGroup)
@@ -452,6 +469,8 @@ static int RecordInt(const vector<uint8_t>& data)
 // the table picker warns only about the tables known to have no VR room or cabinet.
 bool Launcher::ReadMadeForVR(const std::filesystem::path& tablePath)
 {
+   if (IsVRTableFile(tablePath))
+      return true;
    POLE::Storage storage(POLE::PathToFilename(tablePath).c_str());
    storage.open();
    if (storage.result() != POLE::Storage::Ok || !storage.exists("GameStg/Version"))
