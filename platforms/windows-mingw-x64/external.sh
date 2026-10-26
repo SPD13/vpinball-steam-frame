@@ -548,7 +548,7 @@ fi
 # build libspatialaudio
 #
 
-LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001"
+LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}-${LIBMYSOFA_SHA}_001-rotfix1" # Steam Frame Edition: -rotfix1 for the patches of steamframe/patches/libspatialaudio
 LIBSPATIALAUDIO_FOUND_SHA="$([ -f libspatialaudio/cache.txt ] && cat libspatialaudio/cache.txt || echo "")"
 
 if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
@@ -562,6 +562,7 @@ if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
    tar xzf libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
    mv libspatialaudio-${LIBSPATIALAUDIO_SHA} libspatialaudio
    cd libspatialaudio
+   for p in ../../../../../steamframe/patches/libspatialaudio/*.patch; do patch -p1 < "$p"; done # Steam Frame Edition: soundfield rotation fade (VR head tracking)
    cmake \
       -DBUILD_SHARED_LIBS=OFF \
       -DBUILD_TESTING=OFF \
