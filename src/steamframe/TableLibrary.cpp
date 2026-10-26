@@ -547,6 +547,8 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
    if (!jsonExists || tables.size() != m_tables.size() || !std::equal(tables.begin(), tables.end(), m_tables.begin(), SameTable))
       Commit(std::move(tables));
    m_scanned = true;
+   if (m_config.onScanned)
+      m_config.onScanned(GetTables());
    progress(100, "Complete");
 }
 
@@ -1101,6 +1103,8 @@ std::vector<Table> TableLibrary::Import(const fs::path& path, const ProgressCall
    std::vector<Table> tables = m_tables;
    tables.insert(tables.end(), imported.begin(), imported.end());
    Commit(std::move(tables));
+   if (m_config.onScanned)
+      m_config.onScanned(GetTables());
    if (onProgress)
       onProgress(100, "Import complete");
    return imported;

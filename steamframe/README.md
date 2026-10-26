@@ -15,6 +15,7 @@ upstream's files only get small, guarded hooks into it.
 | Tools to sync with upstream and regenerate the shaders | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
+| Fixes of the tables and ROMs that do not work as they are: the recipes, and their record | `src/assets/fixes/fixes.json`, `docs/Table and ROM Fixes.md` |
 | Documentation of the fork | `docs/` (new files only) |
 
 ## Rules for upstream files

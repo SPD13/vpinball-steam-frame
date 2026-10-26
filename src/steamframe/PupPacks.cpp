@@ -131,7 +131,11 @@ string ReadTableScript(const std::filesystem::path& vpxPath)
       std::ifstream file(vbsPath, std::ios::binary);
       return string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
    }
+   return ReadEmbeddedScript(vpxPath);
+}
 
+string ReadEmbeddedScript(const std::filesystem::path& vpxPath)
+{
    // Same reading as ExportVBSCommand (core/AppCommands.cpp): only the GameData stream, not the whole table
    string script;
    POLE::Storage rootStorage(POLE::PathToFilename(vpxPath).c_str());

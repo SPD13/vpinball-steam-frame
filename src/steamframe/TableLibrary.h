@@ -89,6 +89,9 @@ public:
       // 'defaultAliasesPath' (VPinMAME's built-in aliases, VPMAlias.txt) when there is none.
       std::filesystem::path pinmameCatalogPath;
       std::filesystem::path defaultAliasesPath;
+      // Optional: called with the tables after each scan and import, from the thread doing it, for the fixes of the tables added or
+      // changed (see TableFixes::OnTablesScanned). It must not call the operations of the library that modify it.
+      std::function<void(const std::vector<Table>& tables)> onScanned;
    };
 
    explicit TableLibrary(Config config);

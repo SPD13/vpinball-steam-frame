@@ -1656,6 +1656,176 @@ body.dragging-files .file-list:has(.file-item.drag-over) {
   font-weight: 600;
 }
 
+/* Table and ROM fixes (Files page, Advanced menu) */
+.tables-dialog.fixes-dialog {
+  width: min(48rem, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.fixes-heading {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+.fixes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fixes-empty {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.fixes-item {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.fixes-item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.fixes-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fixes-item-path {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.fixes-item-header .btn {
+  flex-shrink: 0;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.fixes-item-fixes {
+  list-style: none;
+  margin-top: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fixes-status {
+  display: inline-block;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--secondary-color);
+}
+
+.fixes-status.available {
+  background: #7c3aed;
+}
+
+.fixes-status.applied {
+  background: #0d9488;
+}
+
+.fixes-status.outdated {
+  background: #b45309;
+}
+
+.fixes-status.notApplicable {
+  color: var(--text-secondary);
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+}
+
+.fixes-detail {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.fixes-item summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.fixes-tag {
+  margin-left: 0.5rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.fixes-tag.off {
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.fixes-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.fixes-fields dt {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.fixes-fields dd {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .fixes-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .fixes-fields dd {
+    margin-bottom: 0.25rem;
+  }
+}
+
+.fixes-doc {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* Tables page: a fix applied to the table, or available for it (bottom right, unless the table has an unknown game), linked to the fixes */
+.table-tile-fix {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: #0d9488;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.table-tile-fix.available {
+  background: #7c3aed;
+}
+
+.table-tile-fix[hidden] {
+  display: none;
+}
+
 /* Tables page: the search and the "Add table" button, which opens the Files page */
 .tables-toolbar-actions {
   display: flex;

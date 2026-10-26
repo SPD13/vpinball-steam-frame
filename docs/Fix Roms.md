@@ -3,10 +3,13 @@
 Oct 3, 2026 · @SPD13
 
 PinMAME tables that load but cannot be played, and how to fix them. Each fix has its own document with the full investigation.
+The fixes the application applies by itself, and the tables they apply to, are recorded in
+[Table and ROM Fixes](Table%20and%20ROM%20Fixes.md) (Files page of the web server, Advanced > Table and ROM fixes).
 
 | Symptom | Cause | Document |
 | --- | --- | --- |
-| Coins are accepted but the display stays at CREDITS 0 (Gottlieb System 3: Street Fighter II, Super Mario Bros, Stargate) | The ROM's settings in a new NVRAM are all zero, so every price is 0 | [Gottlieb System 3 No Credits](Gottlieb%20System%203%20No%20Credits.md) |
+| Coins are accepted but the display stays at CREDITS 0 (Gottlieb System 3: Street Fighter II, Super Mario Bros, Stargate) | The ROM's settings in a new NVRAM are all zero, so every price is 0. Fixed by the application since 2026-10-25 (`gts3-zero-settings`) | [Gottlieb System 3 No Credits](Gottlieb%20System%203%20No%20Credits.md) |
+| The table closes as soon as it starts, back to the lobby (Back to the Future VR Room) | The script calls `vpmInit` twice, which `core.vbs` refuses by stopping the table (the message only goes to the log). Fixed by the application (`bttf-vr-room-double-vpminit`) | [Table and ROM Fixes](Table%20and%20ROM%20Fixes.md#bttf-vr-room-double-vpminit) |
 | Backglass stays dark, Start does nothing, no ball (The Simpsons) | The table asks for an alias (`simp`) that PinMAME only knows through `pinmame/alias.txt`, which was missing | [PinMAME ROM Aliases](PinMAME%20ROM%20Aliases.md) |
 
 ## First checks
