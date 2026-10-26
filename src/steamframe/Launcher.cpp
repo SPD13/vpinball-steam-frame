@@ -17,6 +17,7 @@
 #include "parts/Material.h"
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
+#include "pole/pole.h"
 #include "parts/primitive.h"
 #include "ui/live/LiveUI.h"
 #include "core/player.h"
@@ -84,6 +85,7 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
          const PupPacks::TableUse use = PupPacks::GetTableUse(PupPacks::ReadTableScript(tablePath));
          return VPinballLib::TableLibrary::PupUse { use.usesPup, use.names, use.rom, use.games };
       };
+      config.readMadeForVR = [](const std::filesystem::path& tablePath) { return ReadMadeForVR(tablePath); };
       // Where ROMs found in uploads go: the ROM folder of PinMAME, as SetupSharedPinMAMEFolder chooses it (the user's PinMAME folder, the
       // one of the home folder, or the shared one of the tables)
       const string pinmameFolder = g_settingsService.GetAppSettings().GetString(GetPinMAMEPathPropId());
@@ -328,6 +330,207 @@ vector<IEditable*> Launcher::GetRoomParts(PinTable* table)
             if (part->GetItemType() != ItemTypeEnum::eItemPartGroup && std::ranges::find(parts, part) == parts.end())
                parts.push_back(part);
    return parts;
+}
+
+// Broader than the room: a VR cabinet alone is enough. The parts for VR are:
+// - in a part group placed in the room or the cabinet space, or shown in VR but not on a desktop,
+// - in a part group or a layer whose name has the word 'VR' or 'room' (like 'VR', 'VR Room', 'VR_Cab'),
+// - named after VR or the cabinet, the conventions of the VR tables (VR_Floor, VRBackglass, PinCab_Backbox...),
+// - or in a collection named 'VR...'.
+// The same rules apply to a loaded table (IsMadeForVR) and to a table file (ReadMadeForVR, for the table picker).
+static bool IsVRPartName(const string& name)
+{
+   const string lowerName = lowerCase(name);
+   return lowerName.starts_with("vr") || lowerName.starts_with("pincab");
+}
+
+static bool IsVRPartGroup(const string& name, PartGroupData::SpaceReference space, unsigned int mask)
+{
+   if (space == PartGroupData::SpaceReference::SR_ROOM || space == PartGroupData::SpaceReference::SR_CABINET || space == PartGroupData::SpaceReference::SR_CABINET_FEET
+      || ((mask & PartGroupData::PMVM_VIRTUAL_REALITY) && !(mask & PartGroupData::PMVM_DESKTOP)))
+      return true;
+   const string lowerName = lowerCase(name);
+   for (size_t pos = lowerName.find("vr"); pos != string::npos; pos = lowerName.find("vr", pos + 1))
+      if ((pos == 0 || !isalpha(static_cast<unsigned char>(lowerName[pos - 1]))) && (pos + 2 == lowerName.size() || !isalpha(static_cast<unsigned char>(lowerName[pos + 2]))))
+         return true;
+   return lowerName.find("room") != string::npos;
+}
+
+static bool IsVRCollection(const string& name, size_t partCount)
+{
+   return partCount > 0 && lowerCase(name).starts_with("vr");
+}
+
+bool Launcher::IsMadeForVR(PinTable* table)
+{
+   for (IEditable* part : table->GetParts())
+   {
+      if (part->GetItemType() == ItemTypeEnum::eItemPartGroup)
+         continue;
+      if (IsVRPartName(part->GetName()))
+         return true;
+      for (const PartGroup* group = part->GetPartGroup(); group != nullptr; group = group->GetPartGroup())
+         if (IsVRPartGroup(group->GetName(), group->m_d.m_spaceReference, group->m_d.m_playerModeVisibilityMask))
+            return true;
+   }
+   return std::ranges::any_of(table->GetCollections(), [](const CComObject<Collection>* collection) { return IsVRCollection(collection->m_name, collection->GetParts().size()); });
+}
+
+// The records of a part or collection stream whose tag is asked for, the others being skipped without reading them (meshes can be large).
+// A record is its length (tag and data), its tag, and its data, up to the ENDB tag (files after version 30, see BiffReader::AsObject),
+// except the font of the textboxes and decals, which follows its record without being counted in its length (see AsFontDescriptor).
+static bool ReadRecords(POLE::Stream& stream, std::initializer_list<int> tags, const std::function<void(int tag, const vector<uint8_t>& data)>& onRecord)
+{
+   const uint64_t size = stream.size();
+   while (stream.tell() + 8 <= size)
+   {
+      int32_t header[2];
+      if (stream.read(reinterpret_cast<unsigned char*>(header), sizeof(header)) != sizeof(header) || header[0] < 4)
+         return false;
+      if (header[1] == FID(ENDB))
+         return true;
+      const uint64_t dataSize = static_cast<uint64_t>(header[0]) - 4;
+      if (stream.tell() + dataSize > size)
+         return false;
+      if (std::ranges::find(tags, header[1]) != tags.end())
+      {
+         vector<uint8_t> data(dataSize);
+         stream.read(data.data(), dataSize);
+         onRecord(header[1], data);
+      }
+      else
+         stream.seek(stream.tell() + dataSize);
+      if (header[1] == FID(FONT))
+      {
+         uint8_t font[11]; // Version, charset, attributes, weight, size, then the length of the name
+         if (stream.read(font, sizeof(font)) != sizeof(font))
+            return false;
+         stream.seek(stream.tell() + font[10]);
+      }
+   }
+   return false;
+}
+
+// Strings are their length in bytes, then their characters (see BiffReader::AsString and AsWideString)
+static string RecordString(const vector<uint8_t>& data)
+{
+   int32_t length = 0;
+   if (data.size() >= sizeof(int32_t))
+      memcpy(&length, data.data(), sizeof(int32_t));
+   return length > 0 && sizeof(int32_t) + length <= data.size() ? string(reinterpret_cast<const char*>(data.data()) + sizeof(int32_t), length) : string();
+}
+
+static string RecordWideString(const vector<uint8_t>& data)
+{
+   int32_t length = 0;
+   if (data.size() >= sizeof(int32_t))
+      memcpy(&length, data.data(), sizeof(int32_t));
+   if (length <= 0 || sizeof(int32_t) + length > data.size())
+      return string();
+#if (WCHAR_T_SIZE == 2) // Windows
+   wstring value(length / 2, L'\0');
+#else // Linux, macOS
+   std::u16string value(length / 2, u'\0');
+#endif
+   memcpy(value.data(), data.data() + sizeof(int32_t), value.size() * 2);
+#if (WCHAR_T_SIZE == 2)
+   return MakeString(value);
+#else
+   return MakeString(utf16_to_utf32(value));
+#endif
+}
+
+static int RecordInt(const vector<uint8_t>& data)
+{
+   int32_t value = 0;
+   if (data.size() >= sizeof(int32_t))
+      memcpy(&value, data.data(), sizeof(int32_t));
+   return value;
+}
+
+// Only the names, part groups and collections of the parts are read, not the table. A file that can not be read is taken as made for VR:
+// the table picker warns only about the tables known to have no VR room or cabinet.
+bool Launcher::ReadMadeForVR(const std::filesystem::path& tablePath)
+{
+   POLE::Storage storage(POLE::PathToFilename(tablePath).c_str());
+   storage.open();
+   if (storage.result() != POLE::Storage::Ok || !storage.exists("GameStg/Version"))
+      return true;
+   int32_t fileVersion = 0;
+   POLE::Stream versionStream(&storage, "GameStg/Version");
+   versionStream.read(reinterpret_cast<unsigned char*>(&fileVersion), sizeof(int32_t));
+   if (fileVersion < 1000) // Records without lengths, or encrypted (before VP10)
+      return true;
+
+   struct Group
+   {
+      PartGroupData::SpaceReference space = PartGroupData::SpaceReference::SR_PLAYFIELD;
+      unsigned int mask = PartGroupData::PMVM_ALL;
+      string parent;
+   };
+   std::unordered_map<string, Group> groups;
+   vector<std::pair<string, string>> parts; // Name, part group (or 10.7 layer)
+   for (const std::string& entry : storage.entries("GameStg"))
+   {
+      if (entry.starts_with("GameItem"))
+      {
+         POLE::Stream stream(&storage, "GameStg/" + entry);
+         ItemTypeEnum type = ItemTypeEnum::eItemInvalid;
+         if (stream.read(reinterpret_cast<unsigned char*>(&type), sizeof(int32_t)) != sizeof(int32_t))
+            return true;
+         string name, group;
+         Group groupData;
+         if (!ReadRecords(stream, { FID(NAME), FID(GRUP), FID(LANR), FID(SPRF), FID(PMSK) },
+                [&](int tag, const vector<uint8_t>& data)
+                {
+                   switch (tag)
+                   {
+                   case FID(NAME): name = RecordWideString(data); break;
+                   case FID(GRUP): group = RecordString(data); break;
+                   case FID(LANR): group = RecordString(data); break;
+                   case FID(SPRF): groupData.space = static_cast<PartGroupData::SpaceReference>(RecordInt(data)); break;
+                   case FID(PMSK): groupData.mask = static_cast<unsigned int>(RecordInt(data)); break;
+                   }
+                }))
+         {
+            PLOGW << "Failed to read the parts of " << tablePath << " (" << entry << "): taken as made for VR";
+            return true;
+         }
+         if (type == ItemTypeEnum::eItemPartGroup)
+         {
+            groupData.parent = group;
+            groups[name] = groupData;
+         }
+         else
+            parts.emplace_back(name, group);
+      }
+      else if (entry.starts_with("Collection"))
+      {
+         POLE::Stream stream(&storage, "GameStg/" + entry);
+         string name;
+         size_t partCount = 0;
+         ReadRecords(stream, { FID(NAME), FID(ITEM) }, [&](int tag, const vector<uint8_t>& data) { tag == FID(NAME) ? (void)(name = RecordWideString(data)) : (void)partCount++; });
+         if (IsVRCollection(name, partCount))
+            return true;
+      }
+   }
+
+   for (const auto& [name, groupName] : parts)
+   {
+      if (IsVRPartName(name))
+         return true;
+      // Up the part groups (10.7 layers have no stream: their name is all there is); the depth guards against a file whose groups loop
+      string current = groupName;
+      for (int depth = 0; !current.empty() && depth < 64; depth++)
+      {
+         const auto group = groups.find(current);
+         const Group groupData = group != groups.end() ? group->second : Group();
+         if (IsVRPartGroup(current, groupData.space, groupData.mask))
+            return true;
+         current = groupData.parent;
+      }
+   }
+   return false;
 }
 
 std::optional<bool> Launcher::GetPartVisible(IEditable* part)
@@ -697,7 +900,16 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
    player->m_liveUI->m_inGameUI.AddPage("lobby/rooms"s, []() { return VPX::InGameUI::CreateLobbyRoomsPage(); });
    CabinetDisplays::RegisterPage(player);
    if (!isLobby)
+   {
+      const bool madeForVR = IsMadeForVR(player->m_ptable);
+      PLOGI << "Table made for VR: " << (madeForVR ? "yes" : "no (no VR room or cabinet)");
+      if (player->m_vrDevice && !madeForVR)
+         player->m_liveUI->ShowMessage("Table not made for VR"s,
+            "This table has no VR room or cabinet: it was made for desktops and cabinets.\n"
+            "In the headset, only its playfield is shown, floating in the void, without a cabinet or a backglass.\n"
+            "Look for a version of this table named 'VR' or 'VR Room'."s);
       return;
+   }
    player->m_liveUI->OpenInGameUI("tables/picker"s);
    // Back from a table: the scores of its games and their rank. Without any profile, nothing is asked: the scores stay unassigned, and can
    // be given to a profile later (from the browser, or the 'Who is playing?' page).
