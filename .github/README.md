@@ -442,6 +442,16 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 | X, Y | Right | Not used: free to map to another action | |
 | Steam button | Left / right | Kept by SteamOS, not used by the game | |
 
+## Candidates for merge upstream
+
+Changes of the fork that are not specific to the Steam Frame and could be proposed to the upstream projects. Each document describes the change, how it was checked, and what a pull request could take.
+
+- **Spatial audio crackle when turning the head** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Spatial%20Audio%20Crackle%20When%20Turning%20the%20Head.md)): a fix to the soundfield rotator of libspatialaudio, which skipped the fade of the coefficients that start at zero, so that the sound crackled in VR when the head turned on heavy tables. It would go to libspatialaudio first, then to Visual Pinball as a version bump (section 7).
+- **Culling parts outside the view** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Culling%20Parts%20Outside%20the%20View.md)): primitives entirely outside the view are no longer drawn, with every renderer and in every view and stereo mode. The commit applies to upstream `master` unchanged; section 7 has a draft of the pull request.
+- **Specular anti-aliasing** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)): the material shader widens the glossy highlights by the variation of the normal inside the pixel, which stops the chrome parts from sparkling, at a negligible cost, on every platform (section 6). Section 8 describes dynamic resolution, which suits any VR headset.
+- **PinUP Player plugin fixes** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinUP%20Player%20on%20the%20Steam%20Frame.md)): five fixes to upstream's PUP plugin, listed in section 9: the root folder the scripts add the pack to, label images relative to the pack, hardware video decoding with a software fallback, recovery from a blocked hardware decoder, and backgrounds that replace a looping media.
+- **Eye-tracked foveated rendering** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Foveated%20Rendering%20on%20the%20Steam%20Frame.md)): the bgfx patch works with any Vulkan driver that has fragment density maps, and the OpenXR part with any runtime that has the Meta foveation extensions (Quest). It would go to bgfx first; until then it stays in the Linux ARM64 build (section 9).
+
 ## More details
 
 What the fork changes, file by file, which builds contain what, and how far each part has been tested: [Steam Frame Edition, the technical documentation](/docs/Steam%20Frame%20Branch.md).
