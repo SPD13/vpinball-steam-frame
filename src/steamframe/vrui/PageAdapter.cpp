@@ -113,7 +113,14 @@ void InGameUIPageView::SetWindowOutputs(InGameUIPage& page, const ImVec2& pos, c
    page.m_windowHovered = hovered;
 }
 
-void InGameUIPageView::RenderPopups(InGameUIPage& page) { page.RenderInputActionPopup(); }
+// The binding of an action is captured in a popup of the page owning the item: for a composed screen (Controls), the page a section comes from
+void InGameUIPageView::RenderPopups(InGameUIPage& page)
+{
+   if (const auto* composed = dynamic_cast<const VRUI::ComposedPage*>(&page); composed)
+      composed->ForEachSourcePage([](InGameUIPage& source) { source.RenderInputActionPopup(); });
+   else
+      page.RenderInputActionPopup();
+}
 
 void InGameUIPageView::Back(InGameUIPage& page) { page.m_player->m_liveUI->m_inGameUI.NavigateBack(); }
 
@@ -314,6 +321,15 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
                const ImVec2 badgeMin(imagePos.x + Theme::Px(0.3f), imagePos.y + imageSize.y - textSize.y - 2.f * badgePad.y - Theme::Px(0.3f));
                drawList->AddRectFilled(badgeMin, badgeMin + textSize + badgePad * 2.f, Theme::kAccent, Theme::Px(0.3f));
                drawList->AddText(badgeMin + badgePad, IM_COL32_WHITE, item->m_tileBadge.c_str());
+            }
+            // Warning, in the top left corner of the image
+            if (!item->m_tileWarning.empty())
+            {
+               const ImVec2 textSize = ImGui::CalcTextSize(item->m_tileWarning.c_str());
+               const ImVec2 badgePad(Theme::Px(0.35f), Theme::Px(0.1f));
+               const ImVec2 badgeMin(imagePos.x + Theme::Px(0.3f), imagePos.y + Theme::Px(0.3f));
+               drawList->AddRectFilled(badgeMin, badgeMin + textSize + badgePad * 2.f, IM_COL32(234, 179, 8, 240), Theme::Px(0.3f));
+               drawList->AddText(badgeMin + badgePad, IM_COL32(66, 32, 6, 255), item->m_tileWarning.c_str());
             }
          }
          bool toggleHovered = false;

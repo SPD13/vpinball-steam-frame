@@ -39,6 +39,7 @@ struct Table {
    int64_t pupScannedAt = 0;
    bool hasPupPack = false;
    std::string rom; // The PinMAME ROM the script names (cGameName), read and cached along the packs
+   bool madeForVR = true; // Has a VR room or cabinet (see Config::readMadeForVR), read and cached along the packs
 };
 
 // Table database shared by the launchers: keeps tables.json in sync with the content of the tables folder.
@@ -78,6 +79,8 @@ public:
       // the tables (they are also looked for in a 'pupvideos' folder along each table)
       std::function<PupUse(const std::filesystem::path& tablePath)> readPupUse;
       std::filesystem::path sharedPupVideosPath;
+      // Optional: whether a table has a VR room or cabinet, read from its file when its script is read (see Launcher::ReadMadeForVR)
+      std::function<bool(const std::filesystem::path& tablePath)> readMadeForVR;
       // Imported packs get their VR layout when they have one, as a PinUP Player user would run its option (see PupPackOptions::ApplyRecommended)
       bool applyVrPupOptions = true;
       // Optional: the ROM folder of PinMAME. ROMs found in imported bundles outside of a table's 'pinmame/roms' folder, and ROM archives
