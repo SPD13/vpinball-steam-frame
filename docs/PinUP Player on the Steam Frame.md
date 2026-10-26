@@ -291,7 +291,9 @@ section 9, which are generic.
 - `GetTableUse(script)`: `usesPup` when the script contains `pinupplayer`; the candidate names, in order: the quoted name after
   `PuPlayer.Init`, the `cPuPPack` values, then every `cGameName` value; `rom` is the first `cGameName` not commented out (scripts keep
   the lines of other versions as comments), only when the script loads PinMAME (`LoadVPM`, `VPinMAME.Controller`, `LoadController("VPM")`;
-  original tables set `cGameName` for their pack too); `games`, the names given to `.Games("...")` and the other `cGameName` values (used by the
+  original tables set `cGameName` for their pack too). These are not counted in comments nor inside the procedures of a pasted `Controller.vbs`
+  (`Sub LoadVPM`, `LoadVPMALT`, `LoadVPinMAME`, `LoadController`, `LoadPROC`): Harry Potter (Original 2020) pastes it for DOF and only
+  calls `LoadEM`; `games`, the names given to `.Games("...")` and the other `cGameName` values (used by the
   ROM aliases). Quotes in comments (`'` outside a string, `Rem`) are skipped.
 - `ReadTableScript(vpx)`: the `.vbs` next to the table when there is one (it replaces the embedded script), otherwise the `GameData`
   stream of the `.vpx`, as `-ExtractVBS` reads it.
