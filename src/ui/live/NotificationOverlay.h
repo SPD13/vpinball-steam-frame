@@ -16,7 +16,24 @@ public:
    // of the in-game menu window, which the player looks at)
    void Update(bool showNotification, ImFont * font, float aboveY = -1.f);
 
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition, in VR: text and box sized like the VR menu's (UI pixels), and, when 'center' is set (positive), the stack centered on
+   // that point of the UI display, where the player looks ('aboveY' still applies when given). A font size of 0 keeps the default look.
+   struct Style
+   {
+      float fontSize = 0.f;
+      float maxWidth = 0.f; // Of the text
+      float padding = 0.f;
+      float rounding = 0.f;
+      ImVec2 center { -1.f, -1.f };
+   };
+   void SetStyle(const Style& style) { m_style = style; }
+#endif
+
 private:
+#if defined(VPX_STEAM_FRAME)
+   Style m_style;
+#endif
    struct Notification
    {
       unsigned int id;

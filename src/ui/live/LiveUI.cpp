@@ -13,6 +13,9 @@
 #include "plugins/VPXPlugin.h"
 #include "renderer/Renderer.h"
 #include "renderer/VRDevice.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/vrui/VRUI.h"
+#endif
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl3.h"
@@ -454,7 +457,15 @@ void LiveUI::RenderUI()
       if (m_player->m_vrDevice && m_inGameUI.IsOpened())
          if (const float menuTop = m_inGameUI.GetActivePage()->GetWindowPos().y; menuTop > 0.1f * io.DisplaySize.y)
             notificationsAboveY = menuTop - 10.f * m_uiScale;
+      #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: in VR, sized like the menu text and in the middle of the view (src/steamframe/vrui/VRUI.cpp)
+      if (m_player->m_vrDevice && m_rd->m_nEyes == 2)
+         VPX::VRUI::UpdateNotifications(m_player, m_notificationOverlay, m_overlayFont, notificationsAboveY);
+      else
+         m_notificationOverlay.Update(true, m_overlayFont, notificationsAboveY);
+      #else
       m_notificationOverlay.Update(true, m_overlayFont, notificationsAboveY);
+      #endif
 
       // Display performance overlays
       m_perfUI.Update();
@@ -517,6 +528,7 @@ void LiveUI::RenderUI()
       if (m_inGameUI.IsOpened() && !m_vrInGameUIWasOpened)
          m_player->m_vrDevice->RecenterUIPanel();
       m_vrInGameUIWasOpened = m_inGameUI.IsOpened();
+      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened());
       onVRPanel = m_player->m_vrDevice->GetUIPanelTransforms(right, bottom, matView);
    }
    #endif

@@ -5,12 +5,15 @@
 
 #include "MainMenuPage.h"
 #include "SelfTest.h"
+#include "Theme.h"
 
+#include "renderer/VRDevice.h"
 #include "steamframe/TablePickerPage.h"
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/HomePage.h"
 
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 
 namespace VPX::VRUI
 {
@@ -90,6 +93,25 @@ void OnPlayerCreated(Player* player, bool isLobby)
          return std::make_unique<TablePickerPage>();
       });
    SelfTest::OnPlayerCreated(player, isLobby);
+}
+
+void UpdateNotifications(Player* player, NotificationOverlay& overlay, ImFont* font, float aboveY)
+{
+   Theme::BeginFrame(); // Pixels per degree of the UI panel (also done by the menu, which may be closed)
+   NotificationOverlay::Style style;
+   style.fontSize = Theme::Px(Theme::kNotificationTextSize);
+   style.maxWidth = Theme::Px(Theme::kNotificationWidth);
+   style.padding = Theme::Px(Theme::kPadding);
+   style.rounding = Theme::Px(Theme::kRounding);
+   #if defined(ENABLE_XR)
+   if (float x, y; player->m_vrDevice && player->m_vrDevice->GetUIPanelGazePoint(x, y, 0.1f))
+      style.center = ImVec2(x * ImGui::GetIO().DisplaySize.x, y * ImGui::GetIO().DisplaySize.y);
+   #endif
+   overlay.SetStyle(style);
+   const float density = ImGui::GetPixelDensity();
+   Theme::ApplyPixelDensity(); // Glyphs rasterized for the density of the eye views, like the menu's
+   overlay.Update(true, font, aboveY);
+   ImGui::SetPixelDensity(density);
 }
 
 }

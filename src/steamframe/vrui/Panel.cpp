@@ -50,7 +50,23 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
 
    const vec3 head = (vec3(views[0].pose.position.x, views[0].pose.position.y, views[0].pose.position.z) + vec3(views[1].pose.position.x, views[1].pose.position.y, views[1].pose.position.z)) * 0.5f;
    m_uiHeadPos = head;
-   if (!m_uiPanelPlaced || m_uiPanelReplace)
+   m_uiHeadForward = rotate(views[0].pose.orientation, vec3(0.f, 0.f, -1.f));
+   const float horizontal = sqrtf(m_uiHeadForward.x * m_uiHeadForward.x + m_uiHeadForward.z * m_uiHeadForward.z);
+   if (m_uiPanelFollowsHead && horizontal > 0.05f) // Looking straight up or down keeps the last placement
+   {
+      // Facing the head, without roll, its middle on the forward ray of the head
+      constexpr float width = 2.8f;
+      const float distance = clamp(g_settingsService.GetAppSettings().GetStandalone_VRMenuDistance(), 0.3f, 3.f);
+      const float height = width * static_cast<float>(m_eyeHeight) / static_cast<float>(m_eyeWidth);
+      const vec3 right(-m_uiHeadForward.z / horizontal, 0.f, m_uiHeadForward.x / horizontal);
+      const vec3 up = CrossProduct(right, m_uiHeadForward);
+      m_uiPanelRight = right * width;
+      m_uiPanelDown = up * -height;
+      m_uiPanelOrigin = head + m_uiHeadForward * distance - m_uiPanelRight * 0.5f - m_uiPanelDown * 0.5f;
+      m_uiPanelPlaced = true;
+      m_uiPanelReplace = false;
+   }
+   else if (!m_uiPanelPlaced || m_uiPanelReplace)
    {
       // The panel covers the whole UI display area, most of it being transparent. The UI windows are laid out for the full field of view
       // of the headset: at 1m, 2.8m wide gives about 109 degrees (86 at the default distance of 1.5m).
@@ -161,6 +177,21 @@ bool VRDevice::GetUIPanelTransforms(float width, float height, Matrix3D (&pixelT
       m_uiPanelOrigin.x, m_uiPanelOrigin.y, m_uiPanelOrigin.z, 1.f);
    for (int eye = 0; eye < 2; eye++)
       pixelToClip[eye] = pixelToPanel * m_uiPanelViewProj[eye];
+   return true;
+}
+
+bool VRDevice::GetUIPanelGazePoint(float& x, float& y, float margin) const
+{
+   if (!m_uiPanelPlaced)
+      return false;
+   // The forward ray of the head intersected with the panel plane. Looking away from it (along it or behind it), the point goes to the edge
+   // of the panel on the side the head is turned to
+   const vec3 normal = CrossProduct(m_uiPanelRight, m_uiPanelDown);
+   const float denom = m_uiHeadForward.Dot(normal);
+   const float t = fabsf(denom) > 1e-6f ? (m_uiPanelOrigin - m_uiHeadPos).Dot(normal) / denom : -1.f;
+   const vec3 onPanel = (t > 0.f ? m_uiHeadPos + m_uiHeadForward * t : m_uiHeadPos + m_uiHeadForward * 100.f) - m_uiPanelOrigin;
+   x = clamp(onPanel.Dot(m_uiPanelRight) / m_uiPanelRight.LengthSquared(), margin, 1.f - margin);
+   y = clamp(onPanel.Dot(m_uiPanelDown) / m_uiPanelDown.LengthSquared(), margin, 1.f - margin);
    return true;
 }
 

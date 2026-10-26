@@ -30,7 +30,23 @@ void NotificationOverlay::Update(bool showNotification, ImFont * font, float abo
    const uint32_t tick = msec();
    const auto& io = ImGui::GetIO();
    float notifY = aboveY > 0.f ? aboveY : io.DisplaySize.y * 0.25f;
+#if defined(VPX_STEAM_FRAME)
+   ImGui::PushFont(font, m_style.fontSize > 0.f ? m_style.fontSize : font->LegacySize);
+   if (aboveY <= 0.f && m_style.center.y > 0.f)
+   {
+      // Stacked downwards, the whole stack centered on the point
+      float height = 0.f;
+      for (int i = 0; i < static_cast<int>(m_notifications.size()); i++)
+         if (tick <= m_notifications[i].disappearTick)
+         {
+            vector<string> lines;
+            height += (height > 0.f ? 10.f : 0.f) + LayoutNotification(i, lines).y;
+         }
+      notifY = m_style.center.y - height * 0.5f;
+   }
+#else
    ImGui::PushFont(font, font->LegacySize);
+#endif
    for (int i = static_cast<int>(m_notifications.size()) - 1; i >= 0; i--)
    {
       if (tick > m_notifications[i].disappearTick)
@@ -53,8 +69,13 @@ ImVec2 NotificationOverlay::LayoutNotification(int index, vector<string>& lines)
    ImFont *const font = ImGui::GetFont();
    const ImFontBaked *const fontBaked = ImGui::GetFontBaked();
 
+#if defined(VPX_STEAM_FRAME)
+   const float padding = m_style.fontSize > 0.f ? m_style.padding * 2.f : 50.f;
+   const float maxWidth = m_style.maxWidth > 0.f ? m_style.maxWidth : ImGui::GetIO().DisplaySize.x - padding;
+#else
    constexpr float padding = 50.f;
    const float maxWidth = ImGui::GetIO().DisplaySize.x - padding;
+#endif
 
    ImVec2 text_size(0, 0);
 
@@ -74,7 +95,12 @@ ImVec2 NotificationOverlay::LayoutNotification(int index, vector<string>& lines)
          ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
          if (lineSize.x > maxWidth)
          {
+#if defined(VPX_STEAM_FRAME)
+            // At the size the text is drawn at (CalcWordWrapPositionA uses the size the font was loaded with)
+            const char *wrapPoint = font->CalcWordWrapPosition(fontBaked->Size, textEnd, nextLineTextEnd, maxWidth);
+#else
             const char *wrapPoint = font->CalcWordWrapPositionA(font->Scale, textEnd, nextLineTextEnd, maxWidth);
+#endif
             if (wrapPoint == textEnd)
                wrapPoint++;
             nextLineTextEnd = wrapPoint;
@@ -106,8 +132,21 @@ float NotificationOverlay::RenderNotification(int index, float posY) const
 
    constexpr ImGuiWindowFlags window_flags
       = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+#if defined(VPX_STEAM_FRAME)
+   const bool styled = m_style.fontSize > 0.f;
+   if (styled)
+   {
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(m_style.padding * 0.5f, m_style.padding * 0.5f));
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, m_style.rounding);
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+   }
+   ImGui::SetNextWindowBgAlpha(styled ? 0.88f : 0.666f);
+   const float centerX = m_style.center.x > 0.f ? m_style.center.x : ImGui::GetIO().DisplaySize.x * 0.5f;
+   ImGui::SetNextWindowPos(ImVec2(centerX - text_size.x * 0.5f, posY));
+#else
    ImGui::SetNextWindowBgAlpha(0.666f);
    ImGui::SetNextWindowPos(ImVec2((ImGui::GetIO().DisplaySize.x - text_size.x) / 2, posY));
+#endif
    ImGui::SetNextWindowSize(text_size);
    ImGui::Begin(("Notification" + std::to_string(index)).c_str(), nullptr, window_flags);
    for (const string &lline : lines)
@@ -117,5 +156,9 @@ float NotificationOverlay::RenderNotification(int index, float posY) const
       ImGui::TextUnformatted(lline.c_str());
    }
    ImGui::End();
+#if defined(VPX_STEAM_FRAME)
+   if (styled)
+      ImGui::PopStyleVar(3);
+#endif
    return text_size.y;
 }

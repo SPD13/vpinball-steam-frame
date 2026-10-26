@@ -39,6 +39,8 @@ inline constexpr float kTitleSize = 2.2f;
 inline constexpr float kHeaderTextSize = 1.75f;
 inline constexpr float kSmallTextSize = 1.35f;
 inline constexpr float kRailIconSize = 1.9f;
+inline constexpr float kNotificationTextSize = 2.f; // Notifications, in the middle of the view while the menu is closed
+inline constexpr float kNotificationWidth = 44.f; // Of their text, at most
 
 // Colors
 inline constexpr ImU32 kPanelBg = IM_COL32(16, 19, 26, 242);

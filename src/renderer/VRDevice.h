@@ -161,8 +161,14 @@ public:
    void RecenterUIPanel() { m_uiPanelPlaced = false; }
    // Same, the panel staying where it is until it is placed again, instead of the UI being head locked for a frame (menu distance changes)
    void ReplaceUIPanel() { m_uiPanelReplace = true; }
+   // While the in-game UI is closed, the panel faces the head and follows it, so that what is drawn in its middle (notifications) stays in the
+   // middle of the view, at the menu distance. Opening the UI recenters it (upright, in the table's forward direction)
+   void SetUIPanelFollowsHead(bool follow) { m_uiPanelFollowsHead = follow; }
    // Transforms from UI pixel coordinates (0..width, 0..height from the top left of the panel) to each eye clip space. Returns false if the panel is not placed yet
    bool GetUIPanelTransforms(float width, float height, Matrix3D (&pixelToClip)[2]) const;
+   // Where the head looks at the UI panel (its forward ray), normalized to 0..1 from its top left and kept within 'margin' of its edges, so that
+   // something drawn there is in the middle of the view (notifications). Returns false if the panel is not placed yet
+   bool GetUIPanelGazePoint(float& x, float& y, float margin) const;
    // Position pointed by a controller on the UI panel, normalized to 0..1 from its top left, and vertical axis of the thumbstick of that
    // controller (-1..1, up is positive). Returns false if no controller points at it
    bool GetUIPointer(float& x, float& y, bool& pressed, float& scroll) const
@@ -398,6 +404,7 @@ private:
    // UI panel, in the reference space (meters): top left corner, and vectors along its full width and height
    bool m_uiPanelPlaced = false;
    bool m_uiPanelReplace = false; // Placed again at the next update
+   bool m_uiPanelFollowsHead = false;
    vec3 m_uiPanelOrigin, m_uiPanelRight, m_uiPanelDown;
    Matrix3D m_uiPanelViewProj[2]; // Reference space to each eye clip space
    // UI pointer: the aim ray of a controller, intersected with the UI panel
@@ -412,6 +419,7 @@ private:
    vector<std::pair<int, vec3>> m_tableCaptureBounds;
    void SetTableCaptureViewPoses(std::vector<XrView>& views, float vpuToWorldScale, TableCaptureView captureView) const;
    vec3 m_uiPointerRayStart, m_uiPointerRayEnd, m_uiHeadPos; // Reference space (meters)
+   vec3 m_uiHeadForward { 0.f, 0.f, -1.f }; // Reference space, unit length
    void UpdateUIPanel(const std::vector<XrView>& views, XrTime time);
 
    struct RenderLayerInfo
