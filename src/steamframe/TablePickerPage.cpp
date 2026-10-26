@@ -9,6 +9,7 @@
 #include "core/VPApp.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/ScoreStore.h"
+#include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
 #ifdef VPX_TABLE_WEBSERVER
 #include "lib/src/WebServer.h"
@@ -1318,6 +1319,54 @@ void TableActionsPage::BuildPage()
    else if (table->usesPup && !table->pupPacks.empty())
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
          "PinUP Player pack '" + table->pupPacks.front() + "' not found: add it to the 'pinupsystem/pupvideos' folder of the tables, from 'Add tables from a browser'"));
+
+   // Fixes for the tables and ROMs that do not work as they are (see TableFixes.h): the ones applied, and the patch, or the patch again, of the
+   // table, for the tables added to the library before a fix was released
+   {
+      VPinballLib::TableFixes& fixes = g_launcher->GetTableFixes();
+      const std::vector<VPinballLib::TableFixes::TableFix> tableFixes = fixes.GetTableFixes(*table);
+      if (!tableFixes.empty())
+      {
+         const std::vector<VPinballLib::TableFixes::Recipe> recipes = fixes.GetRecipes();
+         const auto getTitle = [&recipes](const string& id)
+         {
+            const auto recipe = std::find_if(recipes.begin(), recipes.end(), [&id](const VPinballLib::TableFixes::Recipe& r) { return r.id == id; });
+            return recipe == recipes.end() ? id : recipe->title;
+         };
+         using Status = VPinballLib::TableFixes::Status;
+         string applied, details;
+         bool canPatch = false, canPatchAgain = false;
+         for (const VPinballLib::TableFixes::TableFix& fix : tableFixes)
+         {
+            canPatch |= fix.status == Status::Available || fix.status == Status::Outdated;
+            canPatchAgain |= fix.status == Status::Applied || fix.status == Status::Pending;
+            if (fix.status == Status::Applied || fix.status == Status::Pending)
+               applied += (applied.empty() ? ""s : ", "s) + getTitle(fix.id);
+            static constexpr const char* STATUS_TEXTS[] = { "available", "applied", "update available", "runs at the next start", "not needed" };
+            details += getTitle(fix.id) + ": " + STATUS_TEXTS[static_cast<int>(fix.status)] + (fix.detail.empty() ? ""s : " (" + fix.detail + ')') + '\n';
+         }
+         if (!applied.empty())
+            AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Patched for compatibility: " + applied));
+         if (canPatch || canPatchAgain)
+            AddItem(std::make_unique<InGameUIItem>(canPatch ? ICON_FK_WRENCH " Patch table"s : ICON_FK_WRENCH " Re-patch table"s,
+               "Apply the fixes that make this table work on the Steam Frame (the Files page of the web server, Advanced menu, tells what they change)\n" + details,
+               [this]()
+               {
+                  const std::optional<LibraryTable> table = g_launcher->GetTableLibrary().GetTable(m_uuid);
+                  if (!table)
+                     return;
+                  std::vector<string> messages;
+                  g_launcher->GetTableFixes().Patch(*table, messages);
+                  string text;
+                  for (const string& message : messages)
+                     text += (text.empty() ? ""s : "\n"s) + message;
+                  if (IsRunningTable(m_player, *table))
+                     text += "\nThe fixes apply when the table starts again"s;
+                  m_player->m_liveUI->PushNotification(text, 6000);
+                  RequestRebuild();
+               }));
+      }
+   }
 
    AddItem(std::make_unique<InGameUIItem>(table->favorite ? ICON_FK_STAR " Remove from favorites"s : ICON_FK_STAR_O " Add to favorites"s, "Favorites have their own list in the table picker"s,
       [this, favorite = table->favorite]()

@@ -317,4 +317,12 @@ typedef struct VPXPluginAPI
    // 'folder', and 'files' what was missing in it (lines separated by '\n'). Recorded for the table manager of the application, if any.
    void(MSGPIAPI* ReportMissingFile)(const char* package, const char* folder, const char* files);
 
+   // --- Fixes of the application for the ROMs that do not work as they are (added after the first version: check that they are defined)
+   // The procedure to run once the emulation of 'rom' started, as a JSON object, or nullptr for none: {"id", "version", "title", "notice",
+   // "bootMs", "holdMs", "waitMs", "reset", "switches": [...]}: wait 'bootMs', press each switch 'holdMs' then wait 'waitMs', reset the machine
+   // if 'reset', while showing 'notice' to the player. 'hasNvram': the ROM already has a saved NVRAM. The string is valid until the next call.
+   const char*(MSGPIAPI* GetRomFix)(const char* rom, int hasNvram);
+   // The outcome of a procedure given by GetRomFix: 'completed' is 0 when it was interrupted (table closed before its end)
+   void(MSGPIAPI* ReportRomFix)(const char* rom, const char* id, int version, int completed);
+
 } VPXPluginAPI;

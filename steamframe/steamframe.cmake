@@ -28,6 +28,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/ScoreStore.cpp
    src/steamframe/ScoreTracker.h
    src/steamframe/ScoreTracker.cpp
+   src/steamframe/TableFixes.h
+   src/steamframe/TableFixes.cpp
    src/steamframe/TableLibrary.h
    src/steamframe/TableLibrary.cpp
    src/steamframe/TablePickerPage.h
@@ -49,11 +51,16 @@ target_compile_definitions(vpinball PRIVATE
    VPX_TABLE_WEBSERVER
 )
 
-# The fork's code in the PinUP Player plugin is guarded by VPX_STEAM_FRAME too. The plugins are defined after this file
+# The fork's code in the PinUP Player and PinMAME plugins is guarded by VPX_STEAM_FRAME too. The plugins are defined after this file
 # (make/CMakeLists_plugins.txt), hence a call deferred to the end of the root folder
 function(steamframe_plugin_definitions)
    if(TARGET PUPPlugin)
       target_compile_definitions(PUPPlugin PRIVATE VPX_STEAM_FRAME)
+   endif()
+   if(TARGET PinMAMEPlugin)
+      target_compile_definitions(PinMAMEPlugin PRIVATE VPX_STEAM_FRAME)
+      # The procedures of the ROM fixes (see src/steamframe/TableFixes.h)
+      target_sources(PinMAMEPlugin PRIVATE ${CMAKE_SOURCE_DIR}/plugins/pinmame/RomFix.h ${CMAKE_SOURCE_DIR}/plugins/pinmame/RomFix.cpp)
    endif()
 endfunction()
 cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL steamframe_plugin_definitions)

@@ -28,6 +28,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Missing ROM message** naming the files to add and where (section 8).
 - **Backup and restore from the browser**: a Backup page (next to Files) downloads what the device holds, all of it or chosen items and tables: tables and their files (PuP packs included), table images, ROMs, machine saves (nvram, VPReg), library information (favorites, names, play counts), settings, scores and players, ROM aliases. The zip is made while it downloads, so nothing is written on the device whatever its size, and a broken download resumes. A backup is restored item by item and table by table, after a confirmation: files are copied, scores, players and favorites are merged with the device's, and the settings of the device itself (displays, audio, controllers, folders) are kept (section 16).
 - **Game aliases of mods found automatically**: a table asking PinMAME for a game it does not know (a mod renaming its game, `simpprtyh` for `simpprty`) gets the alias it needs, found in its readme, script or files, and the ROM it ships outside of a `roms` folder is moved where PinMAME looks. The alias file can be edited from the browser, under an Advanced menu, with the lines PinMAME would misread refused (section 6).
+- **Fixes for tables and ROMs that do not work as they are**: recipes shipped with the application, each with its record of what it changes and why, fix the tables added to the library by themselves, and the tables already there with **Patch table** in their menu (in VR and in the browser). A script fix is saved as a `.vbs` next to the table, never in the table itself. The first two: *VR ROOM Back to the Future*, which closed as soon as it started, and the Gottlieb System 3 games (Street Fighter II, Stargate, Super Mario Bros), which accepted coins without giving credits until their factory settings were loaded from their service menu, now done by the game itself during its first start, with a notice. The Files page lists the fixes and the tables they apply to, under Advanced (section 17, `docs/Table and ROM Fixes.md`).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
@@ -318,6 +319,18 @@ A fresh installation of the device, or a new one, loses the tables, the ROMs and
 
 **Checked on macOS** (a copy of the Frame library, 12 tables, 2.1 GB): full backup streamed through `bsdtar` (CRCs), partial backups through `unzip -t`, Python's `zipfile` and `ditto`, a resumed download identical to a full one, zip64 with a 4.5 GB file and 70,000 entries (Python reads through ranges), full, single-table and interrupted restores to an empty library (files identical, dates kept), a restore onto a library that already had a table under another uuid (its scores follow it), settings across devices (the device's folders, audio device and web server kept), hostile entry paths refused, backup and restore refused while a table plays. **To check on the Steam Frame**: the speed over Wi-Fi, whether `systemd-inhibit` keeps the headset on the network when it is put down, and a restore onto a fresh installation.
 
+## 17. Table and ROM fixes (branch `table-fixes`, 2026-10-25)
+
+Files: `src/steamframe/TableFixes.h/.cpp`, `plugins/pinmame/RomFix.h/.cpp`, `src/assets/fixes/fixes.json`, `tests/test-table-fixes.cpp`, `docs/Table and ROM Fixes.md` (new), `plugins/plugins/VPXPlugin.h` (`GetRomFix`, `ReportRomFix`), `src/core/VPXPluginAPIImpl.h/.cpp`, `plugins/pinmame/Controller.h/.cpp` (hooks in `Run`, `Stop`, `SetSwitch`, guarded by `VPX_STEAM_FRAME`), `src/steamframe/Launcher.h/.cpp` (`GetTableFixes`), `src/steamframe/TableLibrary.h/.cpp` (`Config::onScanned`), `src/steamframe/PupPacks.h/.cpp` (`ReadEmbeddedScript`), `src/steamframe/WebServerLibrary.cpp` (`/table-fixes`, fix counts in `/tables`), `lib/src/WebServer.h`, `src/steamframe/TablePickerPage.cpp` (Patch table), `src/steamframe/Backup.cpp` (the user's `fixes.json`), `steamframe/steamframe.cmake` (sources, `VPX_STEAM_FRAME` for the PinMAME plugin), `src/assets/web/vpx.html`, `app.js`, `tables.js`, `styles.css`.
+
+VR ROOM Back to the Future closed as soon as it started on the Frame: its script calls `vpmInit` twice, which `core.vbs` answers with a message (to the log only) and the end of the table. The Gottlieb System 3 games gave no credits until their factory settings were loaded by hand. Such tables now get **fixes**, described by recipes shipped with the application (`src/assets/fixes/fixes.json`), each with its section in `docs/Table and ROM Fixes.md`, which says how it all works:
+
+- **Script patches** are text replacements written as the table's `.vbs` (which VPX loads instead of the script of the `.vpx`), applied only when their text is found the expected number of times; the `.vbs` a table came with is kept as `.vbs.orig`.
+- **ROM procedures** are switch presses run by the PinMAME plugin once the emulation started (the service menu of the game), followed by a reset of the machine, with a notice for the player; they run by themselves when the ROM has no NVRAM yet.
+- Tables added to the library are patched as they are found; the tables already there, or matched by a recipe shipped later, are patched on request: **Patch table** / **Re-patch table** in the "..." menu of the Tables page (with a **Fix available** / **Patched** badge on the tile) and in the table's menu in VR, and the **Table and ROM fixes** dialog of the Files page (Advanced), which lists the recipes with their details and the tables they match with their state. What was applied is kept in `table-fixes.json`; a recipe whose `version` is raised is offered again to the tables patched with the older one. A `fixes.json` in the preferences folder adds recipes or turns shipped ones off.
+
+Tests: `tests/test-table-fixes.cpp` (line ends, the first scan, tables added with and without their own `.vbs`, a new `.vpx` with and without the bug, a new version of a recipe, ROM procedures requested, interrupted and completed, local recipes, and every shipped recipe recorded in the document). Checked on macOS, 2026-10-25, with a scratch library: both fixes, the automatic patch of an added table, the web pages in Chrome, a ROM procedure run by itself, requested and interrupted. Not checked yet: the Frame, the VR table menu (built, not seen).
+
 ## Effects on existing builds
 
 - `-Play`, the editor and the Visual Studio build behave as before, except for the OpenXR changes that apply everywhere: the Vulkan extension filter, the extra controller inputs and default mappings, the menu panel and pointer, and the upstream VR fixes of section 8.
@@ -351,6 +364,11 @@ src/steamframe/TableLibrary.h
 src/steamframe/TableLibrary.cpp
 src/steamframe/RomAliases.h
 src/steamframe/RomAliases.cpp           game aliases of the tables (section 6)
+src/steamframe/TableFixes.h
+src/steamframe/TableFixes.cpp           fixes of the tables and ROMs: recipes, script patches, state (section 17)
+plugins/pinmame/RomFix.h
+plugins/pinmame/RomFix.cpp              ROM procedures of the fixes, run by the PinMAME plugin (section 17)
+src/assets/fixes/fixes.json             the recipes of the fixes (section 17)
 src/steamframe/ScoreStore.h
 src/steamframe/ScoreStore.cpp
 src/steamframe/ScoreTracker.h
@@ -372,10 +390,12 @@ src/steamframe/TablePickerPage.cpp
 src/ui/live/ingameui/MessagePage.h
 src/ui/live/ingameui/MessagePage.cpp
 tests/test-table-library.cpp
+tests/test-table-fixes.cpp
 src/renderer/VRControllerModels.h
 src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h
 docs/Steam Frame Branch.md
+docs/Table and ROM Fixes.md
 docs/Foveated Rendering on the Steam Frame.md
 docs/Image Quality on the Steam Frame.md
 docs/Table Scores and Leaderboards.md
@@ -401,6 +421,8 @@ src/assets/web/styles.css               missing ROMs, ROM folder link, upload ba
 src/core/ScriptGlobalTable.cpp          SaveValue forwarded to the score tracker
 plugins/flexdmd/FlexDMD.h, .cpp, UltraDMD.cpp   UltraDMD scoreboard broadcast for the scores
 plugins/pinmame/PinMAMEPlugin.cpp       bundled memory maps as last resort
+plugins/pinmame/Controller.h, .cpp      ROM procedures of the fixes (RomFix), guarded by VPX_STEAM_FRAME (section 17)
+plugins/plugins/VPXPlugin.h, src/core/VPXPluginAPIImpl.h, .cpp   GetRomFix and ReportRomFix for the fixes (section 17)
 src/core/AppCommands.h, AppCommands.cpp -Launcher option, launcher hooks in PlayTableCommand::Play, tables played one after the other
 src/core/main.cpp                       launcher counts as play mode, web server started with the application when always on
 src/core/VPApp.h, VPApp.cpp             windows (and VR device) kept between tables, owns the Launcher

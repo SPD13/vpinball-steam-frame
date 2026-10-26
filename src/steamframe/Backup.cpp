@@ -44,6 +44,7 @@ constexpr std::pair<const char*, Item> PREF_FILES[] = {
    { "VPinballX.ini", Item::Settings },
    { "lobby-room.json", Item::Settings },
    { "score-rules.json", Item::Settings },
+   { "fixes.json", Item::Settings }, // The user's own table fixes (table-fixes.json, what was applied, is not: it is rebuilt by the library)
    { "scores.json", Item::Scores },
    { "profiles.json", Item::Scores },
 };

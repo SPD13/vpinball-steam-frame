@@ -78,6 +78,8 @@ private:
    static unsigned int MSGPIAPI UpdateNotification(const unsigned int handle, const char* msg, const int lengthMs);
    static void MSGPIAPI ShowMessage(const char* title, const char* message);
    static void MSGPIAPI ReportMissingFile(const char* package, const char* folder, const char* files);
+   static const char* MSGPIAPI GetRomFix(const char* rom, int hasNvram);
+   static void MSGPIAPI ReportRomFix(const char* rom, const char* id, int version, int completed);
 
    static void MSGPIAPI DisableStaticPrerendering(const BOOL disable);
    static void MSGPIAPI GetActiveViewSetup(VPXViewSetupDef* view);
