@@ -14,6 +14,10 @@
 
 #include <openxr/openxr.h>
 
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/XRInputLabels.h"
+#endif
+
 
 class XRInputHandler final : public InputManager::InputHandler
 {
@@ -123,6 +127,13 @@ public:
          else if (type == XR_ACTION_TYPE_VIBRATION_OUTPUT)
             m_hapticActions.push_back(tracker.action);
       }
+
+      #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: readable names of the inputs in the Controls page, instead of their OpenXR paths (src/steamframe/XRInputLabels.h)
+      for (const ActionTracker& t : m_trackers)
+         if (t.type == XR_ACTION_TYPE_BOOLEAN_INPUT || t.type == XR_ACTION_TYPE_FLOAT_INPUT)
+            m_pininput.RegisterElementName(m_joyId, t.type == XR_ACTION_TYPE_FLOAT_INPUT, t.pinInputId, VPX::SteamFrame::GetXRInputLabel(t.path));
+      #endif
 
       // Register these bindings for major profiles
       std::vector<const char*> profiles { //
