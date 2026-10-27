@@ -13,7 +13,7 @@ use your own.
 
 You need:
 
-- Visual Pinball X: Steam Frame Edition installed on the Frame (see the installer's instructions).
+- Visual Pinball X: Steam Frame Edition installed on the Frame: see [Installing the game](Installing%20the%20Game.md).
 - A computer, tablet or phone on the same Wi-Fi network as the Frame, with a web browser.
 - The table's `.vpx` file and the ROM zip it needs.
 
