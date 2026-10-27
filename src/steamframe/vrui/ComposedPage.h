@@ -61,6 +61,12 @@ public:
    const InGameUI::InGameUIItem* GetSelectedSectionItem() const;
    bool IsActionSelected(InGameUI::InGameUIItem::Type type) const;
    bool HasAdjustableItems() const;
+   // The pages the sections come from (the input mapping popup of an item is opened by its own page)
+   void ForEachSourcePage(const std::function<void(InGameUI::InGameUIPage&)>& func) const
+   {
+      for (const SourcePage& source : m_sources)
+         func(*source.page);
+   }
 
 private:
    void BuildPage() override { }

@@ -113,7 +113,14 @@ void InGameUIPageView::SetWindowOutputs(InGameUIPage& page, const ImVec2& pos, c
    page.m_windowHovered = hovered;
 }
 
-void InGameUIPageView::RenderPopups(InGameUIPage& page) { page.RenderInputActionPopup(); }
+// The binding of an action is captured in a popup of the page owning the item: for a composed screen (Controls), the page a section comes from
+void InGameUIPageView::RenderPopups(InGameUIPage& page)
+{
+   if (const auto* composed = dynamic_cast<const VRUI::ComposedPage*>(&page); composed)
+      composed->ForEachSourcePage([](InGameUIPage& source) { source.RenderInputActionPopup(); });
+   else
+      page.RenderInputActionPopup();
+}
 
 void InGameUIPageView::Back(InGameUIPage& page) { page.m_player->m_liveUI->m_inGameUI.NavigateBack(); }
 
