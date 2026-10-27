@@ -3,6 +3,11 @@
 From a fresh install to your first game on the Steam Frame: turn on Wi-Fi upload in the headset, upload a table from a browser, play it once to
 find out which ROM it needs, upload that ROM, and let the game set itself up on its first start.
 
+[![Adding tables and ROMs: the video](img/adding-tables-and-roms-video.jpg)](https://youtu.be/4qvbUkFgUvI)
+
+**▶ [Watch the video](https://youtu.be/4qvbUkFgUvI)** (2:36): the same steps in the headset and in the browser. The text below follows it, with
+more details.
+
 The example is *VR ROOM Addams Family (Bally 1992) v2.0*, whose ROM is `taf_l7.zip`. Tables and ROMs are not included with Visual Pinball:
 use your own.
 

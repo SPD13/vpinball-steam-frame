@@ -13,6 +13,8 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 
 **▶ [Watch the trailer](https://youtu.be/YvKycmiTYIY)** (2:11): the VR version, with the VR menu and table search, Steam Frame tuning and eye-tracked foveated rendering, uploading tables over Wi-Fi, player profiles and online scores, the installer and one-click updates.
 
+**▶ [Get help with the tutorials](/docs/tutorials/tutorials.md)**: step-by-step guides with screenshots and videos, starting with adding tables and ROMs.
+
 ## What the player gets
 
 In the standalone builds (the Steam Frame app, and the standalone desktop builds):
