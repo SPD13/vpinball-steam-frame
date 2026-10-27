@@ -4,6 +4,11 @@ Visual Pinball X: Steam Frame Edition is not on the Steam store. It is installed
 the **installer app**: it finds the Frame, checks that it is ready, then downloads the latest version of the game and installs it, with its
 entry and artwork in the Steam library. Nothing is installed on the computer itself.
 
+[![Installing the game: the video](img/installing-the-game-video.jpg)](https://youtu.be/HmzkSPvwXjg)
+
+**▶ [Watch the video](https://youtu.be/HmzkSPvwXjg)** (1:34): the same steps, from the download of the installer to the game in the Steam
+library. The text below follows it, with more details.
+
 You need:
 
 - A Steam Frame and a computer on the **same network**.
@@ -13,15 +18,19 @@ You need:
 ## 1. Turn on Developer Mode on the Frame
 
 The installer reaches the Frame the way developers do, so the Frame must be in Developer Mode, with a password for its `steamos` user.
-Valve describes both steps, with screenshots, in its
-[Steam Frame setup guide](https://partner.steamgames.com/doc/steamhardware/steamframe/setup):
+These are the steps of Valve's [Steam Frame setup guide](https://partner.steamgames.com/doc/steamhardware/steamframe/setup):
 
 1. Open **Steam Settings > System** and turn on **Enable Developer Mode**.
-2. On the left, scroll down to the new **Developer** section. Near the bottom of that page, choose **Set User Password** and pick a
-   password. The installer asks for it.
 
-*Source: Valve, [Steamworks Documentation, Steam Frame setup](https://partner.steamgames.com/doc/steamhardware/steamframe/setup),
-section "Developer Mode".*
+   ![Steam Settings > System, Enable Developer Mode](img/install-devmode-1-system.jpg)
+
+2. On the left, scroll down to the new **Developer** section. Near the bottom of that page, choose **Set User Password** and pick a
+   password. The installer asks for it. Once a password is set, the button says **Change User Password**, as here.
+
+   ![Steam Settings > Developer, the user password](img/install-devmode-2-developer.jpg)
+
+*Source of the steps: Valve, [Steamworks Documentation, Steam Frame setup](https://partner.steamgames.com/doc/steamhardware/steamframe/setup),
+section "Developer Mode". The screenshots were taken in a Steam Frame.*
 
 Keep the headset on (or awake) while installing: it leaves the network when it goes to sleep.
 
