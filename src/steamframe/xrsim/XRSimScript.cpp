@@ -258,6 +258,13 @@ void UpdateScript(Player* player)
             r.lobbyOnScore = true;
          else if (c.op == "menu")
             player->m_liveUI->OpenInGameUI(c.args.empty() ? "homepage"s : c.args[0]);
+         else if (c.op == "balls") // Positions of the balls in the log (table units), to frame a shot on them
+         {
+            std::stringstream ss;
+            for (const Ball* b : player->m_vball)
+               ss << ' ' << static_cast<int>(b->GetPosition().x) << ',' << static_cast<int>(b->GetPosition().y) << ',' << static_cast<int>(b->GetPosition().z);
+            PLOGI << "XRSIM-BALLS " << Epoch() << ss.str() << " (table " << static_cast<int>(player->m_ptable->m_right) << 'x' << static_cast<int>(player->m_ptable->m_bottom) << ')';
+         }
          else if (c.op == "mark")
             PLOGI << "XRSIM-MARK " << Epoch() << ' ' << (c.args.empty() ? ""s : c.args[0]);
          else if (c.op == "code")

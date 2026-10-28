@@ -130,6 +130,94 @@ void RenderDevice::OnScreenshotCaptured(const char* _filePath, uint32_t _width, 
    // - DX12 does not implement the framebuffer selection and always captures from the base swapchain and returns data on the swapchain format
    // - Metal implements per-window framebuffer selection and returns data on the (per-window) swapchain format
    // - OpenGL & Vulkan seems to be ok (always returning 4 byte BGRA, eventually after conversion if backbuffer format is not BGRA)
+   // TEMP-TRAILER begin
+   if (strcmp(_filePath, "/__trailer_rec__") == 0)
+   {
+      struct RecFrame { vector<uint8_t> data; uint32_t w, h, pitch; bool yflip, rgba; };
+      static std::mutex qm;
+      static std::condition_variable qcv;
+      static std::deque<RecFrame> q;
+      static std::thread* writer = nullptr;
+      static uint64_t frames = 0, dropped = 0;
+      if (_format != bgfx::TextureFormat::BGRA8 && _format != bgfx::TextureFormat::RGBA8)
+         return;
+      if (writer == nullptr)
+         writer = new std::thread([]()
+         {
+            FILE* rec = fopen(getenv("VPX_REC_FIFO"), "wb");
+            vector<uint8_t> buf;
+            for (;;)
+            {
+               RecFrame f;
+               {
+                  std::unique_lock lk(qm);
+                  qcv.wait(lk, []() { return !q.empty(); });
+                  f = std::move(q.front());
+                  q.pop_front();
+               }
+               if (rec == nullptr) continue;
+               // Area-weighted 1.5x downscale (2880x1800 -> 1920x1200) when the source is a multiple of 3, else as is
+               const bool down = (f.w % 3 == 0) && (f.h % 3 == 0) && getenv("VPX_REC_DOWNSCALE");
+               const uint32_t ow = down ? f.w * 2 / 3 : f.w, oh = down ? f.h * 2 / 3 : f.h;
+               const uint32_t rowBytes = ow * 4;
+               buf.resize(54 + (size_t)rowBytes * oh);
+               uint8_t* hdr = buf.data();
+               memset(hdr, 0, 54); hdr[0] = 'B'; hdr[1] = 'M';
+               auto put32 = [&](int o, uint32_t v) { memcpy(hdr + o, &v, 4); };
+               put32(2, 54 + rowBytes * oh); put32(10, 54); put32(14, 40); put32(18, ow); put32(22, oh);
+               hdr[26] = 1; hdr[28] = 32; put32(34, rowBytes * oh);
+               auto srcRow = [&](uint32_t y) { return f.data.data() + (size_t)(f.yflip ? (f.h - 1 - y) : y) * f.pitch; };
+               auto work = [&](uint32_t y0, uint32_t y1)
+               {
+                  for (uint32_t y = y0; y < y1; y++) // y: top-down output row, BMP is stored bottom-up
+                  {
+                     uint8_t* row = hdr + 54 + (size_t)(oh - 1 - y) * rowBytes;
+                     if (!down)
+                     {
+                        const uint8_t* p = srcRow(y);
+                        if (f.rgba) for (uint32_t x = 0; x < ow; x++) { row[x*4] = p[x*4+2]; row[x*4+1] = p[x*4+1]; row[x*4+2] = p[x*4]; row[x*4+3] = 255; }
+                        else memcpy(row, p, rowBytes);
+                        continue;
+                     }
+                     const uint32_t sy = (y / 2) * 3;
+                     const uint8_t* r0 = srcRow(sy + (y & 1 ? 2 : 0)); // full weight row
+                     const uint8_t* r1 = srcRow(sy + 1);               // half weight row
+                     for (uint32_t x = 0; x < ow; x++)
+                     {
+                        const uint32_t sx = (x / 2) * 3, xf = sx + (x & 1 ? 2 : 0), xh = sx + 1;
+                        for (int c = 0; c < 3; c++)
+                        {
+                           const int cc = f.rgba ? 2 - c : c;
+                           const uint32_t v = 4 * r0[xf*4+cc] + 2 * r0[xh*4+cc] + 2 * r1[xf*4+cc] + r1[xh*4+cc];
+                           row[x*4+c] = (uint8_t)((v + 4) / 9);
+                        }
+                        row[x*4+3] = 255;
+                     }
+                  }
+               };
+               {
+                  constexpr uint32_t n = 6;
+                  vector<std::thread> th;
+                  for (uint32_t i = 0; i < n; i++) th.emplace_back(work, oh * i / n, oh * (i + 1) / n);
+                  for (auto& t : th) t.join();
+               }
+               fwrite(buf.data(), 1, buf.size(), rec);
+               fflush(rec);
+            }
+         });
+      {
+         std::lock_guard lk(qm);
+         if (q.size() < 3)
+            q.push_back(RecFrame { vector<uint8_t>(static_cast<const uint8_t*>(_data), static_cast<const uint8_t*>(_data) + (size_t)_pitch * _height), _width, _height, _pitch, _yflip, _format == bgfx::TextureFormat::RGBA8 });
+         else
+            dropped++;
+      }
+      qcv.notify_one();
+      if (frames++ % 300 == 0)
+         PLOGI << "TRAILER-REC frame " << frames << " dropped " << dropped << " " << _width << "x" << _height << " epoch " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+      return;
+   }
+   // TEMP-TRAILER end
    std::function<void(bool)> callback;
    bool fireCallback = false;
    bool callbackSuccess = false;
@@ -666,6 +754,11 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
                }
             }
 
+            // TEMP-TRAILER begin
+            static uint64_t recTick = 0;
+            if (getenv("VPX_REC_FIFO") && (recTick++ % (getenv("VPX_REC_EVERY") ? atoi(getenv("VPX_REC_EVERY")) : 1)) == 0 && m_outputWnd.size() >= 2 && m_outputWnd.back()->GetBackBuffer())
+               bgfx::requestScreenShot(m_outputWnd.back()->GetBackBuffer()->GetCoreFrameBuffer(), "/__trailer_rec__");
+            // TEMP-TRAILER end
             // Request BGFX to submit to GPU (calls bgfx::frame())
             BEGIN_SPAN(tagSpan, "BGFX->GPU")
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_FLIP);
