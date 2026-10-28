@@ -626,6 +626,7 @@ void TableFixes::OnTablesScanned(const std::vector<Table>& tables)
 string TableFixes::GetRomFix(const string& rom, bool hasNvram, const fs::path& tablePath)
 {
    std::lock_guard lock(m_mutex);
+   m_romFixRunning = false; // Set again below when a procedure runs for this start of the ROM
    EnsureLoaded();
    const string romName = ToLower(rom);
    const string fileName = ToLower(tablePath.filename().string());
@@ -644,6 +645,7 @@ string TableFixes::GetRomFix(const string& rom, bool hasNvram, const fs::path& t
       if (sequence == procedure.sequences.end())
          continue;
       Log(LogLevel::Info, "Running '" + recipe.id + "' for the ROM '" + rom + "' (" + (requested ? "requested" : "no NVRAM yet") + ')');
+      m_romFixRunning = true;
       return nlohmann::json {
          { "id", recipe.id }, { "version", recipe.version }, { "title", recipe.title }, { "bootMs", procedure.bootMs }, { "holdMs", procedure.holdMs },
          { "waitMs", procedure.waitMs }, { "reset", procedure.reset }, { "notice", procedure.notice }, { "switches", sequence->switches } }.dump();
@@ -654,6 +656,7 @@ string TableFixes::GetRomFix(const string& rom, bool hasNvram, const fs::path& t
 void TableFixes::ReportRomFix(const string& rom, const string& id, int version, bool completed)
 {
    std::lock_guard lock(m_mutex);
+   m_romFixRunning = false;
    EnsureLoaded();
    if (!completed) {
       Log(LogLevel::Warn, "'" + id + "' was interrupted for the ROM '" + rom + "': it runs again at the next start");

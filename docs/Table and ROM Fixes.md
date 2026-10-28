@@ -178,8 +178,8 @@ History: version 1, 2026-10-25.
 
 ### <a id="gts3-zero-settings"></a>Gottlieb System 3: factory settings of the game
 
-Applies to the ROMs `sfight2` (Street Fighter II), `stargat5` (Stargate), `smb` (Super Mario Bros) and `smbmush` (Super Mario Bros
-Mushroom World).
+Applies to the ROMs `sfight2` (Street Fighter II), `stargat5` (Stargate), `waterwld` (Waterworld), `smb` (Super Mario Bros) and
+`smbmush` (Super Mario Bros Mushroom World).
 
 **Symptom.** Coins are accepted, but the display stays at CREDITS 0 and no game can be started.
 
@@ -191,7 +191,7 @@ is reset. Sequences (libpinmame switches: −8 Self Test, 143 left flipper, 141 
 
 | ROMs | Menu | Switches |
 | --- | --- | --- |
-| `sfight2`, `stargat5` | Long: Self Test twice, left flipper 3 times down to Game Adjustments, right flipper to select it, Start (load factory settings), Start (English) | −8, −8, 143, 143, 143, 141, 4, 4 |
+| `sfight2`, `stargat5`, `waterwld` | Long: Self Test twice, left flipper 3 times down to Game Adjustments, right flipper to select it, Start (load factory settings), Start (English) | −8, −8, 143, 143, 143, 141, 4, 4 |
 | `smb`, `smbmush` | Short: Self Test, left flipper to "Credit button to load factory settings", Start, Start | −8, 143, 4, 4 |
 
 Each press lasts 100 ms, followed by 1.2 s. The first press comes 25 s after the start of the emulation: the boot of these games takes
@@ -219,4 +219,8 @@ they had as `<rom>.nv.bak-<date>`).
 
 Other Gottlieb System 3 ROMs are not listed: their menus may differ, so each one must be checked with the driver before it is added.
 
-History: version 1, 2026-10-25.
+- `waterwld`, 2026-10-27: with the driver from a new NVRAM, the long menu ends on FACTORY SETTINGS LOADED; before it the attract mode
+  read REPLAY AT 00, and 2 coins and Start started no game (the score coverage harness saw no game on VR ROOM WaterWorld (Gottlieb
+  1995) 1.2).
+
+History: version 1, 2026-10-25; `waterwld` added 2026-10-27 (same version: tables that never had the fix see it as available).

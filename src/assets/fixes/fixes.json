@@ -40,7 +40,7 @@
         "runWithoutNvram": true,
         "notice": "Patching this table for compatibility: its game loads its factory settings (one time only, about 40 seconds). Please don't press any button until the game restarts.",
         "sequences": [
-          { "_menu": "Long menu: Self Test twice, left flipper 3 times down to Game Adjustments, right flipper, Start twice", "roms": ["sfight2", "stargat5"], "switches": [-8, -8, 143, 143, 143, 141, 4, 4] },
+          { "_menu": "Long menu: Self Test twice, left flipper 3 times down to Game Adjustments, right flipper, Start twice", "roms": ["sfight2", "stargat5", "waterwld"], "switches": [-8, -8, 143, 143, 143, 141, 4, 4] },
           { "_menu": "Short menu: Self Test, left flipper to 'load factory settings', Start twice", "roms": ["smb", "smbmush"], "switches": [-8, 143, 4, 4] }
         ]
       }

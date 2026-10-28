@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -122,6 +123,8 @@ public:
    // or because the ROM has no NVRAM yet. {"id", "version", "bootMs", "holdMs", "waitMs", "reset", "notice", "switches": [...]}
    std::string GetRomFix(const std::string& rom, bool hasNvram, const std::filesystem::path& tablePath);
    void ReportRomFix(const std::string& rom, const std::string& id, int version, bool completed);
+   // A ROM procedure given by GetRomFix runs: the machine is in its service menu, then reset (the score tracker ignores it meanwhile)
+   bool IsRomFixRunning() const { return m_romFixRunning; }
 
    const std::filesystem::path& GetLocalRecipesPath() const { return m_config.localRecipesPath; }
 
@@ -167,6 +170,7 @@ private:
 
    const Config m_config;
    std::recursive_mutex m_mutex;
+   std::atomic<bool> m_romFixRunning = false;
    bool m_loaded = false;
    bool m_libraryRecorded = false; // The tables of the library were recorded by a first scan (see OnTablesScanned)
    std::vector<Recipe> m_recipes;
