@@ -6,6 +6,9 @@ the VR trailer on a Mac, and it is also a quick way to look at the VR UI without
 
 It is an OpenXR runtime of its own, linked into the application (no loader): `src/steamframe/xrsim/`.
 
+It lives on the `xr-sim` branch only, with the frame recorder and the tools that make the videos: see
+[The xr-sim branch](XR%20Simulator%20Branch.md).
+
 | File | What |
 |---|---|
 | `XRSim.cpp` | The OpenXR functions VPX uses: instance, system, session and its states, reference and action spaces, swapchains, frame loop, actions, and `XR_EXT_render_model` for the controller models. The poses and inputs come from the application (`XRSim.h`). |
