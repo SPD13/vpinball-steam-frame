@@ -2,7 +2,7 @@
   "_comment": [
     "Per table rules for the leaderboards, for the tables whose scores are not found or not ended right by the heuristics (see src/core/ScoreTracker.h).",
     "A rule applies to the tables whose file name contains 'file', or which run the ROM 'rom'. Users can add their own in score-rules.json in the preferences folder.",
-    "Fields: disable (no scores recorded), source (pinmame, b2s, ultradmd, script, highscore), scores / players / inGame / gameOver (names of script variables), scoreBase (0 or 1, first index of the scores array), gameOnSolenoid (PinMAME solenoid on while a game is played, for machines whose memory map has no game over flag).",
+    "Fields: disable (no scores recorded), source (pinmame, b2s, ultradmd, script, highscore), scores / players / inGame / gameOver (names of script variables), scoreBase (0 or 1, first index of the scores array), scoresColumn (second index of a scores array of 2 dimensions, like the 1 of playersArray(player, 1)), gameOnSolenoid (PinMAME solenoid on while a game is played, for machines whose memory map has no game over flag).",
     "Example: {\"file\": \"my original table\", \"source\": \"script\", \"scores\": \"PlayerScores\", \"scoreBase\": 1, \"inGame\": \"GameRunning\"}"
   ],
   "rules": [
@@ -14,6 +14,16 @@
       "scoreBase": 1,
       "players": "PlayersPlayingGame",
       "inGame": "VpGameInPlay"
+    },
+    {
+      "_table": "Ready Player One (original): the scores are a column of the players array, playersArray(player, 1) from player 0",
+      "file": "ready player one",
+      "source": "script",
+      "scores": "playersArray",
+      "scoresColumn": 1,
+      "scoreBase": 0,
+      "players": "PlayersPlayingGame",
+      "gameOver": "gameOver"
     },
     {
       "_table": "The Walking Dead (Stern SAM): no game over flag in the memory map, flipper enable 'GameOn' solenoid of PinMAME",
