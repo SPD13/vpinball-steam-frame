@@ -69,7 +69,9 @@ cmake --build build --target vpinball
 
 ## The tools outside the repository
 
-The scripts that drive the simulator and make the videos live in the workspace next to the checkouts, **not in git**:
+The scripts that drive the simulator and make the videos run from the workspace, next to the checkouts. A copy is kept in the Doc repo
+(`vp_vr-steam-frame-docs`, `video-tools/`, refreshed by its `export.sh`) with the settings each tutorial starts from and the list of its
+tables and ROMs:
 
 | Folder | What |
 |---|---|
