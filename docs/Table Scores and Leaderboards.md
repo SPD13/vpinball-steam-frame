@@ -64,7 +64,7 @@ Each source gives a *reading*: the scores of the players (player 1 first), the n
 - **b2s.** The B2S plugins broadcast `"B2S","OnStateChange:1"` for every score (`'C'` events) and data change (`'E'` events, with the ids of the helpers: 31 `B2SSetCanPlay`, 35 `B2SSetGameOver`). The legacy B2S server broadcasts *before* it checks that a backglass is running, so this works for tables without a `.directb2s` file. Values are 32-bit, plenty for EM tables.
 - **ultradmd.** New plugin message, `plugins/plugins/ScoreboardPlugin.h`: `"Scores","OnScoreboard:1"` with a `ScoreboardEvent` (source name, players, current player, up to 8 scores of 64 bits). `UltraDMD::DisplayScoreboard` broadcasts it through `FlexDMD::BroadcastScoreboard`. Any other plugin that shows scores on behalf of a script can send it too; its `source` name is what gets stored.
 - **script.** The tracker asks the script engine for the dispatch id of each candidate name (`GetIDsOfNames`) and keeps those that read as properties (functions with the same names are left out), then reads them with `DISPATCH_PROPERTYGET`. Names tried, the first found wins:
-  - scores, as an array: `Score`, `Scores`, `PlayerScore`, `PlayerScores`, `PScore`, `PlayersScore`; else one variable per player: `Score1..4`, `PlayerScore1..4`, `P1Score..P4Score`; else a single score variable among the first list;
+  - scores, as an array of at most 16 entries (a longer one is something else: the 27 display digits of TopGun (2019), `Scores(26)`): `Score`, `Scores`, `PlayerScore`, `PlayerScores`, `PScore`, `PlayersScore`; else one variable per player: `Score1..4`, `PlayerScore1..4`, `P1Score..P4Score`; else a single score variable among the first list;
   - players: `PlayersPlayingGame`, `PlayersInGame`, `NumberOfPlayers`, `NumPlayers`, `PlayerCount`, `TotalPlayers`, `Players`, `nPlayers`;
   - in game: `bGameInPlay`, `GameInPlay`, `bGameInProgress`, `GameInProgress`, `bGameActive`, `GameActive`, `bGameStarted`, `GameStarted`, `bInGame`, `InGame`, `bGameOn`, `GameOn`, `bGameRunning`, `GameRunning`;
   - game over (only when no in game variable): `bGameOver`, `GameOver`, `IsGameOver`.
@@ -124,6 +124,7 @@ A rule applies to the tables whose **file name contains** `file` (case insensiti
 | `source` | Use this source (`pinmame`, `b2s`, `ultradmd`, `script`, `highscore`) instead of the most reliable one seen |
 | `scores` | Script variable holding the scores (array or single value); replaces the usual names |
 | `scoreBase` | 0 or 1: first index of the scores array |
+| `scoresColumn` | For a `scores` array of 2 dimensions, the players first: the second index, where the score is (`playersArray(player, 1)` is `scoresColumn: 1`) |
 | `players` | Script variable holding the number of players |
 | `inGame` | Script variable true while a game runs |
 | `gameOver` | Script variable true when no game runs (used instead of `inGame`) |
@@ -136,6 +137,7 @@ The bundled rules come from the coverage run over the library (section 12):
 | Rule | Table | Why |
 |---|---|---|
 | `{"file": "masters of the universe", "source": "script", "scores": "nvScore", "scoreBase": 1, "players": "PlayersPlayingGame", "inGame": "VpGameInPlay"}` | Masters of the Universe (custom, UltraDMD) | Its scoreboard always says 2 players, and its game flag and scores have names of their own (`Score` is an unrelated scalar) |
+| `{"file": "ready player one", "source": "script", "scores": "playersArray", "scoresColumn": 1, "scoreBase": 0, "players": "PlayersPlayingGame", "gameOver": "gameOver"}` | Ready Player One (original, FlexDMD) | Its scores are a column of its players array, `playersArray(player, 1)` from player 0; no B2S or scoreboard event |
 | `{"rom": "twd_160h", "gameOnSolenoid": 33}` | The Walking Dead (Stern SAM) | No game over in the map; the player count is not reset at the end of a game |
 | `{"rom": "im_185ve", "gameOnSolenoid": 33}` | Iron Man Vault Edition (Stern SAM) | Same, with the map added locally (section 5) |
 | `{"rom": "potc_600as", "gameOnSolenoid": 33}` | Pirates of the Caribbean (Stern SAM) | Same |
@@ -146,7 +148,7 @@ Each rule carries a `_table` comment field (ignored by the tracker) saying which
 
 `src/assets/pinmame/memmaps/` holds `index.json`, `maps/` and `platforms/` of [tomlogic/pinmame-nvram-maps](https://github.com/tomlogic/pinmame-nvram-maps), revision `7e63610`, 5 MB. They are under the **Open Database License** (database) and the **Database Contents License** (contents), Copyright Tom Collins and contributors; both licenses and a README with the attribution are in the folder and must stay with it.
 
-Four maps and two platforms were added locally, found with the probing techniques of section 12.4, and listed in `index.json`:
+Five maps and three platforms were added locally, found with the probing techniques of section 12.4, and listed in `index.json`:
 
 | File | ROM | Table |
 |---|---|---|
@@ -154,6 +156,7 @@ Four maps and two platforms were added locally, found with the probing technique
 | `maps/stern/sam/potc_600as.map.json` | `potc_600as` | Pirates of the Caribbean (Stern SAM) |
 | `maps/peyper/sonstwar.map.json`, `platforms/peyper.json` | `sonstwar` | Star Wars (Sonic 1987) |
 | `maps/juegos-populares/faeton.map.json`, `platforms/juegos-populares.json` | `faeton` | Faeton (Juegos Populares 1985), played by Ulysse 31 |
+| `maps/taito/sshuttle.map.json`, `platforms/taito.json` | `sshuttle` | Space Shuttle (Taito 1985), played by TopGun (2019) through the alias `TopGun,sshuttle` |
 
 Their `_notes` say how each address was found and what was verified (the Faeton scale of 10 is inferred, section 12.6). They are candidates to send upstream.
 
@@ -349,6 +352,8 @@ The tools are test code, kept out of the repository in the workspace folder `Doc
 
 Three tables side by side take about 45 minutes for the 46 tables. Run it under `caffeinate -dims`.
 
+`--ini Section.Key=Value...` adds settings to the runs. PuP tables need their pack in `FrameTables/pinupsystem/pupvideos` (otherwise every missing video is an error line), and the dummy audio driver makes them log an error per sound: both filled the 5 MB log of TopGun in 2 minutes. For them, use `--real-audio --ini Player.SoundVolume=0 Player.MusicVolume=0`. Disabling the PuP plugin (`Plugin.PUP.Enable=0`) is worse: their scripts then fail on every timer.
+
 ### 12.2 Reading a result: why does a table record nothing?
 
 Start from the session line of the log (`score-coverage-report.py <out>` prints them all), then look at the `COVERAGE-READ` lines:
@@ -438,6 +443,7 @@ About the tables and the machines:
 - **Scoreboards do not always tell the players**: the UltraDMD scoreboard of Masters of the Universe always says 2 players. The script's `PlayersPlayingGame` is right.
 - **Some tables cannot be played unattended**: James Bond 007 (Gottlieb 1980, timed play) and Street Fighter 2 (ball stuck after the first points) never finished a game with the autoplay. Their scores and game start are read correctly, and both record when played by hand (checked on the Frame). Others get a ball stuck now and then (The Simpsons once in four games): one failed run of a table that passed before is not a regression, run it again.
 - **Single-player machines** ignore the second Start (Apollo, Williams 1967). The Stern SAM tables sometimes ignored a second Start 2.5 s after the first, and took it 0.7 s after: a 2-player autoplay is not guaranteed.
+- **Taito do Brasil machines** (1981-85 hardware) have no maps upstream either. Their score display is RAM, `0x4080`-`0x408B` (the `dma_display` area of PinMAME `taito.c`): 3 bytes of packed BCD per player, least significant byte first, blank digits `0xF` (read as 0). The player count is `0x408F` and the game over flag bit 0 of `0x409F`. About 5 s after the game over flag is set, the attract mode writes text into the score bytes: the tracker takes the scores 1.5 s after the flag, before that. The map was made for `sshuttle` only; other Taito ROMs of this hardware likely share the layout, unchecked.
 - **Spanish 8-bit machines** (Peyper/Sonic Star Wars, Juegos Populares Faeton/Ulysse 31) have no maps and no platform files upstream. Both keep their whole state in 2 KB of battery-backed RAM: scores as 3 bytes of BCD per player on a 3-byte stride, a player count that goes back to 0 at the end, and 7-digit displays that show the 6 digits of memory followed by a fixed 0 (`scale: 10`). For Peyper the fixed 0 is in the driver (segment 36); for Juegos Populares it is inferred (6 digits in memory, no room for a 7th) and should be checked against the display on the Frame, where the backglass shows it.
 - **The memory map probe needs the machine to be the only thing changing**: in attract mode a machine copies a score to every display (Faeton shows one score on the four players), blinks scores, or shows high scores. Only readings taken after the Start press say which address is whose score.
 
@@ -484,6 +490,7 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | Pirates of the Caribbean | potc_600as | pinmame | the game on solenoid of the machine | 2,045,020 | New map (probe) + game on solenoid rule (SAM) |
 | Playboy 35th Anniversary (Data East 1989) v4.3 JP Salas, Ext2k VRROOM | play_a24 | pinmame | the game over flag of the machine | 26,300 |  |
 | Pokemon Pinball | - | script | a script variable | 550,440 |  |
+| Ready Player One | - | script | a script variable | 3,334,420 | Script rule (`playersArray` column 1, `gameOver`), new `scoresColumn` field (2026-10-27) |
 | Robocop (Data East 1989) | robo_a34 | pinmame | the game over flag of the machine | 91,200 |  |
 | Room Rocky (Gottlieb 1982) | rocky | pinmame | the game over flag of the machine | 20,850 |  |
 | Scooby Doo 2022 | - | script | a script variable | 3,818,360 |  |
@@ -503,6 +510,7 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | The Simpsons (Data East 1990) | simp | pinmame | the game over flag of the machine | 127,180 |  |
 | The Walking Dead | twd_160h | pinmame | the game on solenoid of the machine | 1,992,150 | Game on solenoid rule (SAM) |
 | Tmnt | tmnt_104 | pinmame | the game over flag of the machine | 312,000 |  |
+| TopGun (2019) (VR ROOM) | sshuttle (alias `TopGun`) | pinmame | the game over flag of the machine | 65,536 | New Taito platform and map (RAM probe); before, its display digits array `Scores(26)` was taken as scores (2026-10-27) |
 | Twilight Zone | tz_94ch | pinmame | the game over flag of the machine | 4,800,000 |  |
 | Ulysse 31 | faeton | pinmame | the game over flag of the machine | 151,980 | New platform and map for the Faeton ROM (RAM probe), scale 10 inferred |
 | Wrath of Olympus (Original 2022) | - | script | a script variable | 3,919,270 |  |
