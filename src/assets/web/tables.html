@@ -91,6 +91,28 @@
     </form>
   </dialog>
 
+  <dialog id="folder-dialog" class="tables-dialog folder-dialog">
+    <form id="folder-form" method="dialog">
+      <h2 id="folder-title">Thumbnail</h2>
+      <p class="tables-dialog-hint">Choose an image of the table's files on the device. It is resized for the table picker, the file itself is not changed.</p>
+      <div class="folder-browser">
+        <div class="folder-files">
+          <div id="folder-path" class="folder-path"></div>
+          <ul id="folder-list" class="folder-list"></ul>
+          <div id="folder-empty" class="folder-empty" hidden></div>
+        </div>
+        <div class="folder-preview">
+          <div class="folder-preview-image"><img id="folder-image" alt=""></div>
+          <div id="folder-info" class="folder-info"></div>
+        </div>
+      </div>
+      <div class="tables-dialog-actions">
+        <button type="button" id="folder-cancel" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="folder-save" class="btn btn-primary" disabled>Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <input type="file" id="thumbnail-input" accept="image/*" hidden>
 
   <script src="tables.js"></script>
