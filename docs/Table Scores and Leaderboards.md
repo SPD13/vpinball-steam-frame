@@ -48,7 +48,7 @@ Each source gives a *reading*: the scores of the players (player 1 first), the n
 | Name (stored in `source`) | What is read | Tables covered | In game signal |
 |---|---|---|---|
 | `pinmame` | The RAM of the emulated machine, through the **memory map** of its ROM (`game_state` of the [Pinball Memory Maps](https://github.com/tomlogic/pinmame-nvram-maps) project): one state per player score, `player_count`, `game_over` | ROM tables whose map has a `game_state` section (WPC, System 11, Bally, Stern, Gottlieb...: 383 395 1534 of the  bundled maps,  ROM names in the index) | `game_over` flag of the machine; the player count back to 0; the 'game on' solenoid named by a rule |
-| `b2s` | What the script sends to the B2S backglass server: `B2SSetScorePlayer` (scores of players 1 to 6), `B2SSetCanPlay` (players), `B2SSetGameOver` | Most EM and original tables (`If B2SOn Then Controller.B2SSetScorePlayer...`) | Game over light (`B2SSetGameOver`) |
+| `b2s` | What the script sends to the B2S backglass server: `B2SSetScorePlayer` (scores of players 1 to 4, and of 5 and 6 when `B2SSetCanPlay` says more than 4 players), `B2SSetCanPlay` (players), `B2SSetGameOver` | Most EM and original tables (`If B2SOn Then Controller.B2SSetScorePlayer...`) | Game over light (`B2SSetGameOver`) |
 | `ultradmd` | The scores of the UltraDMD scoreboard (`DisplayScoreboard(cPlayers, highlighted, s1..s4, ...)`), as FlexDMD implements UltraDMD | Original tables built on UltraDMD | none |
 | `script` | Global variables of the table script with the usual names (below) | EM and original tables without the above | `bGameInPlay`-like or `GameOver`-like variable |
 | `highscore` | Values the script saves with `SaveValue` under score-like keys | Last resort, when no other source showed a score in the session | none |
@@ -61,7 +61,7 @@ Each source gives a *reading*: the scores of the players (player 1 first), the n
   - the `game_over` entry of the map;
   - the **player count**: once the machine has shown players in the session, no player (0, or a value outside 1..6, as maps with an `offset` read 256 when no game runs) means no game. Some `game_over` entries do not work: the one of Bally Evel Knievel reads the game over lamp, which stays off, while its player count goes back to 0 at the end of the game (section 12.6);
   - the **game on solenoid** named by the rule of the ROM (`gameOnSolenoid`, section 4), read from the "VPinMAME Solenoids" states of the plugin, numbered like in the scripts' `SolCallback`. It is the flipper enable output: on while a ball is played, off between balls (drain, bonus count, tilt: up to 6 s seen) and after the game. The game is over once it stays off **20 s** (`GAME_ON_OFF_DELAY`), which also lets the end of game bonus, counted after the flippers went off, into the score. Stern SAM machines have no game over in their maps; PinMAME emulates their 'GameOn' as solenoid 33 (`SAM_FASTFLIPSOL`) from a per-ROM RAM address (`fastflipaddr` in `sam.c`), so it works for the SAM ROMs that PinMAME knows.
-- **b2s.** The B2S plugins broadcast `"B2S","OnStateChange:1"` for every score (`'C'` events) and data change (`'E'` events, with the ids of the helpers: 31 `B2SSetCanPlay`, 35 `B2SSetGameOver`). The legacy B2S server broadcasts *before* it checks that a backglass is running, so this works for tables without a `.directb2s` file. Values are 32-bit, plenty for EM tables.
+- **b2s.** The B2S plugins broadcast `"B2S","OnStateChange:1"` for every score (`'C'` events) and data change (`'E'` events, with the ids of the helpers: 31 `B2SSetCanPlay`, 35 `B2SSetGameOver`). The legacy B2S server broadcasts *before* it checks that a backglass is running, so this works for tables without a `.directb2s` file. Values are 32-bit, plenty for EM tables. Players 5 and 6 are only scores on a machine that tells it has more than 4 players: backglasses of 4-player machines use them for other displays (2001 A Space Odyssey counts its balls with `B2SSetScorePlayer5`, and sends its scores with `B2SSetScore <display>`, which has no score event: the backglass looked like the score source and hid the right one, the script).
 - **ultradmd.** New plugin message, `plugins/plugins/ScoreboardPlugin.h`: `"Scores","OnScoreboard:1"` with a `ScoreboardEvent` (source name, players, current player, up to 8 scores of 64 bits). `UltraDMD::DisplayScoreboard` broadcasts it through `FlexDMD::BroadcastScoreboard`. Any other plugin that shows scores on behalf of a script can send it too; its `source` name is what gets stored.
 - **script.** The tracker asks the script engine for the dispatch id of each candidate name (`GetIDsOfNames`) and keeps those that read as properties (functions with the same names are left out), then reads them with `DISPATCH_PROPERTYGET`. Names tried, the first found wins:
   - scores, as an array of at most 16 entries (a longer one is something else: the 27 display digits of TopGun (2019), `Scores(26)`): `Score`, `Scores`, `PlayerScore`, `PlayerScores`, `PScore`, `PlayersScore`; else one variable per player: `Score1..4`, `PlayerScore1..4`, `P1Score..P4Score`; else a single score variable among the first list;
@@ -89,6 +89,8 @@ A session can hold several games. The tracker runs a small state machine, *idle*
 Scores already shown when the table starts do not start a game: they are often the previous game's, restored by the script.
 
 **Games must start from zero.** A machine whose NVRAM was saved in the middle of a game boots with that game's scores in memory; a script may restore its last scores. So a game is only recorded if its scores were seen at zero within 3 s before its start (`GAME_START_ZERO_WINDOW`) or during it; otherwise: "Game ended without its scores being reset at its start (...): not recorded, as they are from an earlier game".
+
+**ROM fixes.** While a ROM procedure of the table fixes runs (`TableFixes::IsRomFixRunning`: from `GetRomFix` to `ReportRomFix`, see `docs/Table and ROM Fixes.md`), the machine is in its service menu, then reset: the tracker skips its polls. Afterwards it forgets what it saw, and scores shown before the next zero do not start a game (WaterWorld showed 1,400,000,000 when it restarted, which was recorded as a game before this).
 
 **Recording** (`RecordGame`): a game whose scores are all zero is skipped. The number of players is what the source says, or up to the last player who scored. One score is stored per player with a non-zero score, given to the profile of that player (`ScoreStore::GetPlayerProfileIds`), or to nobody if the player is unassigned or above 6. The duration of the game and the ROM name are kept. The scores are written at once, so a crash later in the session does not lose them.
 
@@ -141,6 +143,7 @@ The bundled rules come from the coverage run over the library (section 12):
 | `{"rom": "twd_160h", "gameOnSolenoid": 33}` | The Walking Dead (Stern SAM) | No game over in the map; the player count is not reset at the end of a game |
 | `{"rom": "im_185ve", "gameOnSolenoid": 33}` | Iron Man Vault Edition (Stern SAM) | Same, with the map added locally (section 5) |
 | `{"rom": "potc_600as", "gameOnSolenoid": 33}` | Pirates of the Caribbean (Stern SAM) | Same |
+| `{"rom": "st_161h", "gameOnSolenoid": 33}` | Star Trek LE (Stern SAM) | Same (its map has no game over) |
 
 Each rule carries a `_table` comment field (ignored by the tracker) saying which table it is for and why.
 
@@ -148,7 +151,7 @@ Each rule carries a `_table` comment field (ignored by the tracker) saying which
 
 `src/assets/pinmame/memmaps/` holds `index.json`, `maps/` and `platforms/` of [tomlogic/pinmame-nvram-maps](https://github.com/tomlogic/pinmame-nvram-maps), revision `7e63610`, 5 MB. They are under the **Open Database License** (database) and the **Database Contents License** (contents), Copyright Tom Collins and contributors; both licenses and a README with the attribution are in the folder and must stay with it.
 
-Five maps and three platforms were added locally, found with the probing techniques of section 12.4, and listed in `index.json`:
+Six maps and four platforms were added locally, found with the probing techniques of section 12.4, and listed in `index.json`:
 
 | File | ROM | Table |
 |---|---|---|
@@ -157,6 +160,9 @@ Five maps and three platforms were added locally, found with the probing techniq
 | `maps/peyper/sonstwar.map.json`, `platforms/peyper.json` | `sonstwar` | Star Wars (Sonic 1987) |
 | `maps/juegos-populares/faeton.map.json`, `platforms/juegos-populares.json` | `faeton` | Faeton (Juegos Populares 1985), played by Ulysse 31 |
 | `maps/taito/sshuttle.map.json`, `platforms/taito.json` | `sshuttle` | Space Shuttle (Taito 1985), played by TopGun (2019) through the alias `TopGun,sshuttle` |
+| `maps/spinball/vrnwrld.map.json`, `platforms/spinball.json` | `vrnwrld` | Verne's World (Spinball 1996) |
+
+One map of the project was changed: `maps/bally/as-2518-17/system-rom-20.map.json` (8 Bally ROMs, Evel Knievel among them) reads its game over lamp with the mask `0x40` instead of `0x4`. Its NVRAM keeps the data in the high nibble, and libpinmame applies the mask of a field to the whole byte without the nibble of the platform, so `0x4` read a bit that is always set and the games never ended. Other maps that read a lamp with a mask on a platform with a nibble may have the same problem (`bally-17-*`, `bally-35-*`); only this one is used by a table of the library.
 
 Their `_notes` say how each address was found and what was verified (the Faeton scale of 10 is inferred, section 12.6). They are candidates to send upstream.
 
@@ -352,7 +358,9 @@ The tools are test code, kept out of the repository in the workspace folder `Doc
 
 Three tables side by side take about 45 minutes for the 46 tables. Run it under `caffeinate -dims`.
 
-`--ini Section.Key=Value...` adds settings to the runs. PuP tables need their pack in `FrameTables/pinupsystem/pupvideos` (otherwise every missing video is an error line), and the dummy audio driver makes them log an error per sound: both filled the 5 MB log of TopGun in 2 minutes. For them, use `--real-audio --ini Player.SoundVolume=0 Player.MusicVolume=0`. Disabling the PuP plugin (`Plugin.PUP.Enable=0`) is worse: their scripts then fail on every timer.
+`--ini Section.Key=Value...` adds settings to the runs. PuP tables need their pack in `FrameTables/pinupsystem/pupvideos` (otherwise every missing video is an error line), and the dummy audio driver makes them log an error per sound: both filled the 5 MB log of TopGun in 2 minutes. For them, use `--real-audio --ini Player.SoundVolume=0 Player.MusicVolume=0`. Disabling the PuP plugin (`Plugin.PUP.Enable=0`) is worse: their scripts then fail on every timer. Tables that print a lot (WaterWorld prints '0' many times a second) need `--ini Global.LogScriptOutput=0`.
+
+Other options: `--slam-at uuid8=S` presses the slam tilt then (it did not end the games of LOTR and James Bond: their scripts do not wire it); `--start-at uuid8=S` delays the Start press, e.g. after a ROM fix (80 s for WaterWorld); `VPX_COVERAGE_APP=<binary>` plays with another build (a copy of the app with another `libpinmame.dylib`, for instance). The Frame is only needed for the tables missing on the Mac.
 
 ### 12.2 Reading a result: why does a table record nothing?
 
@@ -475,7 +483,9 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | BleachVR | - | script | a script variable | 8,410,590 |  |
 | Bond 60th Dr.No | - | script | a script variable | 35,081,110 |  |
 | Bram Stoker's Dracula (Williams 1993) | drac_l1 | pinmame | the game over flag of the machine | 4,409,220 |  |
-| Evel Knievel (Bally 1977) | evelknie | pinmame | no player on the machine | 11,740 | Player count end signal (its game over lamp flag never changes) |
+| 2001 A Space Odyssey ChuckRibbits Mod VR Room 1.2 | - | script | a script variable | 32,150 | Backglass players 5 and 6 only for machines of more than 4 players (2026-10-28) |
+| Diablo 2 (ChuckRibbits Original 2026) 1.2.1 | - | script | a script variable | 200,000 | None: the autoplay needs 2 Start presses (difficulty choice, `--players 2`) |
+| Evel Knievel (Bally 1977) | evelknie | pinmame | the game over flag of the machine | 20,910 | Game over lamp mask of the Bally AS-2518-17 map (2026-10-28); October: player count end signal, which stayed at 2 players on 2026-10-28 |
 | Friday the 13th | - | script | a script variable | 119,150 |  |
 | Ghostbusters slimer 2.1 | - | script | a script variable | 353,610 |  |
 | Godzilla (Sega 1998) | godzilla | pinmame | the game over flag of the machine | 4,356,820 |  |
@@ -496,7 +506,8 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | Scooby Doo 2022 | - | script | a script variable | 3,818,360 |  |
 | South Park (Sega 1999) | sprk_103 | pinmame | the game over flag of the machine | 8,821,040 |  |
 | Space Cadet (Original 2021) | - | script | a script variable | 163,250 |  |
-| Star Wars (Sonic 1987) | sonstwar | pinmame | the game over flag of the machine | 2,277,000 | New platform and map (RAM probe), scale 10 |
+| Star Trek LE (Stern 2013) v1.09 | st_161h | pinmame | the game on solenoid of the machine | 1,712,390 | Game on solenoid rule (SAM, 2026-10-28) |
+| Star Wars (Sonic 1987) | sonstwar | pinmame | the game over flag of the machine | 2,277,000 | New platform and map (RAM probe), scale 10. 2026-10-28: the machine no longer takes coins or Start on the Mac (displays dark), with the October NVRAM, a new one, and PinMAME 652249e2 too. Open |
 | Star Wars Trilogy | swtril43 | pinmame | the game over flag of the machine | 1,410,290 |  |
 | Stargate Minimal (Gottlieb 1995) | stargat5 | pinmame | the game over flag of the machine | 10,269,180 |  |
 | Starship Troopers (Sega 1997) | startrp2 | pinmame | the game over flag of the machine | 4,171,910 |  |
@@ -512,5 +523,9 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | Tmnt | tmnt_104 | pinmame | the game over flag of the machine | 312,000 |  |
 | TopGun (2019) (VR ROOM) | sshuttle (alias `TopGun`) | pinmame | the game over flag of the machine | 65,536 | New Taito platform and map (RAM probe); before, its display digits array `Scores(26)` was taken as scores (2026-10-27) |
 | Twilight Zone | tz_94ch | pinmame | the game over flag of the machine | 4,800,000 |  |
+| Verne's World (Spinball 1996) 1.0.1 | vrnwrld | pinmame | the game over flag of the machine | 393,013 | New Spinball platform and map (RAM probe, 2026-10-28); needs a second launch the first time (Spinball first boot hang) |
+| VR Room Terminator 2 (Williams 1991) g5k v1.11 | t2_l8 | pinmame | the game over flag of the machine | 411,490 | None: a WPC first launch without NVRAM stays on FACTORY SETTINGS RESTORED |
 | Ulysse 31 | faeton | pinmame | the game over flag of the machine | 151,980 | New platform and map for the Faeton ROM (RAM probe), scale 10 inferred |
+| VR ROOM WaterWorld (Gottlieb 1995) 1.2 | waterwld | pinmame | - | - | Not recorded: a game starts (after `waterwld` was added to the Gottlieb System 3 factory settings fix, 2026-10-28), but no ball is served, also on a second launch. Table or emulation problem, open |
+| World Cup Soccer (Bally 1994) VPW v1.5 | wcs_l2 | pinmame | the game over flag of the machine | 19,300,000 | None: WPC first launch, as Terminator 2 |
 | Wrath of Olympus (Original 2022) | - | script | a script variable | 3,919,270 |  |

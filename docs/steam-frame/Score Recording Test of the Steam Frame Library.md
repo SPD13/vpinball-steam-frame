@@ -101,3 +101,26 @@ Each table was played once, unattended, on the Mac build of fork master (5d6abe8
 - **Green check:** the score tracker recorded a finished game with a score above zero.
 - **Red mark:** no game was recorded. The reason column gives the tracker's last log line.
 - **Limits:** a red mark can also come from the autoplay (ball stuck, single-player machine, timed play) rather than the tracker. James Bond 007 and Street Fighter 2 failed this way in October and recorded fine when played by hand. The Mac has the Frame's ROMs and aliases, but only the TopGun PuP pack, so PuP tables ran without their videos. Nothing was fixed in this pass.
+
+## Follow-up: the 14 tables analyzed on the Mac (2026-10-28)
+
+The 12 failing tables without a PuP pack were played again on the Mac (DarkestDungeon and Futurama, which need their PuP packs, were left
+out). 7 of the 12 now record a score. 3 games cannot be finished unattended (two of them recorded when played by hand), and 2 tables
+have a problem outside score tracking, still open: WaterWorld serves no ball, Star Wars (Sonic 1987) takes no coin.
+
+| Table | Now | Cause | Fix |
+| --- | --- | --- | --- |
+| 2001 A Space Odyssey | ✅ 32,150 | The backglass was taken as the score source: the table counts its balls on backglass player 5, and its scores never reach the backglass as player scores | Backglass players 5 and 6 only count for machines of more than 4 players |
+| Diablo 2 | ✅ 200,000 | None in the tracker: the game waits for a difficulty choice confirmed by a second Start | None (the harness presses Start twice) |
+| Evel Knievel | ✅ 20,910 | The game over lamp of its memory map was read with a mask on the wrong nibble: always "in game" | Mask `0x40` in the shared Bally AS-2518-17 map |
+| Star Trek LE | ✅ 1,712,390 | Stern SAM map without game over flag | Game on solenoid rule (`st_161h`, solenoid 33) |
+| Terminator 2 | ✅ 411,490 | First launch without NVRAM: WPC machines stay on FACTORY SETTINGS RESTORED | None needed after the first launch |
+| World Cup Soccer | ✅ 19,300,000 | Same as Terminator 2 | Same |
+| Verne's World | ✅ 393,013 | No memory map for Spinball games (and a first launch hang) | New Spinball platform and `vrnwrld` map |
+| Lord of the Rings | ❌ | A ball stays trapped and keeps scoring: the game never ends unattended | None: autoplay limit |
+| James Bond 007 | ❌ | Timed play kept alive by the autoplay | None: recorded by hand in October |
+| Street Fighter 2 | ❌ | The ball gets stuck after the first points | None: recorded by hand in October |
+| WaterWorld | ❌ | Zero settings (no game could start); after the fix, a game starts but no ball is served | `waterwld` added to the Gottlieb System 3 factory settings fix, and the tracker ignores what a ROM fix shows (it recorded a 1,400,000,000 point game). The ball is still open |
+| Star Wars (Sonic 1987) | ❌ | The machine takes no coin or Start and its displays stay dark, with any NVRAM and PinMAME version tried | Open |
+
+Details in `docs/Table Scores and Leaderboards.md` (sections 3, 4, 5, 12 and appendix A) and `docs/Table and ROM Fixes.md`.
