@@ -39,6 +39,11 @@
       "_table": "Pirates of the Caribbean (Stern SAM)",
       "rom": "potc_600as",
       "gameOnSolenoid": 33
+    },
+    {
+      "_table": "Star Trek LE (Stern SAM)",
+      "rom": "st_161h",
+      "gameOnSolenoid": 33
     }
   ]
 }

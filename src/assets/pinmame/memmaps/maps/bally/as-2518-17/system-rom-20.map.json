@@ -137,11 +137,11 @@
       ]
     },
     "game_over": {
-      "_notes": "reading 'game over' lamp",
+      "_notes": "reading 'game over' lamp. Changed locally for VPX: mask 0x40 instead of 0x4. The NVRAM of this platform keeps its data in the high nibble, and libpinmame applies the mask of a field to the whole byte, without the nibble of the platform: 0x4 read a bit that is always set, so the game never ended (Evel Knievel). The lamp is bit 0x4 of the high nibble: 0x40 of the byte, set during a game.",
       "label": "Game Over",
       "start": "0x20C",
       "encoding": "bool",
-      "mask": "0x4",
+      "mask": "0x40",
       "invert": true
     },
     "tilted": {
