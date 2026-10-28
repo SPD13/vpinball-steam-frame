@@ -477,7 +477,7 @@ void ScoreTracker::RecordGame(const vector<int64_t>& scores, int playerCount, So
 // Rules (score-rules.json)
 //
 // {"rules":[{"file":"part of the table file name","rom":"romname","disable":true,"source":"pinmame|b2s|ultradmd|script|highscore",
-//            "scores":"script variable","scoreBase":0,"players":"script variable","inGame":"script variable","gameOver":"script variable",
+//            "scores":"script variable","scoreBase":0,"scoresColumn":1,"players":"script variable","inGame":"script variable","gameOver":"script variable",
 //            "gameOnSolenoid":33}]}
 
 void ScoreTracker::LoadRules(bool romKnown)
@@ -510,6 +510,7 @@ void ScoreTracker::LoadRules(bool romKnown)
             m_rule.inGame = rule.value("inGame", m_rule.inGame);
             m_rule.gameOver = rule.value("gameOver", m_rule.gameOver);
             m_rule.scoreBase = rule.value("scoreBase", m_rule.scoreBase);
+            m_rule.scoresColumn = rule.value("scoresColumn", m_rule.scoresColumn);
             m_rule.gameOnSolenoid = rule.value("gameOnSolenoid", m_rule.gameOnSolenoid);
          }
       }
@@ -762,8 +763,17 @@ void ScoreTracker::ProbeScript()
          {
             if (const std::optional<CComVariant> value = ReadScriptVar(*var); value && V_ISARRAY(&*value))
             {
-               m_scriptScores = var;
-               break;
+               // An array of a score per player has a few entries (some tables declare more than they use): a much longer one is
+               // something else, like the 27 display digits of TopGun (2019), Scores(26)
+               SAFEARRAY* array = (V_VT(&*value) & VT_BYREF) ? *V_ARRAYREF(&*value) : V_ARRAY(&*value);
+               LONG lower = 0, upper = -1;
+               if (array && SafeArrayGetDim(array) == 1 && SUCCEEDED(SafeArrayGetLBound(array, 1, &lower)) && SUCCEEDED(SafeArrayGetUBound(array, 1, &upper))
+                  && upper - lower + 1 <= 2 * SCOREPI_MAX_PLAYERS)
+               {
+                  m_scriptScores = var;
+                  break;
+               }
+               continue;
             }
             if (!single)
                single = var;
@@ -819,14 +829,17 @@ std::optional<ScoreTracker::Reading> ScoreTracker::ReadScript()
             SAFEARRAY* array = (V_VT(&*value) & VT_BYREF) ? *V_ARRAYREF(&*value) : V_ARRAY(&*value);
             VARTYPE type = VT_EMPTY;
             LONG lower = 0, upper = -1;
-            if (array && SafeArrayGetDim(array) == 1 && SUCCEEDED(SafeArrayGetVartype(array, &type)) && type == VT_VARIANT
+            // Arrays of the players with their scores in a column (playersArray(player, 1)) have 2 dimensions, the first one for the players
+            const UINT dims = m_rule.scoresColumn >= 0 ? 2 : 1;
+            if (array && SafeArrayGetDim(array) == dims && SUCCEEDED(SafeArrayGetVartype(array, &type)) && type == VT_VARIANT
                && SUCCEEDED(SafeArrayGetLBound(array, 1, &lower)) && SUCCEEDED(SafeArrayGetUBound(array, 1, &upper)))
             {
                vector<int64_t> elements;
                for (LONG i = lower; i <= upper && elements.size() < SCOREPI_MAX_PLAYERS + 1; i++)
                {
+                  LONG indices[2] = { i, m_rule.scoresColumn }; // In the order of the script
                   CComVariant element;
-                  elements.push_back(SUCCEEDED(SafeArrayGetElement(array, &i, &element)) ? VariantToInt64(element).value_or(0) : 0);
+                  elements.push_back(SUCCEEDED(SafeArrayGetElement(array, indices, &element)) ? VariantToInt64(element).value_or(0) : 0);
                }
                // Arrays are often declared with one more entry to be used from index 1 (Dim Score(4)): the first entry tells which
                if (m_rule.scoreBase < 0 && !elements.empty() && elements[0] > 0 && !m_scriptZeroBased)

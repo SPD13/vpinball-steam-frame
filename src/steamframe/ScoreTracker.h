@@ -62,6 +62,7 @@ private:
       Source source = Source::None;
       string scores, players, inGame, gameOver;
       int scoreBase = -1;
+      int scoresColumn = -1; // Second index of a 2 dimensions array of scores, like the 1 of playersArray(player, 1)
       int gameOnSolenoid = 0; // PinMAME solenoid that is on while a game is played (flipper enable, like the 'GameOn' solenoid 33 of Stern SAM)
    };
 
