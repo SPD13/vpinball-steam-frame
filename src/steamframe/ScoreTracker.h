@@ -122,6 +122,7 @@ private:
    std::optional<ScriptVar> m_scriptPlayers, m_scriptInGame, m_scriptGameOver;
    bool m_scriptZeroBased = false; // Arrays of scores filled from index 0
    bool m_scriptProbed = false;
+   bool m_romFixSeen = false; // A ROM fix ran (see Poll)
    std::optional<ScriptVar> ProbeScriptVar(IDispatch* dispatch, const string& name) const;
    std::optional<CComVariant> ReadScriptVar(const ScriptVar& var) const;
 

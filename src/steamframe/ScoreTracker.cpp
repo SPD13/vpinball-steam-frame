@@ -8,6 +8,7 @@
 #include "core/player.h"
 #include "parts/pintable.h"
 #include "steamframe/ScoreStore.h"
+#include "steamframe/TableFixes.h"
 #include "plugins/ScoreboardPlugin.h"
 
 #include <cmath>
@@ -230,6 +231,23 @@ void ScoreTracker::Poll()
 {
    if (m_disabled)
       return;
+   // A ROM fix plays the service menu of the machine, then resets it (see TableFixes): what the machine shows meanwhile is not a game
+   // (WaterWorld showed 1,400,000,000 as a score when it restarted). Scores shown before the next zero do not start a game.
+   if (g_launcher->GetTableFixes().IsRomFixRunning())
+   {
+      m_romFixSeen = true;
+      return;
+   }
+   if (std::exchange(m_romFixSeen, false))
+   {
+      PLOGI << "[Scores] ROM fix done: the readings start again";
+      m_inGame = false;
+      m_pendingInGame.reset();
+      m_gameScores.clear();
+      m_sawNoScore = false;
+      m_lastNoScore.reset();
+      m_lastNoScoreBySource.clear();
+   }
    if (m_rom.empty())
       RefreshRom();
    if (m_pinmameStatesDirty)
@@ -667,8 +685,11 @@ std::optional<ScoreTracker::Reading> ScoreTracker::ReadB2S() const
    if (!m_b2sActive)
       return std::nullopt;
    Reading reading;
+   // Players 5 and 6 are often other displays (credits, ball in play: B2SSetScorePlayer5 counts the balls of 2001 A Space Odyssey):
+   // they are only scores on a machine that tells it has more than 4 players
+   const int maxPlayers = m_b2sPlayers > 4 ? 6 : 4;
    int count = 0;
-   for (int i = 0; i < 6; i++)
+   for (int i = 0; i < maxPlayers; i++)
       if (m_b2sScores[i] != 0)
          count = i + 1;
    reading.scores.assign(m_b2sScores, m_b2sScores + std::max(count, 1));
