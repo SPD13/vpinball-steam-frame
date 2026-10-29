@@ -10,6 +10,7 @@
 #include "fonts/IconsForkAwesome.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/MeshSimplifier.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/ScoresPage.h"
@@ -182,6 +183,41 @@ private:
    }
 };
 
+// The simplified meshes (Steam Frame screen), switched and tuned live, saved for the table or for all of them like the settings pages
+class SimplifiedMeshesPage final : public InGameUIPage
+{
+public:
+   SimplifiedMeshesPage()
+      : InGameUIPage("Simplified meshes"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_SimplifyMeshes, //
+         []() { return MeshSimplifier::Get().IsEnabled(); }, //
+         [](bool v) { MeshSimplifier::Get().SetEnabled(v); }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_SimplifyMeshesError, 1.f, "%.2f px"s, //
+         []() { return MeshSimplifier::Get().GetAllowedPixels(); }, //
+         [](float, float v) { MeshSimplifier::Get().SetAllowedPixels(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Simplified meshes status"s, "Parts simplified when the table loaded, and the triangles left out over the last second"s,
+         [](int, const InGameUIItem*)
+         {
+            const MeshSimplifier& simplifier = MeshSimplifier::Get();
+            const int parts = simplifier.GetSimplifiedPartCount();
+            const float saved = simplifier.GetSavedShare();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(parts == 0 ? "No part simplified (the setting was off when the table loaded, or the table is light)"
+                  : !simplifier.IsEnabled()  ? std::format("{} parts simplified, drawn in full (off)", parts).c_str()
+                  : std::isnan(saved)        ? std::format("{} parts simplified", parts).c_str()
+                                             : std::format("{} parts simplified, {:.0f} % of the triangles left out", parts, saved * 100.f).c_str());
+         }));
+   }
+};
+
 // The controls which have pages of their own (Controls screen)
 class MoreControlsPage final : public InGameUIPage
 {
@@ -241,6 +277,7 @@ constexpr const char* kThisTable = "vrui/table";
 constexpr const char* kMenuAndLobby = "vrui/menu-lobby";
 constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
+constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
 // The items of a page which no section lists (an option added upstream) are shown by its 'rest' section.
@@ -270,13 +307,19 @@ static vector<Section> GetSections(Screen screen)
    case Screen::Display:
       return {
          Section { ""s, kPerfPanel, {}, true },
-         Section { "VR rendering"s, kVR,
-            { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Label("Foveation status"s),
-               Label("Render resolution status"s), Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget),
-               Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale), Label("Dynamic resolution status"s), Prop(Settings::m_propPlayer_SimplifyMeshes) },
-            false, false },
+         Section { "VR rendering"s, kVR, { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Label("Render resolution status"s) }, false, false },
          Section { "Desktop mirror"s, kVR, { Prop(Settings::m_propPlayerVR_DesktopDisplay), Prop(Settings::m_propPlayerVR_ShrinkDesktopDisplay) }, false, false },
          Section { ""s, kGraphics, {}, true },
+      };
+
+   case Screen::SteamFrame:
+      return {
+         Section { "Dynamic resolution"s, kVR,
+            { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale),
+               Label("Dynamic resolution status"s) },
+            false, false },
+         Section { "Foveated rendering"s, kVR, { Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Label("Foveation status"s) }, false, false },
+         Section { "Simplified meshes"s, kSimplifiedMeshes, {}, true },
       };
 
    case Screen::Sound:
@@ -329,6 +372,7 @@ bool IsScreenAvailable(Screen screen)
    case Screen::Scores:
    case Screen::Room:
    case Screen::Display:
+   case Screen::SteamFrame:
    case Screen::Sound:
    case Screen::Controls:
    case Screen::Plugins:
@@ -348,6 +392,7 @@ const char* GetScreenIcon(Screen screen)
    case Screen::Scores: return ICON_FK_TROPHY;
    case Screen::Room: return ICON_FK_CUBE;
    case Screen::Display: return ICON_FK_TACHOMETER;
+   case Screen::SteamFrame: return kSteamFrameLogo;
    case Screen::Sound: return ICON_FK_VOLUME_UP;
    case Screen::Controls: return ICON_FK_GAMEPAD;
    case Screen::Plugins: return ICON_FK_PUZZLE_PIECE;
@@ -368,6 +413,7 @@ const char* GetScreenName(Screen screen)
    case Screen::Scores: return "Scores";
    case Screen::Room: return g_pplayer && g_pplayer->m_vrDevice ? "VR & Room" : "Point of view";
    case Screen::Display: return "Display & Performance";
+   case Screen::SteamFrame: return "Steam Frame";
    case Screen::Sound: return "Sound";
    case Screen::Controls: return "Controls";
    case Screen::Plugins: return "Plugins";
@@ -407,6 +453,11 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       }
       sources.push_back(source(kGraphics, std::make_unique<GraphicSettingsPage>()));
       return CreateComposed(screen, "Display & Performance"s, ""s, std::move(sources));
+   case Screen::SteamFrame:
+      if (vr)
+         sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
+      sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
+      return CreateComposed(screen, "Steam Frame"s, "What the Steam Frame Edition adds to keep heavy tables at the headset's full resolution"s, std::move(sources));
    case Screen::Sound:
       sources.push_back(source(kAudio, std::make_unique<AudioSettingsPage>()));
       if (vr)

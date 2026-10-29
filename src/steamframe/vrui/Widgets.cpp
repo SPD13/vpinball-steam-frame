@@ -23,6 +23,36 @@ void EndRegion()
    Theme::ApplyPixelDensity();
 }
 
+void SteamFrameLogo(ImDrawList* drawList, const ImVec2& center, float size, ImU32 color)
+{
+   const float h = size * 0.5f;
+   const float line = max(1.f, size * 0.075f);
+   // The viewfinder: four corners
+   const float arm = size * 0.2f;
+   for (int i = 0; i < 4; i++)
+   {
+      const float sx = (i & 1) ? 1.f : -1.f, sy = (i & 2) ? 1.f : -1.f;
+      const ImVec2 corner(center.x + sx * h, center.y + sy * h);
+      const ImVec2 points[3] = { ImVec2(corner.x, corner.y - sy * arm), corner, ImVec2(corner.x - sx * arm, corner.y) };
+      drawList->AddPolyline(points, 3, color, ImDrawFlags_None, line);
+   }
+   // The visor: a rounded band with a notch for the nose
+   const float w = size * 0.33f, top = center.y - size * 0.17f, bottom = center.y + size * 0.17f, r = size * 0.1f;
+   const float notch = size * 0.09f, notchDepth = size * 0.09f;
+   drawList->PathArcTo(ImVec2(center.x - w + r, top + r), r, IM_PI, IM_PI * 1.5f);
+   drawList->PathArcTo(ImVec2(center.x + w - r, top + r), r, IM_PI * 1.5f, IM_PI * 2.f);
+   drawList->PathArcTo(ImVec2(center.x + w - r, bottom - r), r, 0.f, IM_PI * 0.5f);
+   drawList->PathLineTo(ImVec2(center.x + notch, bottom));
+   drawList->PathLineTo(ImVec2(center.x, bottom - notchDepth));
+   drawList->PathLineTo(ImVec2(center.x - notch, bottom));
+   drawList->PathArcTo(ImVec2(center.x - w + r, bottom - r), r, IM_PI * 0.5f, IM_PI);
+   drawList->PathStroke(color, ImDrawFlags_Closed, line);
+   // The lenses
+   const float lens = size * 0.075f;
+   drawList->AddCircleFilled(ImVec2(center.x - size * 0.15f, center.y - size * 0.02f), lens, color);
+   drawList->AddCircleFilled(ImVec2(center.x + size * 0.15f, center.y - size * 0.02f), lens, color);
+}
+
 bool RailButton(const char* id, const char* icon, const ImVec2& size, bool selected, bool focused, bool& hovered)
 {
    const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -42,9 +72,15 @@ bool RailButton(const char* id, const char* icon, const ImVec2& size, bool selec
       const float barWidth = Theme::Px(0.25f);
       drawList->AddRectFilled(ImVec2(pos.x, pos.y + size.y * 0.2f), ImVec2(pos.x + barWidth, pos.y + size.y * 0.8f), Theme::kAccent, barWidth * 0.5f);
    }
+   const ImU32 iconColor = selected ? Theme::kAccent : (hovered || focused) ? Theme::kText : Theme::kTextMuted;
+   if (icon[0] == '\x01') // A logo drawn by us (Screens' kSteamFrameLogo)
+   {
+      SteamFrameLogo(drawList, pos + size * 0.5f, Theme::Px(Theme::kRailIconSize), iconColor);
+      return clicked;
+   }
    ImGui::PushFont(Theme::Font(), Theme::Px(Theme::kRailIconSize));
    const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-   drawList->AddText(pos + (size - iconSize) * 0.5f, selected ? Theme::kAccent : (hovered || focused) ? Theme::kText : Theme::kTextMuted, icon);
+   drawList->AddText(pos + (size - iconSize) * 0.5f, iconColor, icon);
    ImGui::PopFont();
    return clicked;
 }

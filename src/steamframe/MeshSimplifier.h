@@ -62,6 +62,13 @@ public:
    // Simplified meshes in use (on for the table when it loaded with the setting on; switched live by the settings page)
    bool IsEnabled() const { return m_enabled; }
    void SetEnabled(bool enabled) { m_enabled = enabled; }
+   // Allowed error, in pixels (Player/SimplifyMeshesError, read when the table loads, changed live by the settings page)
+   float GetAllowedPixels() const { return m_allowedPixels; }
+   void SetAllowedPixels(float pixels) { m_allowedPixels = pixels; }
+   // Parts of the table that got simplified levels when it loaded
+   int GetSimplifiedPartCount() const { return m_nMeshes; }
+   // Share of the triangles of a frame (all views) that the levels left out, over the last second (0 when off, NaN before the first second)
+   float GetSavedShare() const { return m_savedShare; }
 
    // Picks the index range a primitive draws: the full mesh (first 0, count of the mesh) or one of its levels. 'currentLevel' keeps the level
    // of the main view between frames (-1 for the full mesh), so that a level only gets coarser with some margin.
@@ -77,6 +84,13 @@ private:
 
    bool m_enabled = false;
    float m_allowedPixels = 0.f; // Allowed error, in pixels
+
+   // Triangles left out, per frame and over one second (SelectRange is called by the logic thread while it prepares a frame)
+   void CountFrame(size_t saved) const;
+   mutable unsigned int m_statsFrame = ~0u;
+   mutable uint64_t m_frameSaved = 0, m_windowSaved = 0, m_windowTriangles = 0;
+   mutable std::chrono::steady_clock::time_point m_windowStart;
+   mutable float m_savedShare = NAN;
 
    std::mutex m_statsMutex;
    int m_nMeshes = 0, m_nShared = 0, m_nSkipped = 0;

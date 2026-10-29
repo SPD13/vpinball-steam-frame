@@ -3,7 +3,9 @@
 #include "core/stdafx.h"
 #include "MeshSimplifier.h"
 
+#include "core/player.h"
 #include "parts/primitive.h"
+#include "renderer/Renderer.h"
 #include "renderer/IndexBuffer.h"
 #include "ThreadPool.h"
 #include "meshoptimizer/meshoptimizer.h"
@@ -80,6 +82,9 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
    m_enabled = table->GetSettings().GetPlayer_SimplifyMeshes();
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
    m_nMeshes = m_nShared = m_nSkipped = 0;
+   m_savedShare = NAN;
+   m_windowSaved = m_windowTriangles = m_frameSaved = 0;
+   m_windowStart = std::chrono::steady_clock::now();
    m_trisIn = 0;
    m_trisPerLevel.assign(std::size(kBounds), 0);
    m_cpuMs = 0.;
@@ -297,6 +302,7 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
    {
       if (!isReflectionPass)
          currentLevel = -1;
+      CountFrame(0);
       return;
    }
 
@@ -354,6 +360,27 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
       first = levels->levels[level].first;
       count = static_cast<uint32_t>(levels->levels[level].indices.size());
    }
+   CountFrame((mesh.NumIndices() - count) / 3);
+}
+
+void MeshSimplifier::CountFrame(size_t saved) const
+{
+   // A new frame being prepared closes the previous one, measured against the triangles of the last frame rendered
+   if (g_pplayer && g_pplayer->m_overall_frames != m_statsFrame)
+   {
+      m_statsFrame = g_pplayer->m_overall_frames;
+      m_windowSaved += m_frameSaved;
+      m_windowTriangles += g_pplayer->m_renderer->m_renderDevice->m_frameDrawnTriangles;
+      m_frameSaved = 0;
+      const auto now = std::chrono::steady_clock::now();
+      if (now - m_windowStart >= std::chrono::seconds(1))
+      {
+         m_savedShare = m_windowSaved + m_windowTriangles > 0 ? static_cast<float>(m_windowSaved) / static_cast<float>(m_windowSaved + m_windowTriangles) : 0.f;
+         m_windowSaved = m_windowTriangles = 0;
+         m_windowStart = now;
+      }
+   }
+   m_frameSaved += saved;
 }
 
 }

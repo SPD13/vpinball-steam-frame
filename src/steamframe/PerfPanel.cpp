@@ -10,6 +10,7 @@
 #include "renderer/RenderPass.h"
 #include "renderer/Shader.h"
 #include "renderer/VertexBuffer.h"
+#include "steamframe/MeshSimplifier.h"
 #include "steamframe/vrui/Theme.h"
 #include "imgui/imgui.h"
 #include "implot/implot.h"
@@ -623,16 +624,26 @@ ImDrawList* PerfPanel::BuildWindow()
       ImGui::PopFont();
       ImGui::EndGroup();
       ImGui::SetCursorScreenPos(badgePos + ImVec2(0.f, badgeSize.y + 8.f));
-      // Settings that keep the table from reaching the target
+      // Settings that keep the table from reaching the target (left), and the triangles left out by the simplified meshes (right, on the
+      // same line when both fit)
       ImGui::PushFont(font, kSmall);
-      ImGui::PushStyleColor(ImGuiCol_Text, kColorYellow);
+      string warning;
       if (target.nativeWidth > 0 && target.eyeWidth < target.nativeWidth)
-         ImGui::TextUnformatted(std::format("Render resolution {}x{} is below native: green is out of reach", target.eyeWidth, target.eyeHeight).c_str());
+         warning = std::format("Render resolution {}x{} is below native: green is out of reach", target.eyeWidth, target.eyeHeight);
       else if (target.nativeWidth > 0 && !target.dynamicResolution)
-         ImGui::TextUnformatted("Dynamic resolution is off");
-      else
-         ImGui::NewLine();
+         warning = "Dynamic resolution is off";
+      const MeshSimplifier& simplifier = MeshSimplifier::Get();
+      const float saved = simplifier.GetSavedShare();
+      const string meshes = simplifier.GetSimplifiedPartCount() == 0 ? "Meshes: none simplified"s
+         : !simplifier.IsEnabled()                                  ? "Simplified meshes off"s
+         : std::isnan(saved)                                        ? "Meshes: measuring"s
+                                                                    : std::format("Meshes -{:.0f} % triangles", saved * 100.f);
+      ImGui::PushStyleColor(ImGuiCol_Text, kColorYellow);
+      ImGui::TextUnformatted(warning.c_str());
       ImGui::PopStyleColor();
+      if (ImGui::CalcTextSize(warning.c_str()).x + ImGui::CalcTextSize(meshes.c_str()).x + 24.f > contentWidth)
+         ImGui::TextUnformatted("");
+      rightAligned(meshes, simplifier.IsEnabled() && simplifier.GetSimplifiedPartCount() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
       ImGui::PopFont();
    }
 
