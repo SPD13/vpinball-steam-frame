@@ -10,6 +10,7 @@
 #include "fonts/IconsForkAwesome.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/ScoresPage.h"
 #include "steamframe/TablePickerPage.h"
@@ -156,6 +157,31 @@ private:
    }
 };
 
+// The performance panel left of the cabinet (Display & Performance screen): a tool to tune the tables, on or off for all of them, saved at once
+class PerformancePanelPage final : public InGameUIPage
+{
+public:
+   PerformancePanelPage()
+      : InGameUIPage("Performance panel"s, ""s, SaveMode::None)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propStandalone_PerfPanel, //
+         []() { return VPX::PerfPanel::Get().IsEnabled(); }, //
+         [](bool v)
+         {
+            VPX::PerfPanel::Get().SetEnabled(v);
+            Settings& settings = g_settingsService.GetAppSettings();
+            settings.SetStandalone_PerfPanel(v, false);
+            settings.Save();
+         }));
+   }
+};
+
 // The controls which have pages of their own (Controls screen)
 class MoreControlsPage final : public InGameUIPage
 {
@@ -214,6 +240,7 @@ constexpr const char* kTableMisc = "table/general";
 constexpr const char* kThisTable = "vrui/table";
 constexpr const char* kMenuAndLobby = "vrui/menu-lobby";
 constexpr const char* kMoreControls = "vrui/more-controls";
+constexpr const char* kPerfPanel = "vrui/perf-panel";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
 // The items of a page which no section lists (an option added upstream) are shown by its 'rest' section.
@@ -242,6 +269,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Display:
       return {
+         Section { ""s, kPerfPanel, {}, true },
          Section { "VR rendering"s, kVR,
             { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Label("Foveation status"s),
                Label("Render resolution status"s), Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget),
@@ -373,7 +401,10 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       return CreateComposed(screen, "VR & Room"s, "Where the table and the cabinet stand in the room"s, std::move(sources));
    case Screen::Display:
       if (vr)
+      {
+         sources.push_back(source(kPerfPanel, std::make_unique<PerformancePanelPage>()));
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
+      }
       sources.push_back(source(kGraphics, std::make_unique<GraphicSettingsPage>()));
       return CreateComposed(screen, "Display & Performance"s, ""s, std::move(sources));
    case Screen::Sound:

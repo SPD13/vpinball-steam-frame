@@ -15,6 +15,7 @@
 #include "renderer/VertexBuffer.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
+#include "steamframe/PerfPanel.h"
 #endif
 
 // MSVC Concurrency Viewer support
@@ -185,6 +186,11 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_stallWindowHeld = 0;
       m_stallBreaksLeft = 3;
       m_framesSinceDecrease = 0;
+      #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: the performance panel, on or off for all tables (Standalone/PerfPanel, saved by the menu as soon as it is changed)
+      VPX::PerfPanel::Get().SetEnabled(g_settingsService.GetAppSettings().GetStandalone_PerfPanel());
+      VPX::PerfPanel::Get().OnTableStart();
+      #endif
 
       // State of the previous table
       m_headsetViewCentering = false;
@@ -1214,29 +1220,44 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    }
    // Missed frames: the predicted display time moves by one frame period per frame while the application keeps up, by more after a frame
    // missed its display (compared with the budget, since the predicted period itself doubles when SteamVR throttles to half rate)
+   int periods = 1; // Display periods since the previous frame
    if (m_lastPredictedDisplayTime != 0 && m_frameBudgetMs > 0.f)
    {
-      if (static_cast<float>(predictedDisplayTime - m_lastPredictedDisplayTime) / 1000000.f > m_frameBudgetMs * 1.5f)
+      const float stepMs = static_cast<float>(predictedDisplayTime - m_lastPredictedDisplayTime) / 1000000.f;
+      if (stepMs > m_frameBudgetMs * 1.5f)
       {
          m_framesSinceMissed = 0;
          m_missedFrames++;
       }
       else if (m_framesSinceMissed < 1000)
          m_framesSinceMissed++;
+      periods = max(1, static_cast<int>(lroundf(stepMs / m_frameBudgetMs)));
    }
    m_lastPredictedDisplayTime = predictedDisplayTime;
-   if (!m_dynamicResolution)
+   #if defined(VPX_STEAM_FRAME)
+   const bool perfPanel = VPX::PerfPanel::Get().IsEnabled(); // Steam Frame Edition: the performance panel needs the GPU time too
+   #else
+   constexpr bool perfPanel = false;
+   #endif
+   if (!m_dynamicResolution && !perfPanel)
       return;
    if (!m_performanceCountersEnabled)
       EnablePerformanceCounters();
-   if (m_gpuFrameTimePath == XR_NULL_PATH || predictedDisplayPeriod <= 0)
-      return;
-   XrPerformanceMetricsCounterMETA value { XR_TYPE_PERFORMANCE_METRICS_COUNTER_META };
-   if (!XR_SUCCEEDED(m_xrQueryPerformanceMetricsCounterMETA(m_session, m_gpuFrameTimePath, &value)) || !(value.counterFlags & XR_PERFORMANCE_METRICS_COUNTER_FLOAT_VALUE_VALID_BIT_META))
-      return;
-   const float gpuMs = value.floatValue;
-   m_lastGpuFrameTimeMs = gpuMs;
-   if (gpuMs < 1.f) // Nothing rendered (the headset is not worn): keep the scale
+   float gpuMs = -1.f;
+   if (m_gpuFrameTimePath != XR_NULL_PATH && predictedDisplayPeriod > 0)
+   {
+      XrPerformanceMetricsCounterMETA value { XR_TYPE_PERFORMANCE_METRICS_COUNTER_META };
+      if (XR_SUCCEEDED(m_xrQueryPerformanceMetricsCounterMETA(m_session, m_gpuFrameTimePath, &value)) && (value.counterFlags & XR_PERFORMANCE_METRICS_COUNTER_FLOAT_VALUE_VALID_BIT_META))
+      {
+         gpuMs = value.floatValue;
+         m_lastGpuFrameTimeMs = gpuMs;
+      }
+   }
+   #if defined(VPX_STEAM_FRAME)
+   if (perfPanel)
+      ReportPerfPanelFrame(periods, gpuMs);
+   #endif
+   if (!m_dynamicResolution || gpuMs < 1.f) // No reading, or nothing rendered (the headset is not worn): keep the scale
       return;
    const float budgetMs = m_frameBudgetMs;
    const float targetMs = budgetMs * m_dynamicResolutionTarget;
@@ -2057,6 +2078,10 @@ void VRDevice::ReleaseSession()
    g_pplayer->m_pininput.RemoveInputHandler(m_xrInputHandler);
    m_xrInputHandler = nullptr;
 
+   #if defined(VPX_STEAM_FRAME)
+   DestroyPerfPanel();
+   #endif
+
    // Destroy the swapchian render targets, and color/depth image views
    m_swapchainRenderTargets.clear();
    m_uiRenderTarget = nullptr;
@@ -2873,6 +2898,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             }
             m_uiRenderTarget = uiRenderTarget;
          }
+         #if defined(VPX_STEAM_FRAME)
+         AcquirePerfPanelImage(rd); // Steam Frame Edition: the performance panel, when it has new content (src/steamframe/PerfPanelLayer.cpp)
+         #endif
 
          submitFrame(vrRenderTarget);
 
@@ -2904,6 +2932,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             m_uiRenderTarget = nullptr;
             OPENXR_CHECK(xrReleaseSwapchainImage(m_uiSwapchainInfo.swapchain, &releaseInfo), "Failed to release Image back to the UI Swapchain");
          }
+         #if defined(VPX_STEAM_FRAME)
+         ReleasePerfPanelImage();
+         #endif
 
          // Add passthrough layer first (background)
          if (m_passthroughEnabled && m_passthroughLayer != XR_NULL_HANDLE)
@@ -2915,6 +2946,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          }
 
          renderLayerInfo.layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&renderLayerInfo.layerProjection));
+         #if defined(VPX_STEAM_FRAME)
+         AddPerfPanelLayer(renderLayerInfo.layers); // Over the scene, under the UI
+         #endif
 
          // Submit the LiveUI as a separate view-locked quad layer on top of the scene. Rendering the UI inside the
          // projection layer made it shake since a head locked overlay was reprojected as world locked geometry, and the

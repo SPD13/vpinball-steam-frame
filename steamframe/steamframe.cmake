@@ -37,6 +37,11 @@ target_sources(vpinball PRIVATE
    src/steamframe/WebServerBackup.cpp
    src/steamframe/WebServerLibrary.cpp
 
+   # Performance panel in the headset, left of the cabinet: a tool to tune the tables
+   src/steamframe/PerfPanel.h
+   src/steamframe/PerfPanel.cpp
+   src/steamframe/PerfPanelLayer.cpp
+
    # Web server to manage the tables from a browser (upstream only builds it for the mobile library)
    lib/src/WebServer.h
    lib/src/WebServer.cpp
