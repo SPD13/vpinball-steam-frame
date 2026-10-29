@@ -182,7 +182,7 @@ fi
 # build pinmame
 #
 
-PINMAME_EXPECTED_SHA="${PINMAME_SHA}-002"
+PINMAME_EXPECTED_SHA="${PINMAME_SHA}-002-memmap1" # Steam Frame Edition: -memmap1 for the patches of steamframe/patches/pinmame
 PINMAME_FOUND_SHA="$([ -f pinmame/cache.txt ] && cat pinmame/cache.txt || echo "")"
 
 if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
@@ -196,6 +196,7 @@ if [ "${PINMAME_EXPECTED_SHA}" != "${PINMAME_FOUND_SHA}" ]; then
    tar xzf pinmame-${PINMAME_SHA}.tar.gz
    mv pinmame-${PINMAME_SHA} pinmame
    cd pinmame
+   for p in ../../../../../steamframe/patches/pinmame/*.patch; do patch -p1 --forward < "$p"; done # Steam Frame Edition: memory maps, nibble of 4-bit memory before the mask (scores)
    cp cmake/libpinmame/CMakeLists.txt .
    sed -i.bak 's/set_target_properties(pinmame_shared PROPERTIES/set_target_properties(pinmame_shared PROPERTIES\n      PREFIX ""/' CMakeLists.txt
    cmake \
