@@ -107,6 +107,9 @@ On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Editio
 - **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
   `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
 
+> [!NOTE]
+> **Backglass files (`.directb2s`) are optional.** Tables made for VR carry their backglass in the `.vpx`, as parts of their cabinet that the script lights and animates: they need no `.directb2s`. A table made for a desktop or a real cabinet has no backglass in the headset of its own: put its `.directb2s` next to it and turn on **Add Backglass** (off by default; **Virtual Reality Settings** in the in-game menu, or **Room** in the new VR menu) to show it above the cabinet. Tables whose script talks to the backglass (B2S) play the same without the file, and their scores are still recorded. PinUP Player tables take their backglass videos from their PuP pack, not from a `.directb2s`. Uploading a table's download as it is keeps its `.directb2s` with it, ready if you turn the setting on.
+
 ### Updating
 
 Open the installer app again and connect (step 1). When a newer version is out, step 2 shows **Update available** with a button **Update to &lt;version&gt;**: choose it. **Up to date** means there is nothing to do. Tables, settings, scores and play statistics are kept.
