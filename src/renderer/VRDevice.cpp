@@ -183,6 +183,7 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_stallWindowFrames = 0;
       m_stallWindowHeld = 0;
       m_stallBreaksLeft = 3;
+      m_framesSinceDecrease = 0;
 
       // State of the previous table
       m_headsetViewCentering = false;
@@ -1190,8 +1191,9 @@ void VRDevice::SetDynamicResolution(bool enabled)
 // Render thread, once per frame: the scale of the next frame from the GPU time of the last one. The counter is the runtime's measure of the
 // application's GPU work for a frame, so it includes everything the frame renders and follows the GPU clock (the Frame slows its GPU down
 // as it heats up, which this absorbs). The scale moves by small steps: down as soon as a frame is over the target, so a heavy view is
-// caught within a few frames, up slowly once frames are well under it, so the sharpness does not pump. The lower limit is the runtime's
-// recommended size (the headset's own performance target), the upper one the swapchain size chosen with ResFactor.
+// caught within a few frames, up slowly when the next step is expected to stay under it (the cost following the pixels), a second after
+// the last step down, so the sharpness does not pump. The lower limit is the setting's minimum scale, the upper one the swapchain size
+// chosen with ResFactor.
 void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime)
 {
    // The budget is the display's frame period: the shortest period the runtime predicted in this session. SteamVR doubles the predicted
@@ -1262,10 +1264,23 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
       return;
    }
    float scale = m_dynamicRenderScale;
+   constexpr float riseStep = 0.003f;
    if (gpuMs > targetMs)
+   {
       scale -= 0.02f * (1.f + (gpuMs - targetMs) / targetMs); // Faster the further over
-   else if (gpuMs < targetMs * 0.9f)
-      scale += 0.003f;
+      m_framesSinceDecrease = 0;
+   }
+   else
+   {
+      if (m_framesSinceDecrease < 100000)
+         m_framesSinceDecrease++;
+      // Up when the next step is expected to stay under the target, the GPU time following the pixels (an overestimate: a part of the frame does
+      // not depend on the resolution), and not within a second of a step down. Rising only well under the target (90 %) kept tables that fit
+      // at full size a few steps under it after a dip (93 % on Addams Family, docs/Performance on the Steam Frame.md, section 7.4)
+      const float next = (scale + riseStep) / scale;
+      if (static_cast<float>(m_framesSinceDecrease) * budgetMs >= 1000.f && gpuMs * next * next < targetMs * 0.97f)
+         scale += riseStep;
+   }
    m_dynamicRenderScale = clamp(scale, minScale, 1.f);
 }
 
