@@ -224,3 +224,39 @@ Other Gottlieb System 3 ROMs are not listed: their menus may differ, so each one
   1995) 1.2).
 
 History: version 1, 2026-10-25; `waterwld` added 2026-10-27 (same version: tables that never had the fix see it as available).
+
+### <a id="city-hunter-ultradmd"></a>City Hunter: scores on the cabinet's DMD
+
+Applies to: tables whose file name contains `CityHunter` (checked with *CityHunter (Original 2025 Tombg)*, with its PinUP Player pack
+`City_Hunter`).
+
+**Symptom.** In VR the cabinet has a backglass and a DMD. The backglass shows the pack's frame, its videos and the scores; the DMD stays
+black.
+
+**Cause.** The pack has a single layout, and every one of its screens is on the backglass: its DMD screen (screen 1, "DMD - 16:9
+FullDMD") is positioned on the whole of screen 2, and the scores are labels of it, in the bottom band of the frame
+([PinUP Player Label Draw Order](PinUP%20Player%20Label%20Draw%20Order.md)). The cabinet's DMD is a legacy DMD flasher (`DMDPUP`), which
+only shows what the script sends to the table's DMD. The script can send a scoreboard and its messages to UltraDMD, but ships with it
+off:
+
+```vb
+Const UltraDMDUpdateTime	= 5000	'UltraDMD update time (msec).  Increase value if you encounter stutter with UltraDMD on
+Const UseUltraDMD = 0				'0 = Don't use UltraDMD, 1=Use it
+```
+
+Moving screen 1 of the pack to the DMD was not an option: its labels are placed for the band of the backglass, and the backglass would
+lose its scores.
+
+**Fix.** `UseUltraDMD` is set to 1: the script creates UltraDMD (provided by the FlexDMD plugin), refreshes its scoreboard (the players'
+scores, `Credits n`, `Ball n/3`) on a timer, and shows its messages (`UDMD "BALL SAVED"`, skill shot, modes, mystery awards). The
+refresh goes from 5 s to 1 s (`UltraDMDUpdateTime`): the comment's stutter is that of UltraDMD on Windows, and with 5 s the score of
+the DMD lagged the backglass. The plugin shows the scoreboard only when no message is queued (`UltraDMD::DisplayScoreboard`), so a
+faster refresh does not cut the messages. The backglass and the PuP labels are unchanged (`usePuPDMD` stays on).
+
+**Checked** on the Mac, 2026-10-28, with a temporary hook (credit, Start, ball launch, flippers) capturing the DMD in the score view
+window: the recipe applied from the web API (`/table-fixes`, POST), the `.vbs` differs from the script of the table by those two lines,
+CRLF kept. In attract mode the DMD reads `CREDITS 0 BALL 0/3`; in the game it showed `SKILLSHOT LOSE`, then the scoreboard with
+12,855, the score of the backglass. The score tracker reads the scores from UltraDMD too (`Scores shown by ultradmd`). **To check** on
+the Frame: the `DMDPUP` flasher of the cabinet in the headset.
+
+History: version 1, 2026-10-28.
