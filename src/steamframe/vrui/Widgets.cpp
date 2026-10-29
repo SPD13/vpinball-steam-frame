@@ -26,9 +26,9 @@ void EndRegion()
 void SteamFrameLogo(ImDrawList* drawList, const ImVec2& center, float size, ImU32 color)
 {
    const float h = size * 0.5f;
-   const float line = max(1.f, size * 0.075f);
+   const float line = max(1.f, size * 0.095f);
    // The viewfinder: four corners
-   const float arm = size * 0.2f;
+   const float arm = size * 0.22f;
    for (int i = 0; i < 4; i++)
    {
       const float sx = (i & 1) ? 1.f : -1.f, sy = (i & 2) ? 1.f : -1.f;
@@ -37,8 +37,8 @@ void SteamFrameLogo(ImDrawList* drawList, const ImVec2& center, float size, ImU3
       drawList->AddPolyline(points, 3, color, ImDrawFlags_None, line);
    }
    // The visor: a rounded band with a notch for the nose
-   const float w = size * 0.33f, top = center.y - size * 0.17f, bottom = center.y + size * 0.17f, r = size * 0.1f;
-   const float notch = size * 0.09f, notchDepth = size * 0.09f;
+   const float w = size * 0.37f, top = center.y - size * 0.2f, bottom = center.y + size * 0.2f, r = size * 0.12f;
+   const float notch = size * 0.1f, notchDepth = size * 0.1f;
    drawList->PathArcTo(ImVec2(center.x - w + r, top + r), r, IM_PI, IM_PI * 1.5f);
    drawList->PathArcTo(ImVec2(center.x + w - r, top + r), r, IM_PI * 1.5f, IM_PI * 2.f);
    drawList->PathArcTo(ImVec2(center.x + w - r, bottom - r), r, 0.f, IM_PI * 0.5f);
@@ -48,9 +48,9 @@ void SteamFrameLogo(ImDrawList* drawList, const ImVec2& center, float size, ImU3
    drawList->PathArcTo(ImVec2(center.x - w + r, bottom - r), r, IM_PI * 0.5f, IM_PI);
    drawList->PathStroke(color, ImDrawFlags_Closed, line);
    // The lenses
-   const float lens = size * 0.075f;
-   drawList->AddCircleFilled(ImVec2(center.x - size * 0.15f, center.y - size * 0.02f), lens, color);
-   drawList->AddCircleFilled(ImVec2(center.x + size * 0.15f, center.y - size * 0.02f), lens, color);
+   const float lens = size * 0.09f;
+   drawList->AddCircleFilled(ImVec2(center.x - size * 0.17f, center.y - size * 0.03f), lens, color);
+   drawList->AddCircleFilled(ImVec2(center.x + size * 0.17f, center.y - size * 0.03f), lens, color);
 }
 
 bool RailButton(const char* id, const char* icon, const ImVec2& size, bool selected, bool focused, bool& hovered)
