@@ -326,9 +326,11 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
       sqrtf(fullMatrix._31 * fullMatrix._31 + fullMatrix._32 * fullMatrix._32 + fullMatrix._33 * fullMatrix._33) / max(fabsf(s.z), 1e-6f));
    // Pixels per unit of the tangent of the angle from the view axis (perspective) or per VP unit (orthographic). Taken at the full render
    // resolution, not the one of dynamic resolution, so that a lower resolution does not make the parts coarser, which would let it rise again.
+   // The projection may carry a scale of the scene (in VR, the size of the table in the room scales the whole matrix): it cancels in the
+   // divide by w, hence the ratio with the term that gives w.
    const Matrix3D& proj = mvp.GetProj(0);
-   const float pixelScale = max(fabsf(proj._22) * 0.5f * static_cast<float>(renderHeight), 1e-6f);
-   const bool orthographic = fabsf(proj._34) < 1e-6f;
+   const bool orthographic = fabsf(proj._34) < 1e-6f * fabsf(proj._22);
+   const float pixelScale = max(fabsf(proj._22 / (orthographic ? proj._44 : proj._34)) * 0.5f * static_cast<float>(renderHeight), 1e-6f);
    const float allowed = m_allowedPixels * (orthographic ? 1.f : distance) / pixelScale * (isReflectionPass ? kProbeFactor : 1.f) / max(scale, 1e-6f);
 
    int level = -1;
