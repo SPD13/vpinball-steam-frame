@@ -15,6 +15,3 @@ Added in this repository, under the same licenses, for tables the project does n
 maps/stern/sam/potc_600as.map.json, maps/peyper/sonstwar.map.json, maps/juegos-populares/faeton.map.json, maps/taito/sshuttle.map.json,
 maps/spinball/vrnwrld.map.json, platforms/peyper.json, platforms/juegos-populares.json, platforms/taito.json, platforms/spinball.json,
 and their entries in index.json (see docs/Table Scores and Leaderboards.md, section 5).
-
-Changed in this repository: the game_over entry of maps/bally/as-2518-17/system-rom-20.map.json reads the mask 0x40 instead of 0x4
-(see its _notes and docs/Table Scores and Leaderboards.md, section 5).
