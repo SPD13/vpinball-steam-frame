@@ -107,6 +107,9 @@ private:
    bool m_playfieldWindowFramed = false;
 
    vector<std::shared_ptr<MeshBuffer>> m_meshBuffers;
+   #if defined(VPX_STEAM_FRAME)
+   std::shared_ptr<MeshBuffer> m_perfPanelMeshBuffer; // Steam Frame Edition: the performance panel's (src/steamframe/PerfPanel.cpp), released with the player as the others
+   #endif
    std::shared_ptr<MeshBuffer> m_vrPointerRayMesh; // Ray from the VR controller to the pointed position on the UI panel
 
    // Touch UI overlay
