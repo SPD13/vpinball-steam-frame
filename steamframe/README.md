@@ -13,6 +13,7 @@ upstream's files only get small, guarded hooks into it.
 | Dependencies the fork adds (libzip for the web server, libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
 | Patches of libspatialaudio (soundfield rotation fade, see `docs/Spatial Audio Crackle When Turning the Head.md`) | `steamframe/patches/libspatialaudio/`, applied by the `external.sh` of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 |
+| Patches of libpinmame (memory maps of 4-bit memory: nibble before mask, see `docs/PinMAME Memory Maps on 4-bit Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
 | Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
@@ -111,6 +112,30 @@ The workspace folder holds, side by side:
    (`Doc/steam-frame-build/make-release.sh <major.minor.patch>`): numbered since 0.5.0 (the minor number for new features, the patch number
    for fixes only), tagged `v<version>` and titled "Visual Pinball X: Steam Frame Edition <version>" on GitHub.
 
+### Patches of the dependencies
+
+The fork patches three dependencies that upstream downloads and builds in `platforms/*/external.sh`: bgfx, libspatialaudio and
+libpinmame (table above). Each block applies the `*.patch` of its folder in `steamframe/patches/` after the download, and its cache key
+carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency builds rebuild. At each sync:
+
+- **Upstream changed the block** (a conflict on the `Steam Frame Edition` lines): keep upstream's new lines and put our two lines back
+  (the patch loop after the `cd` into the source, the tag at the end of the `*_EXPECTED_SHA`).
+- **Upstream moved to another version** (`platforms/config.sh`: `BGFX_CMAKE_VERSION`, `LIBSPATIALAUDIO_SHA`, `PINMAME_SHA`): the
+  dependency scripts of steps 4 and 6 apply the patches to it. A patch that does not apply stops the script (`set -e`). Then:
+  - if upstream has the fix (the libpinmame loop uses `patch --forward`, which reports `Ignoring previously applied (or reversed)
+    patch`), drop the patch file, the two lines of each `external.sh` and the tag, and the entry of `.github/README.md`
+    ("Candidates for merge upstream");
+  - otherwise make the patch again on the new version (download it like the script, apply the hunks by hand, `diff -u` from the
+    source folder with `a/` and `b/` prefixes), and keep the tag.
+- **A patch of the fork changes**: increase its tag (`-memmap2`), or the dependency builds already made keep the old library.
+
+libpinmame (`01-memmap-nibble-then-mask.patch`, 2026-10-28): `SetMemMapImpl` of `src/libpinmame/libpinmame.cpp` applied the mask of a
+memory map field to the raw byte, before the nibble of the platform, so the game over and tilt of the Bally AS-2518-17/-35 and Stern
+MPU-100 maps (43 maps, 169 ROMs) read constant "in game" and their scores were never recorded. The patch takes the nibbles first, as
+the format and its reference parser do. It is proposed upstream; once merged, the bundled maps need no change (they are upstream's,
+`system-rom-20.map.json` included). After a sync that changes `PINMAME_SHA`, check that `SetMemMapImpl` still has the code the patch
+replaces, and play Evel Knievel (checklist).
+
 ### When upstream builds what the fork has
 
 Upstream develops VR for the Quest and for OpenXR on the desktop: it may add a feature the fork already has, differently. Git sees no
@@ -132,6 +157,8 @@ test: add each one found to the checklist.
 - Image sharpness as before: render resolution (`ResFactor` semantics, 2026-10-18), foveated rendering and dynamic resolution.
 - VR menu, in a table and in the lobby; the table picker (imgui updates).
 - Scores recorded after a game; sound.
+- Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
+  (libpinmame patch, 2026-10-28). It can be checked on macOS too.
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
 
 ### Shader headers

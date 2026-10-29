@@ -208,16 +208,14 @@ shifting each nibble by 4, and a BCD byte holds the two digits the old code took
 
 ## What the fork does meanwhile
 
-Until upstream PinMAME has the fix, the fork changed the one map its library uses: `system-rom-20.map.json` reads `game_over` with mask
-`0x40` (fork master, 2026-10-28, `b022676ca`; `Table Scores and Leaderboards.md`, section 5), which gives the right value with libpinmame as it is (the mask on the raw byte). It
-covers the 8 ROMs of that map only; the 42 other maps stay constant "in game". **That change must be reverted when libpinmame is
-fixed**: with nibble-then-mask, `0x40` selects a bit the nibble does not have and reads constant "over".
+The fork carries the patch: `steamframe/patches/pinmame/01-memmap-nibble-then-mask.patch`, applied to libpinmame by the dependency
+scripts of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 (`platforms/*/external.sh`, cache tag `-memmap1`).
+All 169 ROMs are covered, with the maps as upstream has them. How the patch is kept at each sync, and dropped once upstream merges it:
+`steamframe/README.md`, "Patches of the dependencies".
 
-Two ways for the fork:
-
-1. Wait for upstream, keep the map change (only Evel Knievel's family covered).
-2. Carry the patch (`steamframe/patches/pinmame/`, applied by the dependency scripts of macOS and Linux like the libspatialaudio
-   patch), revert the map change in the same commit, and drop the patch once upstream merges it. All 169 ROMs are covered.
+Before it, on 2026-10-28, the fork had changed the one map its library uses instead: `system-rom-20.map.json` read `game_over` with
+mask `0x40` (`b022676ca`), the right value with libpinmame as it was, for the 8 ROMs of that map only. That change was reverted with the
+patch: with nibble-then-mask, `0x40` selects a bit the nibble does not have and reads constant "over".
 
 ## Draft of the PR
 
@@ -245,7 +243,7 @@ Two ways for the fork:
 
 ## Appendix: affected maps and ROMs
 
-The fields are `game_over` (mask `0x4`) and `tilted` (mask `0x8`) at `0x20C`, except where noted. `system-rom-20` is listed with the upstream mask (`0x4`), not the fork's `0x40`. Map paths relative to `maps/`.
+The fields are `game_over` (mask `0x4`) and `tilted` (mask `0x8`) at `0x20C`, except where noted. Map paths relative to `maps/`.
 
 | Platform | Map | ROMs | Fields, when not the usual two |
 |---|---|---|---|

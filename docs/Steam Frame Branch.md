@@ -370,6 +370,7 @@ steamframe/steamframe.cmake             build of the fork (sources, VPX_STEAM_FR
 steamframe/deps/libarchive.sh           xz + libarchive, run by platforms/*/external.sh
 steamframe/deps/libzip.sh               libzip (web server), run by platforms/*/external.sh (upstream builds it for Android only)
 steamframe/patches/bgfx/                bgfx patches (see below)
+steamframe/patches/pinmame/             libpinmame patch: memory maps of 4-bit memory, nibble before mask (docs/PinMAME Memory Maps on 4-bit Memory.md)
 steamframe/tools/                       sync-upstream.sh, regen-shaders.sh, shaderc-dx-from-ref.sh
 src/steamframe/Launcher.h
 src/steamframe/Launcher.cpp             table library, scores, web server, lobby and launcher mode (g_launcher, owned by VPApp)
@@ -427,6 +428,7 @@ make/CMakeLists_sources.txt             VRControllerModels, MessagePage
 make/vpx-core.vcxitems, .filters        VRControllerModels, MessagePage
 platforms/linux-aarch64/external.sh     bgfx patches of steamframe/patches/bgfx, steamframe/deps scripts
 platforms/macos-*/external.sh           steamframe/deps/libzip.sh
+platforms/{macos-*,linux-*,windows-mingw-x64}/external.sh   libpinmame patch of steamframe/patches/pinmame (cache tag -memmap1)
 steamframe/patches/bgfx/01-turnip-descriptor-pool.patch   descriptor pools without the free-set flag (section 7)
 steamframe/patches/bgfx/02-fragment-density-map.patch     fragment density map attachments and offsets (section 9)
 steamframe/patches/bgfx/03-fragment-shading-rate.patch   fragment shading rate attachments, the foveation path used on the Frame (section 9)
