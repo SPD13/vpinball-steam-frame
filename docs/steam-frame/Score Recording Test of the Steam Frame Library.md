@@ -1,25 +1,25 @@
 # Score Recording Test of the Steam Frame Library
 
-2026-10-27
+2026-10-28
 
-59 of the 73 tables on the Frame recorded a score in the harness; 14 did not. Only 4 of the 14 point to a real score tracking problem. The other 10 never got a game started, ran out of time, or did not run properly on the Mac.
+66 of the 73 tables on the Frame now record a score in the harness. The first run, on 2026-10-27, recorded 59; 7 more record after the fixes of 2026-10-28. Of the 7 left, none points to a score tracking problem: 3 games cannot be finished unattended, 2 tables have another problem, and 2 were not played again.
 
-| Why the 14 tables failed | Tables | Count |
+| The 14 tables that failed on 2026-10-27 | Tables | Count |
 | --- | --- | --- |
-| Score tracking problem (to fix) | 2001 A Space Odyssey, Diablo 2, Star Trek LE, Evel Knievel | 4 |
-| The autoplay could not start a game | Futurama, Star Wars (Sonic 1987), Verne's World, Terminator 2, World Cup Soccer | 5 |
-| The game was still running after 8 minutes | James Bond 007, Street Fighter 2, Lord of the Rings | 3 |
-| The table or ROM does not run properly on the Mac | DarkestDungeon, WaterWorld | 2 |
+| Fixed: they record now | 2001 A Space Odyssey, Diablo 2, Evel Knievel, Star Trek LE, Terminator 2, World Cup Soccer, Verne's World | 7 |
+| The game cannot be finished unattended | Lord of the Rings, James Bond 007, Street Fighter 2 | 3 |
+| Problem outside score tracking, still open | WaterWorld (no ball is served), Star Wars (Sonic 1987) (no coin or Start) | 2 |
+| Not played again: they need their PuP packs | DarkestDungeon, Futurama | 2 |
 
-Evel Knievel and Star Wars (Sonic 1987) recorded in the October run, so they may be regressions. James Bond 007 and Street Fighter 2 also failed unattended in October, and recorded fine when played by hand on the Frame.
+Evel Knievel had recorded in October: its regression came from libpinmame, which the fork now patches. Star Wars (Sonic 1987) had recorded in October too; why it takes no coin now is open. James Bond 007 and Street Fighter 2 also failed unattended in October, and recorded fine when played by hand on the Frame.
 
 ## Results
 
-One unattended game per table, played on 2026-10-27. Score is the score of the recorded game.
+One unattended game per table on 2026-10-27. The 12 failing tables without a PuP pack were played again on 2026-10-28, after the fixes; the last column says what fixed them. Score is the score of the recorded game, one per player for 2-player games.
 
-| Table | Recorded | Source | Score | Why it failed |
+| Table | Recorded | Source | Score | Why it failed, or what fixed it |
 | --- | --- | --- | --: | --- |
-| 2001 A Space Odyssey ChuckRibbits Mod VR Room - 1.2 | ❌ | – | – | Tracking problem: the game ended (script GameOn) at 31,350, but the tracker used the backglass as its source, which only showed 0 and a credit digit |
+| 2001 A Space Odyssey ChuckRibbits Mod VR Room - 1.2 | ✅ | Script | 32,150 | Fixed: the tracker used the backglass as its source, which only showed 0 and a credit digit (the table counts its balls on backglass player 5). Backglass players 5 and 6 now count only for machines of more than 4 players |
 | Ace Of Speed 1.1 | ✅ | ROM memory | 236,010 |  |
 | Addams Family (Bally 1992) | ✅ | ROM memory | 531,000 |  |
 | Albator78 (VR ROOM) | ✅ | Script | 72,030 |  |
@@ -30,11 +30,11 @@ One unattended game per table, played on 2026-10-27. Score is the score of the r
 | BleachVR | ✅ | Script | 9,320,720 |  |
 | Bond 60th Dr.No | ✅ | Script | 35,080,050 |  |
 | Bram Stoker's Dracula (Williams 1993) | ✅ | ROM memory | 3,604,280 |  |
-| DarkestDungeon 3.06 | ❌ | – | – | Did not run: thousands of script errors a second (Object required); its PuP pack is not on the Mac |
-| Diablo 2 (ChuckRibbits Original 2026) 1.2.1 | ❌ | – | – | Tracking problem: the script variable Score stays at 0 during the game: it is not this table's score |
-| Evel Knievel (Bally 1977) | ❌ | – | – | Tracking problem: the game had not ended after 8 minutes; at the end all four displays showed 18,370 while still "in game". Recorded in October |
+| DarkestDungeon 3.06 | ❌ | – | – | Not played again: thousands of script errors a second (Object required); its PuP pack is not on the Mac |
+| Diablo 2 (ChuckRibbits Original 2026) 1.2.1 | ✅ | Script | 200,000 | No tracking problem: the game waits for a difficulty choice confirmed by a second Start, which the first run did not press. Recorded with 2 Start presses |
+| Evel Knievel (Bally 1977) | ✅ | ROM memory | 21,260 / 29,300 | Fixed: libpinmame applied the mask of the game over lamp before taking the nibble of the 4-bit memory, so the game never ended. Recorded with the fork's libpinmame patch and the map as upstream has it |
 | Friday the 13th | ✅ | Script | 324,680 |  |
-| Futurama (Original 2024) v1.2.2 | ❌ | – | – | Inconclusive: the game never started (no reaction to Start, 3 tries); PuP pack not on the Mac |
+| Futurama (Original 2024) v1.2.2 | ❌ | – | – | Not played again: the game never started (no reaction to Start, 3 tries); its PuP pack is not on the Mac |
 | Game of Thrones LE (Stern 2015) VPW 1.2.1 | ✅ | Script | 358,040 |  |
 | Genesis (Gottlieb1986) VPW v1.0 | ✅ | ROM memory | 114,120 |  |
 | Ghostbusters slimer 2.1 | ✅ | Script | 359,110 |  |
@@ -46,7 +46,7 @@ One unattended game per table, played on 2026-10-27. Score is the score of the r
 | James Bond 007 (Gottlieb 1980) | ❌ | – | – | Autoplay limit: game still running at 8 minutes (timed play). Recorded by hand on the Frame in October |
 | JAWS 50Th Anniversary (Original 2025) | ✅ | Script | 4,074,680 |  |
 | JohnWick (BABAYAGA Pinball edition, 2023) (VR ROOM Minimal) Sphere | ✅ | Script | 26,090 |  |
-| Lord of the Rings (Stern 2003) VPW 1.6 | ❌ | – | – | Autoplay limit: game still running at 8 minutes, score rising (482,940) |
+| Lord of the Rings (Stern 2003) VPW 1.6 | ❌ | – | – | Autoplay limit: a ball stays trapped and keeps scoring (482,940 at 8 minutes), so the game never ends unattended |
 | Mass Effect 1.0.8 | ✅ | ROM memory | 167,087,530 |  |
 | Masters of the Universe-custom (VR ROOM edition) | ✅ | Script | 714,000 |  |
 | Maverick (Data East 1994) | ✅ | ROM memory | 34,653,930 |  |
@@ -62,8 +62,8 @@ One unattended game per table, played on 2026-10-27. Score is the score of the r
 | Simpsons Treehouse of Horror MOD v2023.3 (Simpsons Pinball Party, The (Stern 2003) VPW 2.0.3 base) | ✅ | ROM memory | 622,800 |  |
 | South Park (Sega 1999) | ✅ | ROM memory | 23,781,170 |  |
 | Space Cadet (Original 2021) | ✅ | Script | 156,250 |  |
-| Star Trek LE (Stern 2013) v1.09 | ❌ | – | – | Tracking problem: Stern SAM map with no game over flag (shows 4,294,967,295 at boot); the game at 1,355,800 never ended. Likely needs a game on solenoid rule like the other SAM tables |
-| Star Wars (Sonic 1987) | ❌ | – | – | Inconclusive: the game never started (no reaction to Start, 3 tries). Recorded in October |
+| Star Trek LE (Stern 2013) v1.09 | ✅ | ROM memory | 1,712,390 | Fixed: Stern SAM map with no game over flag. New game on solenoid rule (`st_161h`, solenoid 33) |
+| Star Wars (Sonic 1987) | ❌ | – | – | Open: the machine takes no coin or Start and its displays stay dark, with any NVRAM and PinMAME version tried. Recorded in October |
 | Star Wars Trilogy | ✅ | ROM memory | 1,358,780 |  |
 | StarCraft (Sega 1997) v1.2.1 | ✅ | ROM memory | 10,095,250 |  |
 | Stargate Minimal (Gottlieb 1995) | ✅ | ROM memory | 23,153,060 |  |
@@ -83,13 +83,13 @@ One unattended game per table, played on 2026-10-27. Score is the score of the r
 | TopGun (2019)-(VR ROOM) | ✅ | ROM memory | 69,224 |  |
 | Twilight Zone | ✅ | ROM memory | 4,800,000 |  |
 | Ulysse 31 | ✅ | ROM memory | 166,040 |  |
-| Verne's World (Spinball 1996)1.0.1 | ❌ | – | – | Inconclusive: the game never started (no reaction to Start); known first-boot hang of this ROM |
+| Verne's World (Spinball 1996)1.0.1 | ✅ | ROM memory | 255,005 / 393,013 | Fixed: no memory map for Spinball games. New Spinball platform and `vrnwrld` map (the first launch hang of this ROM remains) |
 | VP Cooks- The Matrix PuPevents-v1.0.14 | ✅ | Script | 74,680 |  |
 | VR ROOM Back to the Future (Data East 1990) V103 | ✅ | ROM memory | 160,000 |  |
-| VR Room Terminator 2 (Williams 1991) g5k v1.11 | ❌ | – | – | Inconclusive: the game never started (no reaction to Start, 3 tries); its memory map loaded |
+| VR Room Terminator 2 (Williams 1991) g5k v1.11 | ✅ | ROM memory | 411,490 | No tracking problem: on its first launch without NVRAM the machine stays on FACTORY SETTINGS RESTORED. Records from the second launch |
 | VR ROOM The Fifth Element | ✅ | Script | 43,550 |  |
-| VR ROOM WaterWorld (Gottlieb 1995) 1.2 | ❌ | – | – | Did not run: ROM waterwld.zip is incomplete (also reported missing files on the Frame) |
-| World Cup Soccer (Bally 1994) VPW v1.5 | ❌ | – | – | Inconclusive: the game never started (no reaction to Start, 3 tries); its memory map loaded |
+| VR ROOM WaterWorld (Gottlieb 1995) 1.2 | ❌ | – | – | Open: the ROM started with zero settings, so no game could start; `waterwld` was added to the Gottlieb System 3 factory settings fix, and the tracker now ignores what a ROM fix shows (it had recorded a 1,400,000,000 point game). A game now starts, but no ball is served |
+| World Cup Soccer (Bally 1994) VPW v1.5 | ✅ | ROM memory | 19,300,000 | Same as Terminator 2: records from the second launch |
 | Wrath of Olympus (Original 2022) | ✅ | Script | 4,080,770 |  |
 | X-Files (Sega 1997) Ejse83 LED Mod (Siggis Mod Table) | ✅ | ROM memory | 1,262,780 |  |
 
@@ -100,27 +100,6 @@ Each table was played once, unattended, on the Mac build of fork master (5d6abe8
 - **What the harness does:** waits for the machine to boot, adds 2 credits, starts a 1-player game, then launches the ball and flips every 5 s until the balls drain. It quits 4 s after a game is recorded, or after 480 s.
 - **Green check:** the score tracker recorded a finished game with a score above zero.
 - **Red mark:** no game was recorded. The reason column gives the tracker's last log line.
-- **Limits:** a red mark can also come from the autoplay (ball stuck, single-player machine, timed play) rather than the tracker. James Bond 007 and Street Fighter 2 failed this way in October and recorded fine when played by hand. The Mac has the Frame's ROMs and aliases, but only the TopGun PuP pack, so PuP tables ran without their videos. Nothing was fixed in this pass.
-
-## Follow-up: the 14 tables analyzed on the Mac (2026-10-28)
-
-The 12 failing tables without a PuP pack were played again on the Mac (DarkestDungeon and Futurama, which need their PuP packs, were left
-out). 7 of the 12 now record a score. 3 games cannot be finished unattended (two of them recorded when played by hand), and 2 tables
-have a problem outside score tracking, still open: WaterWorld serves no ball, Star Wars (Sonic 1987) takes no coin.
-
-| Table | Now | Cause | Fix |
-| --- | --- | --- | --- |
-| 2001 A Space Odyssey | ✅ 32,150 | The backglass was taken as the score source: the table counts its balls on backglass player 5, and its scores never reach the backglass as player scores | Backglass players 5 and 6 only count for machines of more than 4 players |
-| Diablo 2 | ✅ 200,000 | None in the tracker: the game waits for a difficulty choice confirmed by a second Start | None (the harness presses Start twice) |
-| Evel Knievel | ✅ 20,910 | The game over lamp of its memory map was read with a mask on the wrong nibble: always "in game" | Mask `0x40` in the shared Bally AS-2518-17 map |
-| Star Trek LE | ✅ 1,712,390 | Stern SAM map without game over flag | Game on solenoid rule (`st_161h`, solenoid 33) |
-| Terminator 2 | ✅ 411,490 | First launch without NVRAM: WPC machines stay on FACTORY SETTINGS RESTORED | None needed after the first launch |
-| World Cup Soccer | ✅ 19,300,000 | Same as Terminator 2 | Same |
-| Verne's World | ✅ 393,013 | No memory map for Spinball games (and a first launch hang) | New Spinball platform and `vrnwrld` map |
-| Lord of the Rings | ❌ | A ball stays trapped and keeps scoring: the game never ends unattended | None: autoplay limit |
-| James Bond 007 | ❌ | Timed play kept alive by the autoplay | None: recorded by hand in October |
-| Street Fighter 2 | ❌ | The ball gets stuck after the first points | None: recorded by hand in October |
-| WaterWorld | ❌ | Zero settings (no game could start); after the fix, a game starts but no ball is served | `waterwld` added to the Gottlieb System 3 factory settings fix, and the tracker ignores what a ROM fix shows (it recorded a 1,400,000,000 point game). The ball is still open |
-| Star Wars (Sonic 1987) | ❌ | The machine takes no coin or Start and its displays stay dark, with any NVRAM and PinMAME version tried | Open |
-
-Details in `docs/Table Scores and Leaderboards.md` (sections 3, 4, 5, 12 and appendix A) and `docs/Table and ROM Fixes.md`.
+- **Limits:** a red mark can also come from the autoplay (ball stuck, single-player machine, timed play) rather than the tracker. James Bond 007 and Street Fighter 2 failed this way in October and recorded fine when played by hand. The Mac has the Frame's ROMs and aliases, but only the TopGun PuP pack, so PuP tables ran without their videos. The first run fixed nothing.
+- **Follow-up (2026-10-28):** the 12 failing tables without a PuP pack were played again on the Mac, after the fixes were pushed to fork master (d0ad00ca7 to 62b5fcc75). Diablo 2 got 2 Start presses. Terminator 2 and World Cup Soccer were played a second time with the NVRAM of their first launch. Evel Knievel was played with the patched libpinmame and the original map; the fork carries that patch since 142670600. Details: `docs/Table Scores and Leaderboards.md` (sections 3, 4, 5, 12 and appendix A), `docs/Table and ROM Fixes.md` and `docs/PinMAME Memory Maps on 4-bit Memory.md`.
+- **Not checked on the Frame yet:** the fixes of the follow-up.
