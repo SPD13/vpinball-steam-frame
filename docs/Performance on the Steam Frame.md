@@ -238,9 +238,19 @@ frame cost does not drift. The resolution stays under 2160² because dynamic res
 90 % of the target (10.6 ms), and Addams sits at 10.7 ms. The CPU runs hotter worn (section 2.2), so a long worn session remains worth a
 check.
 
-Since 2026-10-28 (branch `perf-panel`), the scale rises when the GPU time expected at the next step, the cost following the pixels, stays
-under 97 % of the target, and not within a second of a step down: a table that fits at the full size returns to it after a dip instead of
-staying a few steps under it. To be measured again on Addams (expected: 2160² while its GPU time there is under 11.8 ms).
+Since 2026-10-28, the scale follows the GPU time averaged over about 5 frames (a frame over the whole period still lowers it at once), and
+rises when the time expected at the next step, the cost following the pixels, stays under 97 % of the target, a quarter of a second after
+a step down, by 0.3 % to 1 % per frame depending on the room left. A first version (no averaging, a second's wait, 0.3 % steps) still kept
+Addams under the full size in play: single frames over the target, more than one a second, lowered the scale and restarted the wait, and it
+only rose while the player looked away from the table (at the performance panel). Addams, headless, 3 minutes per run, alternated:
+
+| Rule | Average size | Status lines at 2160² | Frames missed | Runtime GPU |
+|---|---|---|---|---|
+| Steps on each frame, 1 s wait (two runs) | 2092² (97 %) | 33 %, 27 % | 0, 0 | 10.75, 10.74 ms |
+| Averaged, 0.25 s wait, larger steps (two runs) | 2150² (99.5 %) | 88 %, 91 % | 7, 3 | 11.23, 11.02 ms |
+
+The table now stays at 2160² after its first 15 s, at the cost of a few frames missed per 3 minutes (1 in 2000 to 4000), with the GPU at
+the same clock and temperature (902 MHz, 90–92 °C).
 
 ### 7.5 Frame pacing stall
 
