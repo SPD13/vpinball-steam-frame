@@ -116,6 +116,9 @@ private:
 #if defined(ENABLE_BGFX)
    vector<std::shared_ptr<UIListGeometry>> m_uiGeometry; // Per command list CPU snapshot of the frame's UI geometry
 #endif
+   #if defined(VPX_STEAM_FRAME)
+   std::shared_ptr<MeshBuffer> m_perfPanelMeshBuffer; // Steam Frame Edition: the performance panel's (src/steamframe/PerfPanel.cpp), released with the player as the others
+   #endif
    std::shared_ptr<MeshBuffer> m_vrPointerRayMesh; // Ray from the VR controller to the pointed position on the UI panel
 
    // Touch UI overlay

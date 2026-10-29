@@ -99,8 +99,8 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 ## Screens made of several pages
 
 Some screens group options of several pages (`ComposedPage`, layout in `GetSections` of `Screens.cpp`): VR & Room (menu distance and lobby
-room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), Display & Performance (VR rendering options of the VR settings, then the
-graphics settings), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
+room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), Display & Performance (the performance panel switch, saved at once, then the VR rendering options of
+the VR settings, then the graphics settings), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
 table (its actions, then its lighting and difficulty options).
 
 - The pages stay whole and alive: they build their items and keep their rules (rebuilds, Open/Close, ResetToDefaults). A section only
