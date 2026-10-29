@@ -3,7 +3,7 @@
 *2026-10-19, fork `master` at 53c794380 (upstream sync of 2026-10-18). Measurements on the Steam Frame (Adreno, Turnip, SteamVR 2.17) at
 72 Hz (13.9 ms per frame), Standard FXAA, specular AA, foveated rendering, two tables: the Ghostbusters VR room (light, no ROM) and the
 Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
-(section 7).*
+(section 7), and 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15, not measured yet).*
 
 ## 1. Summary
 
@@ -328,8 +328,8 @@ image is free, as bgfx already does for secondary windows), which needs a change
 
 ## 8. Opportunities
 
-Ranked by gain for the effort; items 8 and 9 come from the measurements of section 7. Gains are per frame at 72 Hz; on Addams, a
-millisecond saved lets dynamic resolution raise the size by about 4–5 % per axis.
+Ranked by gain for the effort; items 8 and 9 come from the measurements of section 7, items 10 to 15 from the review of section 8.1.
+Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolution raise the size by about 4–5 % per axis.
 
 | # | Opportunity | Gain | Effort | Status |
 |---|---|---|---|---|
@@ -342,6 +342,12 @@ millisecond saved lets dynamic resolution raise the size by about 4–5 % per ax
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
 | 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
+| 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | Estimated 0.8–1.5 ms on Addams at 2160² | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers | To measure (8.1) |
+| 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Estimated 0.3–1 ms | Small (first step), medium (fusion); upstream shaders | To measure (8.1); first step of item 3 |
+| 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | Estimated 0.3–1 ms | One format in the Frame build, after checking that nothing reads the alpha | To measure (8.1) |
+| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | 1.2–1.6 ms on Addams, plus about 0.6 ms in the probe (measured with hooks) | Medium (`Table Geometry on the Steam Frame.md`, section 8) | Deferred on 2026-10-25, reconsidered 2026-10-29 (8.2); item 4 in detail |
+| 14 | Hardware multiview: one vertex shader run for both eyes | Unknown, bounded by the per-eye share of the geometry cost | Large: bgfx has no multiview, and VPX's varyings are in view space | Measure the bound first (8.1) |
+| 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | To measure: missed frames and the compositor's share |
 
 Details:
 
@@ -376,11 +382,111 @@ Details:
    Drawing the room later, leaving FXAA off on far pixels and handing the sky to the runtime (no panorama layer on the Frame) are ruled
    out; a cheaper read of the sky texture, half-rate shading of sky-like parts and skipping parts outside the view are open. Hidden rooms
    cost no GPU time.
+10. **Foveated post-processing**: the shading rate image is attached to the scene buffers only (`Renderer::SetFragmentDensityMap`,
+   `BackBuffer1/2`), so the periphery is shaded coarsely in the scene, then tonemapped and anti-aliased at full rate (3.2 ms of the
+   Addams frame at 2160²). The rate attachment of `steamframe/patches/bgfx/03-fragment-shading-rate.patch` works on any framebuffer
+   in Turnip's direct path (*Foveated Rendering on the Steam Frame.md*, section 11), so it can go on `PostProcess1` (tonemap) and on the
+   framebuffer of the headset swapchain (FXAA), and on the reflection probe. The rate image must match each target's size under dynamic
+   resolution, as for the scene buffers. The fragment shader then runs once per coarse block but every pixel is still written, so the
+   gain is less than the share of coarse pixels. Visual cost: in the periphery, edges become as blocky as the shading already is there.
+11. **Cheaper FXAA**: the Standard FXAA of `fs_pp_fxaa.sc` computes the luma of 9 RGB reads per pixel (lines 51–58). First step: the
+   tonemap writes the luma into the alpha of `PostProcess1`, and FXAA reads the neighbours' luma with `textureGather` (as in FXAA 3.11),
+   which removes most of the reads. Second step: tonemap and FXAA in one pass (item 3), which removes a full-resolution write and read
+   (2 × 37 MB per frame at 2160²). Both are upstream shaders.
+12. **RG11B10F scene buffer**: VPX asks bgfx for `RGB16F`, which bgfx renders as RGBA16F (`RenderTarget.cpp:143`), 8 bytes per pixel.
+   The scene pass runs direct (not tiled), so every scene fragment written or blended goes through memory, and the tonemap, bloom and
+   probe read it again. RG11B10F is 4 bytes, renderable on Adreno, and already used by the texture compressor. To check first: that no
+   pass reads the back buffer's alpha (screen-space transparency, refraction probes) and that no value is negative; then dark gradients
+   for banding (6-bit mantissa against 10).
+13. **Render-only simplification**: the measured gain of item 4 (weight 10, bound by distance): Addams 11.67 → 10.41 ms (0.5 VPU) or
+   10.03 ms (1 VPU), its probe included; a coarser mesh in the probe adds about 0.3 ms more (probe 1.02 ms against 0.75 ms with
+   strict 2 VPU). Iron Man and LOTR about 0.5 ms, Attack from Mars 0.2, light tables nothing. Approach in section 8.2.
+14. **Hardware multiview**: both eyes are one instanced draw, and the vertex shader runs once per eye (`gl_Layer = gl_InstanceID`,
+   `vs_basic.sc`). With `VK_KHR_multiview`, Turnip can run the vertex shader once and output one position per view, but only when
+   nothing but the position depends on the view (to verify in Mesa's `tu_shader.cc`). VPX's shaders pass `v_worldPos` and `v_normal` in
+   view space, so they would have to light in world space, and bgfx would need multiview render passes and `gl_ViewIndex`. Before any of
+   this, measure the bound: the same frame with one eye drawn (instance count 1), which gives the per-eye share of the 2.2 ms per
+   million triangles.
+15. **Dynamic resolution target**: the scale aims at 85 % of the period (11.8 ms of 13.9), so about 2 ms of GPU time is idle in every
+   frame. The compositor's own GPU work (6–8 %) runs in that time, which is the reason for the margin. A run at 88 % and 90 %, counting
+   missed frames, says whether part of it can become resolution.
 
 For sharpness (*Image Quality on the Steam Frame.md*): with the mirror off, heavy tables like Addams reach about the native 2160², and light
 tables like Ghostbusters reach the 2160² ceiling with about 1.7 ms to spare, so a *Render resolution* slightly above 125 % may fit them
 (not measured). Beyond that, the GPU time freed by opportunities 2 to 4 and 9 is what dynamic resolution can turn into resolution, or
 into headroom for the heat.
+
+### 8.1 Review of 2026-10-29: what keeps Addams below the full size
+
+Since the climb rule of 2026-10-28 (section 7.4), Addams spends 88–91 % of its time at 2160², at 11.0–11.2 ms against the 11.8 ms
+target, with a few frames missed per 3 minutes. Holding the full size all the time needs 1–2 ms less GPU time, not a new renderer. At
+2160², mirror off, its passes are: scene 6.26 ms (mostly triangles), tonemap 1.57, FXAA 1.65, probe 1.33 (mostly triangles), bloom 0.19.
+The full-screen passes are a third of the frame and are the part not studied so far; the geometry was (`Table Geometry on the Steam
+Frame.md`).
+
+Already ruled out, not to retry: forced tiled or direct rendering, the density map (both in *Foveated Rendering*), vertex cache
+reordering, `TU_DEBUG=sysmem` (Table Geometry, section 7), and the room options of `VR Rooms on the Steam Frame.md` (room drawn later,
+FXAA left out on far pixels, runtime sky layer). Low value: bgfx's discard flags (never used by VPX, so every depth buffer is stored and
+every pass that does not clear loads its target, but the passes that matter run direct, where loads and stores cost nothing), the depth
+format, quantized vertices.
+
+Proposed measurement series, before any implementation: Addams, fixed 2160², headless, temporary hooks, the base run repeated in the
+series. Variants: the current master as the base; post-processing foveated (item 10); RG11B10F (item 12); FXAA off, as the bound of
+item 11; one eye drawn, as the bound of item 14; dynamic resolution at 88 % and 90 % (item 15).
+
+### 8.2 Render-only simplification: approach under discussion (2026-10-29)
+
+Item 13 is the largest measured gain on the tables that need it (Addams, Attack from Mars, Iron Man: tables built from scans or
+exports), and nothing on light tables. Points of design, with a proposal for each:
+
+- **Where it runs.** At load, before the GPU buffers are built (`Primitive::RenderSetup`), with the result cached per table in
+  `cache/<title>/meshes/` like the texture compressor (key: hash of the mesh, settings and format version), and the same pass run when a
+  table is imported into the library so that the first play is already fast. No tool rewrites the author's file (Table Geometry,
+  section 8).
+- **What it changes.** meshoptimizer's simplifier collapses edges onto existing vertices: its result is a new index list over the same
+  vertices. A simplified level is therefore only a second index buffer; positions, normals and texture coordinates of the kept vertices
+  are exact, physics and the editor keep the original mesh.
+- **Distance.** The measured runs scaled the bound by the distance from a pinned head at the lockbar. A player leaning in brings a part
+  closer than that. Two ways: (a) one simplified level built for a nominal head position, as measured; (b) two or three levels per mesh
+  (full, 0.5 VPU, 1–2 VPU), and each frame each part draws the level matching its distance from the actual head, the probe taking the
+  coarsest. (b) costs a distance test per part per frame (the culling of `Culling Parts Outside the View.md` already transforms the part's box) and a few index
+  buffers, follows the player, and gives the coarser probe mesh at no extra work. Proposal: (b).
+- **Which parts.** Static parts and parts that move (the bound is in the part's own space); not vertex-animated meshes, light maps,
+  additive parts, meshes under about 500 triangles, nor parts whose mesh the script rewrites. Grouped parts are merged at load and need checking separately.
+  Meshes that coincide (a part and its "off" or light map layer, as Addams' GI pairs and LOTR's `wireramps`) are simplified once and
+  share the index list, so the layers stay exactly on top of each other.
+- **Settings.** On by default in the Frame build with a per-table switch (as texture compression has), off by default elsewhere; an
+  upstream pull request later, as an option.
+- **Validation.** The Mac captures of Table Geometry, section 6 (wire guides, printed artwork), the owner's check in the headset with
+  head motion (specular highlights on re-triangulated surfaces, a level switching while leaning in), and a headless series on Addams,
+  Attack from Mars, Iron Man and LOTR against the current master.
+
+Open questions for the owner: (a) or (b); on by default or per table; which tables besides Addams to validate in the headset.
+**Decided 2026-10-29: (b).**
+
+**Follow-up: levels chosen by foveation.** Foveated shading lowers the fragment work in the periphery but not the geometry, which is
+paid per triangle wherever it lands; the level selection of (b) can take the periphery into account by raising the error allowed for a
+part by its angle from the gaze (eye-tracked) or from the lens centre (fixed foveation), with the full allowance in the clear zone. It
+reuses the same levels and only changes the rule that picks one. Risks: a part is drawn once and may span the clear zone and the
+periphery (use its closest point to the gaze); the eye moves fast and the gaze arrives a few frames late, so a coarse level could be seen
+right where the eye lands (a wide clear zone, hysteresis); in play the eye mostly rests on the playfield, where Addams' heavy parts are,
+so the gain is smaller than the distance rule's. Plan: build (b) with distance only, then count on the Mac, along the scripted head path,
+the triangles a rule by angle would remove (fixed foveation first: the lens blurs the periphery anyway, and there is no gaze latency); try
+it in the headset only if the count is worth it, off by default.
+
+**Working without the Frame (2026-10-29).** The macOS build with the simulated headset (branch `xr-sim`, `docs/XR Simulator Branch.md`)
+does not give timings that transfer to the Frame: the Apple GPU and bgfx's Metal backend handle geometry and memory differently (more
+vertex throughput, far more bandwidth, the scene kept in tile memory, where the Frame renders the scene pass direct), and the Metal build
+has no shading rate image, no multiview path of Turnip, no SteamVR compositor. What it gives reliably, and what is left for the Frame:
+
+| Item | On the Mac | On the Frame |
+|---|---|---|
+| 13 Simplification | The implementation; triangles per pass with and without, along a scripted head path (leaning in, looking around), turned into a forecast with the Frame's 2.2–2.4 ms per million triangles (linear, measured on five tables); the visual check, including a level switching while the scripted head leans in, recorded frame by frame against a run without simplification; load time, stacked layers, the whole Mac copy of the library as a robustness test | One series (Addams, Attack from Mars, Iron Man, LOTR) and the owner's check in the headset |
+| 11 Cheaper FXAA | Same image (luma in alpha, fused pass); possibly Adreno shader statistics, with Turnip compiling on Mesa's `drm-shim` in the Linux ARM64 container (not verified) | Timing |
+| 12 RG11B10F | Which passes read the back buffer's alpha; banding | Timing |
+| 10, 14, 15 | Feasibility only | Everything |
+
+`xr-sim` is behind master: for this work, a local copy of it is rebased onto the work branch (no push).
 
 ## 9. Reproduction
 
