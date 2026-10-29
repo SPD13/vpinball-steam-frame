@@ -16,8 +16,9 @@ namespace VPX
 {
 
 // Error bounds of the levels, in VP units (1 VPU = 0.54 mm). Each level is simplified from the previous one kept, within what is left of its
-// bound, so that the error of a level is the sum of the steps.
-static constexpr float kBounds[] = { 0.5f, 1.f, 2.f, 4.f, 8.f, 16.f };
+// bound, so that the error of a level is the sum of the steps. Steps of x1.41 up to 4 VPU, where the parts of the table are allowed 1 to 3
+// VPU from the lockbar (x2 steps gave 0.1 ms less on Addams), then x2 for the far ones (rooms).
+static constexpr float kBounds[] = { 0.5f, 0.71f, 1.f, 1.41f, 2.f, 2.83f, 4.f, 8.f, 16.f };
 // A level is kept when it has at most 90 % of the triangles of the previous one (or of the mesh)
 static constexpr float kKeepRatio = 0.9f;
 // Meshes under this are not worth it
