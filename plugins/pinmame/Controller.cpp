@@ -26,6 +26,38 @@ using json = nlohmann::json;
 namespace PinMAME
 {
 
+#if defined(VPX_STEAM_FRAME) && defined(__linux__)
+// Steam Frame Edition: libpinmame starts its emulation thread without a name, so it has the name of the thread that started it. Named 'PinMAME'
+// (with the threads it starts later, which inherit it), the performance panel of the Steam Frame tells its CPU use from the others
+// (src/steamframe/PerfPanel.cpp). Linux lets a process name its threads through /proc.
+static std::string ReadThreadName(const std::filesystem::path& task)
+{
+   std::ifstream file(task / "comm");
+   std::string name;
+   std::getline(file, name);
+   return name;
+}
+
+static std::vector<std::string> ListThreads()
+{
+   std::vector<std::string> tids;
+   std::error_code ec;
+   for (const auto& entry : std::filesystem::directory_iterator("/proc/self/task", ec))
+      tids.push_back(entry.path().filename().string());
+   return tids;
+}
+
+// The threads started since 'before' which have the name of the calling thread (the ones it started, not the ones of other threads)
+static void NameNewThreads(const std::vector<std::string>& before, const char* name)
+{
+   const std::string creatorName = ReadThreadName("/proc/thread-self");
+   for (const std::string& tid : ListThreads())
+      if (std::find(before.begin(), before.end(), tid) == before.end())
+         if (const std::filesystem::path task = std::filesystem::path("/proc/self/task") / tid; ReadThreadName(task) == creatorName)
+            std::ofstream(task / "comm") << name;
+}
+#endif
+
 // [0..1] scaled to [0..scale], saturated and rounded. LUM32F is specified as [0..1] but
 // nothing stops a producer overshooting, and truncating would bias every shade down
 __forceinline uint8_t saturatedScale(const float v, const float scale) { return (uint8_t)(scale * (v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v) + 0.5f); }
@@ -313,9 +345,15 @@ void Controller::Run(long hParentWnd, int nMinVersion)
       m_romFix = std::make_unique<RomFix>(m_msgApi, m_endpointId, this);
    m_romFix->Prepare(m_szRomName, m_vpmPath);
 #endif
+#if defined(VPX_STEAM_FRAME) && defined(__linux__)
+   const std::vector<std::string> threadsBefore = ListThreads();
+#endif
    PINMAME_STATUS status = PinmameRun(m_szGameName.c_str());
    while (PinmameIsRunning() == 2) // Wait until the machine is either running or stopped
       std::this_thread::sleep_for(std::chrono::milliseconds(75));
+#if defined(VPX_STEAM_FRAME) && defined(__linux__)
+   NameNewThreads(threadsBefore, "PinMAME");
+#endif
 
    if ((PinmameIsRunning() == 1) && status == PINMAME_STATUS_OK)
    {

@@ -289,6 +289,13 @@ public:
    void PollEvents();
    void RenderFrame(class RenderDevice* rd, const std::function<void(RenderTarget* vrRenderTarget)>& submitFrame);
    RenderTarget* GetUIRenderTarget() const { return m_uiRenderTarget; } // Acquired swapchain target for the UI composition layer (or nullptr if unsupported/not acquired yet)
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the performance panel (src/steamframe/PerfPanel.h), drawn in a quad layer standing left of the cabinet (see PerfPanelLayer.cpp).
+   // Acquired swapchain target of the panel for the frame being prepared, only when the panel has new content (nullptr otherwise): the logic thread
+   // draws the panel into it, then says so, else the image released is not shown
+   RenderTarget* GetPerfPanelRenderTarget() const { return m_perfPanelRenderTarget; }
+   void SetPerfPanelDrawn() { m_perfPanelDrawn = true; }
+   #endif
    void UpdateVisibilityMask(class RenderDevice* rd);
    bool UseDepthBuffer() const { return m_depthExtensionSupported; }
    bgfx::TextureFormat::Enum GetDepthFormat() const { return m_depthSwapchainInfo.format; }
@@ -532,6 +539,23 @@ private:
    void UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime); // Render thread, once per frame before the frame is prepared
    double m_nextStatusLogTime = 0.;
    void LogRuntimeStatus();
+
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the performance panel (src/steamframe/PerfPanelLayer.cpp). A small swapchain of its own, of which an image is acquired only
+   // for the frames that draw new content (every 0.5 s): between them, the quad layer shows the image released last
+   SwapchainInfo m_perfPanelSwapchainInfo = {};
+   std::vector<std::unique_ptr<RenderTarget>> m_perfPanelRenderTargets;
+   RenderTarget* m_perfPanelRenderTarget = nullptr; // As m_uiRenderTarget: written by the render thread before the frame is prepared
+   bool m_perfPanelImageAcquired = false;
+   std::atomic<bool> m_perfPanelDrawn = false; // The logic thread drew into the acquired image
+   bool m_perfPanelHasImage = false; // An image drawn by the logic thread was released: the layer can be shown
+   XrCompositionLayerQuad m_perfPanelLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+   void ReportPerfPanelFrame(int periods, float gpuMs); // From UpdateDynamicResolution
+   void AcquirePerfPanelImage(class RenderDevice* rd); // Before the frame is prepared
+   void ReleasePerfPanelImage(); // After the frame is submitted
+   void AddPerfPanelLayer(std::vector<XrCompositionLayerBaseHeader*>& layers);
+   void DestroyPerfPanel(); // With the session
+   #endif
 
    Matrix3D m_nextProj[2];
 

@@ -14,6 +14,7 @@
 #include "renderer/Renderer.h"
 #include "renderer/VRDevice.h"
 #if defined(VPX_STEAM_FRAME)
+#include "steamframe/PerfPanel.h"
 #include "steamframe/vrui/VRUI.h"
 #endif
 
@@ -414,6 +415,13 @@ void LiveUI::RenderUI()
 
    ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   // Steam Frame Edition: the performance panel, drawn in a layer of its own when it has new content (src/steamframe/PerfPanel.cpp)
+   ImDrawList* perfPanelDrawList = nullptr;
+   if (m_player->m_vrDevice)
+      VPX::PerfPanel::Get().OnLogicFrame(m_player);
+   #endif
+
    if (IsLoadingScreenShown())
       RenderLoadingScreen();
    else
@@ -469,6 +477,12 @@ void LiveUI::RenderUI()
 
       // Display performance overlays
       m_perfUI.Update();
+      #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+      // Built every frame, though drawn into its layer only when it has new content: ImGui discards the glyphs of the font sizes unused for a
+      // couple of frames when its font texture is full, and rebuilding them for the panel every 0.5 s repacked the texture the menu uses (flicker)
+      if (m_player->m_vrDevice)
+         perfPanelDrawList = VPX::PerfPanel::Get().BuildWindow();
+      #endif
    }
 
    ImGui::PopFont();
@@ -585,6 +599,10 @@ void LiveUI::RenderUI()
    for (int n = 0; n < draw_data->CmdListsCount; n++)
    {
       const ImDrawList * const cmd_list = draw_data->CmdLists[n];
+      #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+      if (cmd_list == perfPanelDrawList) // Drawn into its own layer, below
+         continue;
+      #endif
       const unsigned int numVertices = cmd_list->VtxBuffer.size();
       const unsigned int numIndices = cmd_list->IdxBuffer.size();
       hasContent |= numIndices > 0;
@@ -648,6 +666,9 @@ void LiveUI::RenderUI()
       m_player->m_vrDevice->SetShowUILayer(hasContent);
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    RenderVRPointerRay(onVRPanel, depthSort); // Steam Frame Edition: ray from the pointing VR controller to the dot (src/steamframe/vrui/Pointer.cpp)
+   if (perfPanelDrawList && m_player->m_vrDevice->GetPerfPanelRenderTarget()
+      && VPX::PerfPanel::Get().Render(m_rd, m_player->m_vrDevice->GetPerfPanelRenderTarget(), perfPanelDrawList, m_perfPanelMeshBuffer))
+      m_player->m_vrDevice->SetPerfPanelDrawn();
    #endif
 
    NewFrame();
