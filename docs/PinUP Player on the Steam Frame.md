@@ -194,6 +194,13 @@ where it then replaces the table's script: delete it afterwards.
 to change by new ones, never write through the hard links) with the instrumented executable, and `VPX_PERF_FORCE_RENDER=1
 VPX_PERF_TEST=<seconds>` to play unworn and quit. Each run increments the table's play count in its `.info` file.
 
+**What PuP draws, on the Mac**: with the table and its pack in a scratch library (`-PrefPath` with `TablesPath` and `[Plugin.PUP]
+PUPFolder` set to it), `[Backglass] BackglassOutput = 1` opens the backglass window PuP draws in. `screencapture` fails while the Mac
+display sleeps, but `RenderDevice::CaptureScreenshot({ m_playfieldWnd, m_backglassOutput.GetWindow() }, ...)` does not: a temporary hook
+in `Player::PrepareFrame` (as `Doc/test-hooks/autoplay-hooks.py`) that adds a credit, presses Start and captures shows the backglass of
+attract mode and of a game. To find what hides something, skip one screen (`screen->GetScreenNum()` in `renderScreens`) or one label
+(`PUPLabel::Render`) at a time.
+
 **Stacks of a hung VPX**: `kernel.yama.ptrace_scope` is 1 on the Frame, so only a parent may attach gdb. Starting VPX under gdb changes
 the timing enough to hide the hang; instead, the shell script that started VPX replaces itself with gdb once VPX is stuck
 (`exec gdb -p $pid -batch -ex "thread apply all bt"`), which keeps it the parent. `/proc/<pid>/task/*/wchan` shows which threads wait
@@ -384,6 +391,12 @@ upstream; none was proposed yet (Oct 24, 2026). Commits are named by their subje
 | Hardware decoding on by default in the fork (`VPX_STEAM_FRAME`) | `PUPPlugin.cpp` | "Steam Frame: hardware decoding of the PinUP Player videos by default" (fork only) |
 | A background of a higher priority replaces a looping main media (`BG REPLACES LOOP` in the debug log): a looping media never ends, so the background never came back. The Austin Powers intro (D0, Loop, priority 1) gives way to the game background (W54, SetBG, priority 2); Darkest Dungeon's side mode loops end with its 'Reset BG' (SetBG) | `PUPMediaManager.cpp` | "pup: a background of a higher priority replaces a looping media" |
 | Stall recovery of the hardware decoders (section 5) | `PUPMediaPlayer.h/.cpp` | "PUP: a blocked hardware decoder is stopped, its video goes on in software" |
+| The labels of a screen positioned on another one are drawn above the labels of that screen, even when it is in a higher tier: City Hunter's ForceOn screen 2 shows its frame as an overlay (a `pBackground` label) and its scores are labels of screen 1 positioned on it | `PUPManager.cpp` (`Render`) | "pup: labels of a screen positioned on another one are drawn above the labels of that screen" |
+
+Upstream's "PUP: update label texture on API thread (like PUPImage)" (Oct 27, 2026) was picked before the sync that brings it, and
+will drop out of the series then. Label textures were created on worker threads while the API thread creates and deletes a video
+texture every frame; the VPX texture API is not thread safe, and a label could show another texture: City Hunter's XP gauge image
+(`XP0.png`, the full backglass size) drew its backglass frame over the scores.
 
 The canvas of 960 pixels is the fork's (`CabinetDisplays::GetCanvasSize`), not a plugin change: with 1280 pixels, VPX used 1.63 cores on
 Darkest Dungeon, 1.37 with 960 (CPU 77 → 71 °C).
@@ -436,6 +449,7 @@ Packs in `~/Documents/VPinballX/Tables/pinupsystem/pupvideos`:
 | `BladeRunner2049` | none: no batch file, played as uploaded | Not reported (the `qcom-iris` error of section 12 was seen with it) |
 | `5th_Element_VR` | none: only `EditThisPuPPack.bat` | Not reported |
 | `TopGun` | none: only `EditThisPuPPack.bat` | Not reported |
+| `City_Hunter` | none: only `EditThisPuPPack.bat` and `PuPInit.bat` | Oct 28: scores missing and DMD black. Every screen is on the backglass: the frame (`Overlay.png`, screen 2) with six windows for the mode videos, the attract video in the large window top right, the scores below as labels of screen 1. Scores fixed by the two plugin changes of section 9, checked on the Mac. The table's DMD (`DMDPUP`, a legacy DMD flasher) stays black: the script feeds no DMD (UltraDMD is off) |
 
 Tables of the library whose script uses PuP and whose pack is not on the Frame: BleachVR (`Bleachvr`), JAWS 50th Anniversary
 (`JAWS_50Th_Anniversary`), John Wick (`johnwick`), Masters of the Universe (`motu`), One Piece (`onepiece`), StarCraft (`startrp2sc`).
