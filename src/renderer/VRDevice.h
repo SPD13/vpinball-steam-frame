@@ -550,7 +550,8 @@ private:
    unsigned int m_missedFrames = 0, m_heldReadings = 0, m_stallBreaks = 0; // Since the last status log
    unsigned int m_stallWindowFrames = 0, m_stallWindowHeld = 0; // Readings, and held readings, in the current second
    unsigned int m_stallBreaksLeft = 0; // For the current table (see UpdateDynamicResolution)
-   unsigned int m_framesSinceDecrease = 0; // The scale rises again a second after it was lowered (see UpdateDynamicResolution)
+   unsigned int m_framesSinceDecrease = 0; // The scale rises again a quarter of a second after it was lowered (see UpdateDynamicResolution)
+   float m_smoothedGpuMs = 0.f; // GPU time the scale follows: the readings averaged over a few frames (0 until the first reading of the table)
    void UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime); // Render thread, once per frame before the frame is prepared
    double m_nextStatusLogTime = 0.;
    void LogRuntimeStatus();
