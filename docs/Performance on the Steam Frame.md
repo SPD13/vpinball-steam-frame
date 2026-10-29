@@ -238,6 +238,10 @@ frame cost does not drift. The resolution stays under 2160² because dynamic res
 90 % of the target (10.6 ms), and Addams sits at 10.7 ms. The CPU runs hotter worn (section 2.2), so a long worn session remains worth a
 check.
 
+Since 2026-10-28 (branch `perf-panel`), the scale rises when the GPU time expected at the next step, the cost following the pixels, stays
+under 97 % of the target, and not within a second of a step down: a table that fits at the full size returns to it after a dip instead of
+staying a few steps under it. To be measured again on Addams (expected: 2160² while its GPU time there is under 11.8 ms).
+
 ### 7.5 Frame pacing stall
 
 At fixed 2160² on Ghostbusters, three runs out of three started in a second, stable state of the pipeline:
