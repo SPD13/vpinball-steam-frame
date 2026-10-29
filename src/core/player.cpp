@@ -15,6 +15,7 @@
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/CabinetDisplays.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/MeshSimplifier.h"
 #include "steamframe/ScoreTracker.h"
 #include "steamframe/TableLibrary.h"
 #endif
@@ -907,6 +908,9 @@ void Player::InitTableSession(const bool isInitial)
       progschj::ThreadPool pool(g_app->GetLogicalNumberOfProcessors());
       for (auto image : m_ptable->m_vimage)
          pool.enqueue_block(loadImage, image, false);
+#if defined(VPX_STEAM_FRAME)
+      VPX::MeshSimplifier::Get().Enqueue(pool, m_ptable); // Simplified render meshes, made while the textures load
+#endif
 
       bool showLoadingUI = false;
       while (pool.has_work_in_flight())
@@ -962,6 +966,9 @@ void Player::InitTableSession(const bool isInitial)
       }
       pool.wait_until_empty();
       pool.wait_until_nothing_in_flight();
+#if defined(VPX_STEAM_FRAME)
+      VPX::MeshSimplifier::Get().LogStats();
+#endif
 
       // Due to multithreaded loading and pre-allocation, check if some images could not be loaded, and perform a retry since more memory is available now
       // (before locking the render thread, like the parallel load, as uploading a preloaded texture acquires the frame mutex)

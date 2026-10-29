@@ -16,6 +16,9 @@
 
 class HitObject;
 class MeshBuffer;
+#if defined(VPX_STEAM_FRAME)
+namespace VPX { struct MeshLevels; }
+#endif
 
 // Indices for RotAndTra:
 //     RotX = 0
@@ -304,6 +307,11 @@ public:
 
    bool m_lockedByLS = false;
    bool m_inPlayState = false;
+
+#if defined(VPX_STEAM_FRAME)
+   std::shared_ptr<VPX::MeshLevels> m_meshLevels; // Simplified levels of the render mesh, made while the table loads (see steamframe/MeshSimplifier.h)
+   int m_meshLevel = -1; // Level drawn in the main view at the last frame (-1: the full mesh)
+#endif
 
 private:
    Renderer *m_renderer = nullptr;

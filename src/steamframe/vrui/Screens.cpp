@@ -273,7 +273,7 @@ static vector<Section> GetSections(Screen screen)
          Section { "VR rendering"s, kVR,
             { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Label("Foveation status"s),
                Label("Render resolution status"s), Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget),
-               Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale), Label("Dynamic resolution status"s) },
+               Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale), Label("Dynamic resolution status"s), Prop(Settings::m_propPlayer_SimplifyMeshes) },
             false, false },
          Section { "Desktop mirror"s, kVR, { Prop(Settings::m_propPlayerVR_DesktopDisplay), Prop(Settings::m_propPlayerVR_ShrinkDesktopDisplay) }, false, false },
          Section { ""s, kGraphics, {}, true },

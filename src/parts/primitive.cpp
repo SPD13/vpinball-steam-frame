@@ -15,6 +15,9 @@
 #include "renderer/trace.h"
 #include "utils/objloader.h"
 #include "utils/color.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/MeshSimplifier.h"
+#endif
 
 #include "forsyth.h"
 #include "progmesh.h"
@@ -858,7 +861,11 @@ void Primitive::RenderSetup(Renderer *renderer)
    if (m_mesh.NumVertices() > 0 && !m_mesh.m_indices.empty())
    {
       std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, (unsigned int)m_mesh.NumVertices(), nullptr, !(m_d.m_staticRendering || m_mesh.m_animationFrames.empty()));
+#if defined(VPX_STEAM_FRAME)
+      std::shared_ptr<IndexBuffer> indexBuffer = VPX::MeshSimplifier::CreateIndexBuffer(m_renderer->m_renderDevice, m_mesh, m_meshLevels); // The mesh, then its simplified levels
+#else
       std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, m_mesh.m_indices);
+#endif
       m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), vertexBuffer, indexBuffer, true);
 
       // Compute and upload mesh to let a chance for renderdevice to share the buffers with other static objects
@@ -971,6 +978,17 @@ void Primitive::Render(const unsigned int renderMask)
       }
    }
 
+#if defined(VPX_STEAM_FRAME)
+   // The index range drawn: the full mesh, or the level of its simplified mesh that cannot be told from it at this distance
+   uint32_t drawFirst = 0, drawCount = m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices();
+   if (!isUIPass && !m_groupdRendering && m_meshLevels)
+   {
+      int renderWidth, renderHeight;
+      m_renderer->GetRenderSize(renderWidth, renderHeight);
+      VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass, m_meshLevel, drawFirst, drawCount);
+   }
+#endif
+
    if (isUIPass)
    {
       // FIXME use correct point for depth sorting
@@ -1040,7 +1058,11 @@ void Primitive::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, color.w);
       m_renderer->m_renderDevice->m_basicShader->SetTechnique(lightmap ? (img ? ShaderTechnique::unshaded_with_texture_shadow : ShaderTechnique::unshaded_without_texture_shadow)
                                                  : (img ? ShaderTechnique::unshaded_with_texture : ShaderTechnique::unshaded_without_texture));
+#if defined(VPX_STEAM_FRAME)
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, drawFirst, drawCount);
+#else
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+#endif
    }
    else
    {
@@ -1106,7 +1128,11 @@ void Primitive::Render(const unsigned int renderMask)
                // OpenGL & BGFX shaders derive doReflections from the reflection factor: null it so that only the reflection pass applies it
                m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::mirrorNormal_factor, n.x, n.y, n.z, 0.f);
                m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive && !m_d.m_staticRendering, m_d.m_vPosition, m_d.m_depthBias,
+#if defined(VPX_STEAM_FRAME)
+                  m_meshBuffer, RenderDevice::TRIANGLELIST, drawFirst, drawCount);
+#else
                   m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+#endif
                m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::mirrorNormal_factor, n.x, n.y, n.z, m_d.m_reflectionStrength);
                is_reflection_only_pass = true;
             }
@@ -1135,7 +1161,11 @@ void Primitive::Render(const unsigned int renderMask)
             is_reflection_only_pass // The reflection pass is an additive (so transparent) pass to be drawn after the opaque one
          || refractions // Refractions must be rendered back to front since they rely on what is behind
          || (mat->m_bOpacityActive && !m_d.m_staticRendering /* && !m_renderer->m_renderDevice->GetRenderState().IsOpaque() */), // We can not use the real render state opaque state since Blood Machine and other tables use depth masks
+#if defined(VPX_STEAM_FRAME)
+         m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, drawFirst, drawCount);
+#else
          m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+#endif
    }
 
    // Draw the front of the primitive if backface enabled
@@ -1143,8 +1173,12 @@ void Primitive::Render(const unsigned int renderMask)
    {
       m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, cullMode);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, 
+#if defined(VPX_STEAM_FRAME)
+         m_meshBuffer, RenderDevice::TRIANGLELIST, drawFirst, drawCount);
+#else
          m_meshBuffer, RenderDevice::TRIANGLELIST, 0,
          m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+#endif
    }
 
    // Restore state

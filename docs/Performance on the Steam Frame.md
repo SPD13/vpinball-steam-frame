@@ -474,6 +474,15 @@ so the gain is smaller than the distance rule's. Plan: build (b) with distance o
 the triangles a rule by angle would remove (fixed foveation first: the lens blurs the periphery anyway, and there is no gaze latency); try
 it in the headset only if the count is worth it, off by default.
 
+**Implementation (2026-10-29, branch `mesh-simplify`).** As decided above: levels made while the table loads (no cache), chosen per frame
+by distance, the setting on by default on the Frame with a per-table override and a live switch (`Steam Frame Branch.md`, section 19). One
+change from the discussion: the allowed error is given in pixels of the view (`Player.SimplifyMeshesError`, default 1) rather than in VP
+units at 0.5 m, so that it follows the projection: 1 pixel at 2160² on the Frame is close to 1 VPU at 0.5 m, and a zoomed desktop camera
+gets finer levels. First results on the Mac (Addams): 1.43 M triangles in the 114 simplified meshes, 1.10 M at 0.5 VPU, 0.84 M at
+2 VPU; desktop view 1.33 → 0.93 M triangles per frame; close-up captures at the headset's pixel size magnified 4×: no change on the
+flippers and apron, single silhouette pixels of round parts on the upper playfield (0.02 %); loading 0.3 s longer. Next: triangles per
+frame in the simulated headset along a scripted head path, for the forecast of the GPU time on the Frame.
+
 **Working without the Frame (2026-10-29).** The macOS build with the simulated headset (branch `xr-sim`, `docs/XR Simulator Branch.md`)
 does not give timings that transfer to the Frame: the Apple GPU and bgfx's Metal backend handle geometry and memory differently (more
 vertex throughput, far more bandwidth, the scene kept in tile memory, where the Frame renders the scene pass direct), and the Metal build

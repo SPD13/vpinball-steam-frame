@@ -9,6 +9,9 @@
 #include "parts/Sound.h"
 #include "ui/live/LiveUI.h"
 #include "utils/color.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/MeshSimplifier.h"
+#endif
 
 
 namespace VPX::InGameUI
@@ -212,6 +215,14 @@ void VRSettingsPage::BuildPage()
          ImGui::AlignTextToFramePadding();
          ImGui::TextUnformatted(("Dynamic resolution: " + m_player->m_vrDevice->GetDynamicResolutionStatus()).c_str());
       }));
+#endif
+
+#if defined(VPX_STEAM_FRAME)
+   // Simplified meshes of heavy tables, switched live (see steamframe/MeshSimplifier.h)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_SimplifyMeshes, //
+      []() { return VPX::MeshSimplifier::Get().IsEnabled(); }, //
+      [](bool v) { VPX::MeshSimplifier::Get().SetEnabled(v); }));
 #endif
 
 #if !defined(VPX_STEAM_FRAME_HEADSET) // The Steam Frame has no desktop display to show (forced off, see Renderer::Renderer)
