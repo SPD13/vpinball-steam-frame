@@ -13,7 +13,11 @@ namespace VPX::VRUI::Widgets
 void BeginRegion(const char* id, const ImVec2& size, bool scrollable);
 void EndRegion();
 
-// Square icon button of the rail. Returns true when clicked.
+// The logo of the Steam Frame screen, drawn in a square of 'size' centered on 'center': a headset visor with two lenses, in the corners of a
+// viewfinder frame (the icon font has no headset)
+void SteamFrameLogo(ImDrawList* drawList, const ImVec2& center, float size, ImU32 color);
+
+// Square icon button of the rail (the icon is a glyph, or Screens' kSteamFrameLogo). Returns true when clicked.
 bool RailButton(const char* id, const char* icon, const ImVec2& size, bool selected, bool focused, bool& hovered);
 
 // Rounded button with an optional icon before its label. Returns true when clicked.

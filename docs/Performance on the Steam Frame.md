@@ -345,7 +345,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | Estimated 0.8–1.5 ms on Addams at 2160² | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers | To measure (8.1) |
 | 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Estimated 0.3–1 ms | Small (first step), medium (fusion); upstream shaders | To measure (8.1); first step of item 3 |
 | 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | Estimated 0.3–1 ms | One format in the Frame build, after checking that nothing reads the alpha | To measure (8.1) |
-| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | 1.2–1.6 ms on Addams, plus about 0.6 ms in the probe (measured with hooks) | Medium (`Table Geometry on the Steam Frame.md`, section 8) | Deferred on 2026-10-25, reconsidered 2026-10-29 (8.2); item 4 in detail |
+| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** on branch `mesh-simplify` (8.2, measured on the Frame 2026-10-29) |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown, bounded by the per-eye share of the geometry cost | Large: bgfx has no multiview, and VPX's varyings are in view space | Measure the bound first (8.1) |
 | 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | To measure: missed frames and the compositor's share |
 
@@ -473,6 +473,77 @@ right where the eye lands (a wide clear zone, hysteresis); in play the eye mostl
 so the gain is smaller than the distance rule's. Plan: build (b) with distance only, then count on the Mac, along the scripted head path,
 the triangles a rule by angle would remove (fixed foveation first: the lens blurs the periphery anyway, and there is no gaze latency); try
 it in the headset only if the count is worth it, off by default.
+
+**Implementation (2026-10-29, branch `mesh-simplify`).** As decided above: levels made while the table loads (no cache), chosen per frame
+by distance, the setting on by default on the Frame with a per-table override and a live switch (`Steam Frame Branch.md`, section 19). One
+change from the discussion: the allowed error is given in pixels of the view (`Player.SimplifyMeshesError`, default 1) rather than in VP
+units at 0.5 m, so that it follows the projection: 1 pixel at 2160² on the Frame is close to 1 VPU at 0.5 m, and a zoomed desktop camera
+gets finer levels. First results on the Mac (Addams): 1.43 M triangles in the 114 simplified meshes, 1.10 M at 0.5 VPU, 0.84 M at
+2 VPU; desktop view 1.33 → 0.93 M triangles per frame; close-up captures at the headset's pixel size magnified 4×: no change on the
+flippers and apron, single silhouette pixels of round parts on the upper playfield (0.02 %); loading 0.3 s longer.
+
+**Forecast in the simulated headset (2026-10-29).** The `xr-sim` branch, rebased locally onto `mesh-simplify` (not pushed), 2160×2160 per
+eye at 72 Hz, a scripted head (`Doc/test-hooks/simplify/headpath.txt`): 10 s at the lockbar, leaning over the flippers (30 cm forward,
+25 cm down), leaning toward the upper playfield (55 cm forward), looking at the backglass, left, right, back at the lockbar. A temporary
+counter (`simplify/temp-hooks.py`, never committed) logs the triangles of every frame, by level, in the main view and the probe; the
+GPU time is forecast at 2.2 ms per million triangles (the linear fit of `Table Geometry on the Steam Frame.md`, section 5.1). Without
+simplification the simulator draws what the Frame draws at its pinned pose (Addams 1.91 M triangles, Attack from Mars 0.72 M, Iron Man
+0.50 M, against 1.90 M, 0.72 M, 0.50 M), so its view and parts are the Frame's.
+
+| Lockbar, 1 pixel | Field of view per eye | Triangles without | With | Saved | Forecast on the Frame |
+|---|---|---|---|---|---|
+| Addams Family | 90° | 1.91 M | 1.38 M | 28 % | −1.16 ms |
+| Addams Family | 100° | 1.91 M | 1.36 M | 29 % | −1.21 ms |
+| Addams Family | 110° | 1.91 M | 1.31 M | 31 % | −1.31 ms |
+| Addams Family, 1.5 pixels | 100° | 1.91 M | 1.24 M | 35 % | −1.46 ms |
+| Attack from Mars | 100° | 0.72 M | 0.55 M | 24 % | −0.38 ms |
+| Iron Man | 100° | 0.50 M | 0.29 M | 41 % | −0.45 ms |
+
+- The Frame's field of view per eye is not known here (90° is the simulator's default); the forecast moves by 0.15 ms between 90° and
+  110°. Leaning in or looking around saves less (Addams −0.6 to −1.1 ms): fewer triangles in view.
+- The hook runs of `Table Geometry on the Steam Frame.md` measured −1.64 ms with a bound of 1 VPU at 0.5 m growing with the distance;
+  1 pixel at 100° is about the same angle, but levels are discrete: a part allowed 1.9 VPU draws the level under it. Steps of ×1.41
+  instead of ×2 up to 4 VPU took Addams from −1.07 to −1.16 ms at 90° (CPU at load 3.4 → 4.5 s on a Mac).
+- A first run drew 60 % fewer triangles, nearly all at coarse levels even when leaning in: in VR the projection carries the scale of
+  the table (its y term was 0.00066), which the pixel size must divide out (ratio to the w term). Fixed before these runs.
+- Level switches: none while the head holds a pose (with a small sway), 9 to 30 over the two seconds of each move, out of 114 parts:
+  the margin works. Clips of the moves for the owner's review: `vp_vr/mesh-simplify-review/` (left eye at 1920×1080, not the headset's
+  pixel density).
+- Next: the Linux build and a Frame series (Addams, Attack from Mars, Iron Man, LOTR: simplification off/on, fixed 2160²), and the
+  owner's check worn, which also gives the real field of view.
+
+**Measured on the Frame (2026-10-29, headless).** The branch built for the Frame with the test hooks of section 9, a copy of the developer
+deploy with that executable (`~/perf-test/vpx-simplify`), `Doc/test-hooks/simplify/simplify-series.sh`: 120 s per run, 40 s rests, the
+eyes pinned at the lockbar (section 2.1); `off`/`on`/`on15` at fixed 2160² with bgfx's GPU profiler, `droff`/`dron` with dynamic
+resolution as the player has it. Results on the Frame in `~/perf-test/results-simplify`.
+
+| Table, fixed 2160² | Runtime GPU off | On (1 px) | Saved | Triangles per frame | Scene pass | Reflection probe |
+|---|---|---|---|---|---|---|
+| Addams Family (2 runs each) | 11.94, 11.77 ms | 10.58, 10.56 ms | **−1.29 ms** | 1.90 → 1.36 M | 6.34 → 5.45 ms | 1.34 → 1.05 ms |
+| Addams Family, 1.5 px | | 10.32 ms | −1.54 ms | 1.25 M | 5.25 ms | 1.03 ms |
+| Iron Man | 10.23 ms | 9.73 ms | −0.50 ms | 0.50 → 0.29 M | 4.43 → 4.20 ms | 1.16 → 0.91 ms |
+| Attack from Mars | 9.86 ms | 9.66 ms | −0.20 ms | 0.72 → 0.56 M | 4.69 → 4.70 ms | 1.32 → 1.13 ms |
+| Lord of the Rings (36 fps either way) | 17.32 ms | 17.08 ms | −0.24 ms | 1.34 → 1.22 M | 8.59 → 8.50 ms | 1.01 → 0.88 ms |
+
+| Addams Family, dynamic resolution | Status lines at 2160² (after 20 s) | Average size | Runtime GPU |
+|---|---|---|---|
+| Off | 45 % | 2135² | 11.49 ms |
+| **On** | **95 %** (all of them after 30 s) | 2155² | 10.48 ms |
+
+- The forecast of the simulated headset held: Addams −1.21 ms forecast, −1.29 ms measured; the triangle counts match (1.36 M on both).
+  Per million triangles left out: Addams 2.4 ms, Iron Man 2.5 ms, LOTR 1.9 ms, Attack from Mars 1.2 ms (its scene pass did not move: one
+  run each, ±0.2 ms of noise, and the triangles it loses are mostly in the probe).
+- **Addams now holds the native resolution**: with dynamic resolution, 1.4 ms under the 11.8 ms target instead of 0.3 ms over it.
+  At fixed 2160², the frames missed during the first 25 s of a game fell from 20–26 per 5 s to 2–4 (the burst of the first 5 s after the
+  start, 12 to 50 frames, is the same with and without).
+- **Loading**: the texture phase (textures from the cache) takes longer while the levels are made: Addams 0.5 → 1.4 s (7.1–7.5 s of CPU
+  over the cores), Attack from Mars +0.4 s, LOTR +0.3 s, Iron Man +0.15 s. A cache of the levels (section 8 of `Table Geometry on the
+  Steam Frame.md`) would remove it from the second start on; not done.
+- LOTR stays at 36 fps at fixed 2160² (it needs dynamic resolution); 92 of its meshes were simplified, 15 sharing the levels of a
+  coinciding layer.
+- Still to do: the owner's check worn (image up close, level switches while leaning in, the real field of view). The branch, built
+  without the test hooks, is in the developer slot of the Frame since 2026-10-29 (package `steam-frame-package-simplify/`, its own folder;
+  the libraries left in the build volume by older builds, SDL3 0.4.16, winevbs 0.8.5, ffmpeg 62 in the plugins, removed from it).
 
 **Working without the Frame (2026-10-29).** The macOS build with the simulated headset (branch `xr-sim`, `docs/XR Simulator Branch.md`)
 does not give timings that transfer to the Frame: the Apple GPU and bgfx's Metal backend handle geometry and memory differently (more

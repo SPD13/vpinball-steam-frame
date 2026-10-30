@@ -148,6 +148,14 @@ PropBool(Player, ForceBloomOff, "Disable Bloom"s, "Disable postprocessed bloom f
 PropBool(Player, ForceMotionBlurOff, "Disable Motion Blur"s, "Disable ball motion blur.\nThis feature is BGFX only (and not supported in VR or headtracking)"s, false);
 PropBool(Player, ForceAnisotropicFiltering, "Force Anisotropic Filtering"s, "Force anisotropic filtering for better rendering quality/texture clarity at the cost of a bit of performance"s, true);
 PropBool(Player, CompressTextures, "Compress Textures"s, "Compress textures to GPU formats to reduce memory use (slow on first load, cached afterwards)"s, true);
+#ifdef VPX_STEAM_FRAME // Simplified render meshes of heavy tables, see src/steamframe/MeshSimplifier.h
+#ifdef VPX_STEAM_FRAME_HEADSET
+PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, true);
+#else
+PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, false);
+#endif
+PropFloat(Player, SimplifyMeshesError, "Allowed error"s, "Largest deviation of a simplified part from its mesh, in pixels of the view at its full render resolution"s, 0.25f, 4.f, 1.f);
+#endif
 PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to manage Depth Buffer on a DirectX 9 build. May solve some rendering issues"s, false);
 PropBool(Player, SoftwareVertexProcessing, "Software Vertex Processing"s, "Activate this on a DirectX 9 build, if you have issues using an old Intel graphics chip"s, false);
 PropBool(Player, DisableAO, "Disable Ambient Occlusion"s, ""s, false);
