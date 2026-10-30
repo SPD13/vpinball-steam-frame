@@ -10,6 +10,7 @@
 #include "renderer/RenderPass.h"
 #include "renderer/Shader.h"
 #include "renderer/VertexBuffer.h"
+#include "steamframe/MeshSimplifier.h"
 #include "steamframe/vrui/Theme.h"
 #include "imgui/imgui.h"
 #include "implot/implot.h"
@@ -623,8 +624,8 @@ ImDrawList* PerfPanel::BuildWindow()
       ImGui::PopFont();
       ImGui::EndGroup();
       ImGui::SetCursorScreenPos(badgePos + ImVec2(0.f, badgeSize.y + 8.f));
-      // Settings that keep the table from reaching the target
       ImGui::PushFont(font, kSmall);
+      // Settings that keep the table from reaching the target
       ImGui::PushStyleColor(ImGuiCol_Text, kColorYellow);
       if (target.nativeWidth > 0 && target.eyeWidth < target.nativeWidth)
          ImGui::TextUnformatted(std::format("Render resolution {}x{} is below native: green is out of reach", target.eyeWidth, target.eyeHeight).c_str());
@@ -633,6 +634,22 @@ ImDrawList* PerfPanel::BuildWindow()
       else
          ImGui::NewLine();
       ImGui::PopStyleColor();
+      // The performance features of the fork (Steam Frame screen of the menu): foveated rendering (left), simplified meshes (right)
+      static constexpr const char* kFoveationLevels[] = { "off", "Low", "Medium", "High" };
+      const string foveation = target.foveationLevel < 0 ? "Foveation: not supported"s
+         : target.foveationLevel == 0                    ? "Foveation off"s
+                                                         : std::format("Foveation {}, {}", kFoveationLevels[min(target.foveationLevel, 3)],
+                                                              target.foveationEyeTracked ? "eye-tracked" : target.foveationFixedLow ? "fixed (Low profile)" : "fixed");
+      ImGui::PushStyleColor(ImGuiCol_Text, target.foveationLevel > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
+      ImGui::TextUnformatted(foveation.c_str());
+      ImGui::PopStyleColor();
+      const MeshSimplifier& simplifier = MeshSimplifier::Get();
+      const float saved = simplifier.GetSavedShare();
+      const string meshes = simplifier.GetSimplifiedPartCount() == 0 ? "Meshes: none simplified"s
+         : !simplifier.IsEnabled()                                  ? "Simplified meshes off"s
+         : std::isnan(saved)                                        ? "Meshes: measuring"s
+                                                                    : std::format("Meshes -{:.0f} % triangles", saved * 100.f);
+      rightAligned(meshes, simplifier.IsEnabled() && simplifier.GetSimplifiedPartCount() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
       ImGui::PopFont();
    }
 

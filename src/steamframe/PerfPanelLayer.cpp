@@ -62,6 +62,10 @@ void VRDevice::ReportPerfPanelFrame(int periods, float gpuMs)
    frame.budgetMs = m_frameBudgetMs;
    frame.targetMs = m_frameBudgetMs * m_dynamicResolutionTarget;
    frame.dynamicResolution = m_dynamicResolution;
+   // As GetFoveationStatus says it: without a gaze, the shading rate image uses the wide Low profile whatever the level
+   frame.foveationLevel = !m_foveationExtensionSupported ? -1 : (m_foveationMode == 0 || !m_foveationApplied) ? 0 : m_foveationMode;
+   frame.foveationEyeTracked = frame.foveationLevel > 0 && m_foveationEyeTracked && m_foveationEyeTrackedSystemSupported && m_foveationEyeTrackedActive;
+   frame.foveationFixedLow = frame.foveationLevel > 0 && !frame.foveationEyeTracked && m_foveationShadingRate;
    VPX::PerfPanel::Get().OnFrame(frame);
 }
 

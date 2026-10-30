@@ -15,6 +15,7 @@ enum class Screen
    Scores, // Who is playing, leaderboards
    Room, // VR placement and room (point of view on the desktop)
    Display, // Graphics and performance
+   SteamFrame, // The performance features of the Steam Frame Edition: dynamic resolution, foveated rendering, simplified meshes
    Sound,
    Controls,
    Plugins,
@@ -25,6 +26,9 @@ enum class Screen
 };
 
 inline constexpr int kScreenCount = static_cast<int>(Screen::Count);
+
+// Icon of a screen: a glyph of the icon font, or kSteamFrameLogo, drawn by Widgets::SteamFrameLogo
+inline constexpr const char* kSteamFrameLogo = "\x01SteamFrame";
 
 bool IsScreenAvailable(Screen screen);
 const char* GetScreenIcon(Screen screen);
