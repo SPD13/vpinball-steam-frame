@@ -183,7 +183,16 @@ PerfPanel& PerfPanel::Get()
 
 PerfPanel::PerfPanel() { ResetHistory(); }
 
-PerfPanel::~PerfPanel() { SetEnabled(false); }
+PerfPanel::~PerfPanel()
+{
+   {
+      const std::lock_guard lock(m_threadMutex);
+      m_threadStop = true;
+   }
+   m_threadWake.notify_all();
+   if (m_thread.joinable())
+      m_thread.join();
+}
 
 void PerfPanel::SetEnabled(bool enabled)
 {
@@ -191,36 +200,16 @@ void PerfPanel::SetEnabled(bool enabled)
       return;
    if (enabled)
    {
-      {
-         const std::lock_guard lock(m_historyMutex);
-         ResetHistory();
-      }
-      {
-         const std::lock_guard lock(m_frameMutex);
-         m_frameCounters = {};
-      }
-      m_threadStop = false;
-      m_enabled = true;
-      m_thread = std::thread(&PerfPanel::SamplerThread, this);
+      const std::lock_guard lock(m_historyMutex);
+      ResetHistory();
    }
-   else
-   {
-      m_enabled = false;
-      {
-         const std::lock_guard lock(m_threadMutex);
-         m_threadStop = true;
-      }
-      m_threadWake.notify_all();
-      if (m_thread.joinable())
-         m_thread.join();
+   m_enabled = enabled;
+   if (!enabled)
       m_dirty = false;
-   }
 }
 
 void PerfPanel::OnFrame(const FrameInfo& frame)
 {
-   if (!m_enabled)
-      return;
    // The frame counts for the rating while the game is played (the logic thread said so a moment ago) and the headset is worn (when the
    // runtime reports the GPU time, it is under 1 ms when nothing is rendered)
    const bool valid = m_playing && Now() - m_playingTime < 0.25 && (frame.gpuMs < 0.f || frame.gpuMs >= 1.f);
@@ -247,14 +236,19 @@ void PerfPanel::OnFrame(const FrameInfo& frame)
    }
 }
 
-void PerfPanel::OnTableStart() { m_tableStarted = true; }
+void PerfPanel::OnTableStart()
+{
+   m_tableStarted = true;
+   if (!m_thread.joinable())
+      m_thread = std::thread(&PerfPanel::SamplerThread, this);
+}
 
 void PerfPanel::OnLogicFrame(const Player* player)
 {
-   if (!m_enabled)
-      return;
    m_playing = player->IsPlaying(false) && !player->m_isLoading && player->GetCloseState() == Player::CS_PLAYING;
    m_playingTime = Now();
+   if (!m_enabled)
+      return;
    m_scriptMs = static_cast<float>(player->m_logicProfiler.GetSlidingAvg(FrameProfiler::PROFILE_SCRIPT) * 1e-3);
    m_physicsMs = static_cast<float>(player->m_logicProfiler.GetSlidingAvg(FrameProfiler::PROFILE_PHYSICS) * 1e-3);
    if (player->m_renderProfiler)
@@ -297,6 +291,45 @@ PerfPanel::RatingResult PerfPanel::Rate(const WindowStats& stats, float budgetMs
    result.rating = stats.NativeFraction() >= kNativeFraction ? Rating::Green : Rating::Yellow;
    return result;
 }
+
+PerfPanel::RatingResult PerfPanel::GetRunRating()
+{
+   const std::lock_guard lock(m_historyMutex);
+   // The sampling thread has not seen the start of this table: what it holds is the previous one's
+   return m_tableStarted ? RatingResult() : Rate(m_run, m_target.budgetMs, m_target.targetMs);
+}
+
+const char* PerfPanel::GetRatingName(Rating rating)
+{
+   switch (rating)
+   {
+   case Rating::Green: return "green";
+   case Rating::Yellow: return "yellow";
+   case Rating::Red: return "red";
+   default: return "";
+   }
+}
+
+PerfPanel::Rating PerfPanel::GetRatingFromName(const string& name)
+{
+   for (const Rating rating : { Rating::Green, Rating::Yellow, Rating::Red })
+      if (name == GetRatingName(rating))
+         return rating;
+   return Rating::None;
+}
+
+uint32_t PerfPanel::GetRatingColor(Rating rating)
+{
+   switch (rating)
+   {
+   case Rating::Green: return kColorGreen;
+   case Rating::Yellow: return kColorYellow;
+   case Rating::Red: return kColorRed;
+   default: return kColorGrey;
+   }
+}
+
+uint32_t PerfPanel::GetRatingTextColor(Rating rating) { return rating == Rating::Yellow ? IM_COL32(66, 32, 6, 255) : IM_COL32(255, 255, 255, 255); }
 
 void PerfPanel::SamplerThread()
 {
@@ -375,6 +408,15 @@ void PerfPanel::SamplerThread()
 
       SystemInfo system;
       #ifdef __linux__
+      // Readings of the panel: next time it is shown, they start again rather than giving the average of the time it was not
+      if (!m_enabled)
+      {
+         previousTicks.clear();
+         previousProcessTicks = 0;
+         vpxGpu = {};
+         compositorGpu = {};
+      }
+      else
       {
          // CPU per thread of the process, grouped
          float cpu[5] = { 0.f, 0.f, 0.f, 0.f, 0.f }; // Logic, render, PinMAME, audio, other
@@ -455,7 +497,10 @@ void PerfPanel::SamplerThread()
       {
          const std::lock_guard lock(m_historyMutex);
          if (m_tableStarted.exchange(false))
+         {
             ResetHistory();
+            m_run = {};
+         }
          m_sampleSerial++;
          m_samples[m_nextSample] = sample;
          m_nextSample = (m_nextSample + 1) % kNumSamples;
@@ -463,17 +508,20 @@ void PerfPanel::SamplerThread()
          m_system = system;
          if (frame.nativeWidth > 0)
             m_target = frame;
-         // Rating window: the valid frames only (headset worn, game played)
-         m_window.frames += frames.validFrames;
-         m_window.periods += frames.validPeriods;
-         m_window.nativeFrames += frames.nativeFrames;
-         m_window.floorFrames += frames.floorFrames;
-         if (frame.budgetMs > 0.f)
-            m_window.validSeconds += static_cast<double>(frames.validPeriods) * frame.budgetMs / 1000.;
-         if (frames.validFrames > 0 && frames.gpuReadings > 0)
+         // Rating window and whole run: the valid frames only (headset worn, game played)
+         for (WindowStats* stats : { &m_window, &m_run })
          {
-            m_window.gpuMsSum += frames.gpuMsSum;
-            m_window.gpuReadings += frames.gpuReadings;
+            stats->frames += frames.validFrames;
+            stats->periods += frames.validPeriods;
+            stats->nativeFrames += frames.nativeFrames;
+            stats->floorFrames += frames.floorFrames;
+            if (frame.budgetMs > 0.f)
+               stats->validSeconds += static_cast<double>(frames.validPeriods) * frame.budgetMs / 1000.;
+            if (frames.validFrames > 0 && frames.gpuReadings > 0)
+            {
+               stats->gpuMsSum += frames.gpuMsSum;
+               stats->gpuReadings += frames.gpuReadings;
+            }
          }
          if (++m_windowSamples >= kWindowSamples)
          {
@@ -482,7 +530,7 @@ void PerfPanel::SamplerThread()
             m_windowSamples = 0;
          }
       }
-      m_dirty = true;
+      m_dirty = m_enabled.load();
    }
 }
 
