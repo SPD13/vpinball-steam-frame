@@ -786,10 +786,15 @@ ImDrawList* PerfPanel::BuildWindow()
 // Same rendering as LiveUI::RenderUI, into the panel's image with a plain orthographic projection
 bool PerfPanel::Render(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer)
 {
+   return RenderDrawList(rd, target, drawList, meshBuffer, "PerfPanel"s);
+}
+
+bool PerfPanel::RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name)
+{
    if (target == nullptr || drawList == nullptr || drawList->IdxBuffer.empty() || rd->GetCurrentPass() == nullptr)
       return false;
    RenderTarget* const previous = rd->GetCurrentPass()->m_rt;
-   rd->SetRenderTarget("PerfPanel"s, target, false, true);
+   rd->SetRenderTarget(name, target, false, true);
    rd->Clear(clearType::TARGET, 0x00000000);
 
    const unsigned int numVertices = drawList->VtxBuffer.size();
@@ -798,7 +803,7 @@ bool PerfPanel::Render(RenderDevice* rd, RenderTarget* target, const ImDrawList*
    {
       auto ib = std::make_shared<IndexBuffer>(rd, max(meshBuffer ? meshBuffer->m_ib->m_count : 0, numIndices), true, IndexBuffer::Format::FMT_INDEX32);
       auto vb = std::make_shared<VertexBuffer>(rd, max(meshBuffer ? meshBuffer->m_vb->m_count : 0, numVertices), nullptr, true);
-      meshBuffer = std::make_shared<MeshBuffer>("PerfPanel"s, vb, ib, false);
+      meshBuffer = std::make_shared<MeshBuffer>(name, vb, ib, false);
    }
    Vertex3D_NoTex2* vb;
    meshBuffer->m_vb->Lock(vb);
@@ -820,7 +825,7 @@ bool PerfPanel::Render(RenderDevice* rd, RenderTarget* target, const ImDrawList*
    memcpy(ib, drawList->IdxBuffer.begin(), numIndices * sizeof(ImDrawIdx));
    meshBuffer->m_ib->Unlock();
 
-   const Matrix3D matView = Matrix3D::MatrixOrthoOffCenterRH(0.f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.f, 0.f, 1.f);
+   const Matrix3D matView = Matrix3D::MatrixOrthoOffCenterRH(0.f, static_cast<float>(target->GetWidth()), static_cast<float>(target->GetHeight()), 0.f, 0.f, 1.f);
    rd->m_uiShader->SetMatrix(ShaderUniform::matWorldView, &matView, 1);
    rd->ResetRenderState();
    rd->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
