@@ -49,6 +49,9 @@ target_sources(vpinball PRIVATE
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
 
+   # Loading message in the headset between two tables, and the frames submitted meanwhile on the session kept from one table to the next
+   src/steamframe/XRBridge.cpp
+
    # Web server to manage the tables from a browser (upstream only builds it for the mobile library)
    lib/src/WebServer.h
    lib/src/WebServer.cpp
