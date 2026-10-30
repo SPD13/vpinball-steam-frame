@@ -541,7 +541,9 @@ resolution as the player has it. Results on the Frame in `~/perf-test/results-si
   Steam Frame.md`) would remove it from the second start on; not done.
 - LOTR stays at 36 fps at fixed 2160² (it needs dynamic resolution); 92 of its meshes were simplified, 15 sharing the levels of a
   coinciding layer.
-- Still to do: the owner's check worn (image up close, level switches while leaning in, the real field of view).
+- Still to do: the owner's check worn (image up close, level switches while leaning in, the real field of view). The branch, built
+  without the test hooks, is in the developer slot of the Frame since 2026-10-29 (package `steam-frame-package-simplify/`, its own folder;
+  the libraries left in the build volume by older builds, SDL3 0.4.16, winevbs 0.8.5, ffmpeg 62 in the plugins, removed from it).
 
 **Working without the Frame (2026-10-29).** The macOS build with the simulated headset (branch `xr-sim`, `docs/XR Simulator Branch.md`)
 does not give timings that transfer to the Frame: the Apple GPU and bgfx's Metal backend handle geometry and memory differently (more
