@@ -6,6 +6,7 @@
 #include "core/editablereg.h"
 #include "steamframe/Backup.h"
 #include "steamframe/CabinetDisplays.h"
+#include "steamframe/PerfPanel.h"
 #include "steamframe/PupPacks.h"
 #include "core/VPApp.h"
 #include "steamframe/ScoreStore.h"
@@ -925,6 +926,22 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
       GetTableLibrary().RecordPlay(tableFilename); // For the 'Recent' and 'Most played' lists of the table picker
    // The lobby may be loaded from a table of the library: it must not be taken for that table (image, texture cache)
    m_playingLobby = isLobby;
+}
+
+void Launcher::OnTableClosed(const Player* player)
+{
+   if (player->m_isLobby || player->m_vrDevice == nullptr || player->m_playMode != Player::PlayMode::Play)
+      return;
+   const VPX::PerfPanel::RatingResult result = VPX::PerfPanel::Get().GetRunRating();
+   const string rating = VPX::PerfPanel::GetRatingName(result.rating);
+   // Not played long enough to tell: the last rating stays
+   if (rating.empty())
+      return;
+   const auto toPercent = [](float fraction) { return std::round(static_cast<double>(fraction) * 1000.) / 10.; };
+   GetTableLibrary().RecordPerformance(player->m_ptable->m_filename,
+      { rating, result.reason, toPercent(result.stats.NativeFraction()), toPercent(result.stats.FpsRatio()), static_cast<int>(result.stats.validSeconds), static_cast<int64_t>(time(nullptr)) });
+   PLOGI << std::format("Table rated {}{}: native {:.1f} % of the time, on time {:.1f} %, over {:.0f} s", rating, result.reason.empty() ? ""s : " (" + result.reason + ')',
+      result.stats.NativeFraction() * 100.f, result.stats.FpsRatio() * 100.f, result.stats.validSeconds);
 }
 
 void Launcher::OnPlayerCreated(Player* player, bool isLobby)

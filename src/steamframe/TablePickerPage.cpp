@@ -8,6 +8,7 @@
 
 #include "core/VPApp.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
@@ -92,6 +93,44 @@ static string GetTableStatsInfo(const LibraryTable& table, bool compact = false)
    const string lastPlayed = "ast played on " + FormatTime(table.lastPlayedAt, true);
    const string played = table.playCount == 1 ? "layed once"s : std::format("layed {} times", table.playCount);
    return compact ? added + ", p" + played + "\nL" + lastPlayed : added + ", l" + lastPlayed + "\nP" + played;
+}
+
+// The line of a table's page telling how it ran the last time it was played in the headset: a badge with the rating of the performance panel, and
+// what it comes from
+static void RenderPerformanceRow(const VPinballLib::TablePerformance& performance)
+{
+   const PerfPanel::Rating rating = PerfPanel::GetRatingFromName(performance.rating);
+   string badge = performance.rating;
+   std::ranges::transform(badge, badge.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+   ImGui::AlignTextToFramePadding();
+   ImGui::TextUnformatted("Last performance");
+   ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 3.f);
+   const float height = ImGui::GetFrameHeight();
+   const ImVec2 textSize = ImGui::CalcTextSize(badge.c_str());
+   const ImVec2 size(textSize.x + height, height);
+   const ImVec2 pos = ImGui::GetCursorScreenPos();
+   ImDrawList* const drawList = ImGui::GetWindowDrawList();
+   drawList->AddRectFilled(pos, pos + size, PerfPanel::GetRatingColor(rating), 0.3f * height);
+   drawList->AddText(pos + (size - textSize) * 0.5f, PerfPanel::GetRatingTextColor(rating), badge.c_str());
+   ImGui::Dummy(size);
+   ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 3.f);
+   ImGui::AlignTextToFramePadding();
+   const string detail = rating == PerfPanel::Rating::Red
+      ? std::format("{}, {:.1f} % on time, native {:.0f} % of the time", performance.reason.empty() ? "Frames missed"s : performance.reason, performance.onTimePercent, performance.nativePercent)
+      : std::format("Native {:.0f} % of the time, {:.1f} % on time", performance.nativePercent, performance.onTimePercent);
+   ImGui::PushStyleColor(ImGuiCol_Text, VPX::VRUI::Theme::kTextMuted);
+   ImGui::TextUnformatted(detail.c_str());
+   ImGui::PopStyleColor();
+}
+
+static void AddPerformanceRow(InGameUIPage& page, const VPinballLib::TablePerformance& performance)
+{
+   if (PerfPanel::GetRatingFromName(performance.rating) == PerfPanel::Rating::None)
+      return;
+   const string played = performance.playedSeconds < 60 ? std::format("{} s", performance.playedSeconds) : std::format("{} min", performance.playedSeconds / 60);
+   page.AddItem(std::make_unique<InGameUIItem>("##performance"s,
+      "Played on " + FormatTime(performance.ratedAt, true) + ", " + played + " rated\nGreen: at the headset's native resolution 95 % of the time, on time\nYellow: on time at a lower resolution, red: frames missed",
+      [performance](int, const InGameUIItem*) { RenderPerformanceRow(performance); }));
 }
 
 static bool IsRunningTable(const Player* player, const LibraryTable& table)
@@ -1316,6 +1355,8 @@ void TableActionsPage::BuildPage()
          g_launcher->m_nextTableFilename = tablePath;
          m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
+
+   AddPerformanceRow(*this, table->performance);
 
    if (!table->madeForVR)
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Error,

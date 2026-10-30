@@ -18,6 +18,18 @@
 
 namespace VPinballLib {
 
+// How a table ran the last time it was played in the headset long enough to be rated (see PerfPanel.h)
+struct TablePerformance {
+   std::string rating; // "green", "yellow" or "red", empty if it never was
+   std::string reason; // Red: "GPU bound" or "CPU bound", when known
+   double nativePercent = 0.; // Frames at the native resolution of the headset
+   double onTimePercent = 0.; // Display periods which had a new frame
+   int playedSeconds = 0; // Time which was rated
+   int64_t ratedAt = 0;
+
+   bool operator==(const TablePerformance&) const = default;
+};
+
 // A table known to the library. 'path' and 'image' are relative to the tables folder and always use '/'.
 struct Table {
    std::string uuid;
@@ -31,6 +43,7 @@ struct Table {
    int64_t lastPlayedAt = 0;
    int playCount = 0;
    bool favorite = false;
+   TablePerformance performance;
 
    // PinUP Player pack, not part of tables.json either: what the script says (see Config::readPupUse), cached along the statistics with the
    // modification date of the table it was read from, and whether one of the packs it names is in a 'pupvideos' folder (computed, not saved)
@@ -135,6 +148,8 @@ public:
    bool SetFavorite(const std::string& uuid, bool favorite);
    // To be called when a table starts to be played, whether it was selected from the library or not (nothing happens for tables outside of the library)
    bool RecordPlay(const std::filesystem::path& fullPath);
+   // To be called when a table played in the headset closes, if it was played long enough to be rated (same, for tables outside of the library)
+   bool RecordPerformance(const std::filesystem::path& fullPath, const TablePerformance& performance);
    // Zip the table folder as <destFolder>/<name>.vpxz
    std::optional<std::filesystem::path> Export(const std::string& uuid, const std::filesystem::path& destFolder, const ProgressCallback& onProgress = nullptr);
 
