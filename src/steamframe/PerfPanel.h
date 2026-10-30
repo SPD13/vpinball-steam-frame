@@ -9,6 +9,9 @@
 //   on time, yellow when they were on time at a lower resolution (dynamic resolution), red when frames missed their display;
 // - the frame rate, resolution, GPU time, GPU and CPU use (per thread), clocks and temperatures of the last 3 minutes.
 //
+// The rating also runs with the panel off (without reading /proc and /sys): the rating of a whole play of the table is kept with its statistics
+// when it closes, for the table page of the menu (GetRunRating, Launcher::OnTableClosed).
+//
 // The data comes from three threads, none of which may use the objects of another (the VR device and the player come and go with the tables):
 // - the render thread gives each frame (OnFrame, from VRDevice::UpdateDynamicResolution);
 // - the logic thread gives its profiler and whether the game is played (OnLogicFrame), and draws the panel (BuildWindow and Render, from LiveUI);
@@ -37,7 +40,7 @@ public:
    static PerfPanel& Get();
    ~PerfPanel();
 
-   // On or off (starts or stops the sampling thread). Read from the settings when the application starts, changed by the menu
+   // Panel shown or not. Read from the settings when the application starts, changed by the menu
    void SetEnabled(bool enabled);
    bool IsEnabled() const { return m_enabled; }
 
@@ -64,7 +67,7 @@ public:
       bool foveationFixedLow = false; // Fixed through the shading rate image, which then uses the wide Low profile whatever the level
    };
    void OnFrame(const FrameInfo& frame);
-   // A table starts with the VR device (ApplyTableSettings): the history and the rating start again
+   // A table starts with the VR device (ApplyTableSettings): the history and the rating start again (and the sampling thread, the first time)
    void OnTableStart();
 
    // Logic thread, once per frame (LiveUI::RenderUI): whether the game is played (not paused by the menu, not loading), and the logic profiler
@@ -160,6 +163,13 @@ public:
    static constexpr float kNativeFraction = 0.95f;
    static constexpr double kMinValidSeconds = 15.;
    static RatingResult Rate(const WindowStats& stats, float budgetMs, float targetMs);
+   // Logic thread, when the table closes: the rating of all its valid frames since it started
+   RatingResult GetRunRating();
+   // Name of a rating in the statistics of the tables (empty for the ones which are not kept), and back. Color of its badge, and of its text on it
+   static const char* GetRatingName(Rating rating);
+   static Rating GetRatingFromName(const string& name);
+   static uint32_t GetRatingColor(Rating rating);
+   static uint32_t GetRatingTextColor(Rating rating);
 
 private:
    using Sample = std::array<float, NUM_SERIES>;
@@ -170,6 +180,7 @@ private:
    int m_sampleCount = 0;
    int m_nextSample = 0;
    WindowStats m_window; // Current rating window
+   WindowStats m_run; // All the valid frames of the table
    int m_windowSamples = 0;
    RatingResult m_lastRating;
    FrameInfo m_target; // Last frame given: target, swapchain size, budget
