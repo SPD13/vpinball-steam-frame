@@ -32,7 +32,21 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 Launcher* g_launcher = nullptr;
+
+#if defined(__GLIBC__)
+// glibc serves the blocks over its mmap threshold with mmap, given back to the system when freed, but raises that threshold after such a block is
+// freed (up to 32 MB): the big buffers of a table's loading (decoded textures) then came from the heaps of the threads that allocate (an arena
+// per thread, up to 8 per core, and each table starts its own loading threads) and fragmented them. The process grew from table to table, by
+// about 10 MB per lobby <-> table cycle on the Steam Frame and still growing after 15 (Addams Family 964 -> 1207 MB), with nothing leaked by
+// VPX: with a fixed threshold, it stays at 780 MB at the table and 260 MB in the lobby. Tables load 3 to 5 % slower (fresh pages for the big
+// buffers). Set before main, so before any thread; a fixed threshold also stops glibc from adjusting it (docs/Steam Frame Branch.md, section 20).
+static const int s_mallocMmapThreshold = mallopt(M_MMAP_THRESHOLD, 1024 * 1024);
+#endif
 
 // Same definition as the one of the PinMAME plugin, which reads its value when it is loaded
 static VPX::Properties::PropertyRegistry::PropId GetPinMAMEPathPropId()
