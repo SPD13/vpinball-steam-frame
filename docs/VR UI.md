@@ -49,7 +49,8 @@ check whether the new view needs the same change:
 ## The new menu
 
 One window with a rail of icon buttons on the left (`MainMenuPage`), each choosing a screen (`Screens.cpp`): Tables, This table (not in the
-lobby), Scores, VR & Room, Display & Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
+lobby), Scores, VR & Room, Display & Performance, Steam Frame (its logo is drawn by `Widgets::SteamFrameLogo`: a headset visor in the corners
+of a viewfinder, the icon font having no headset), Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
 button is on the screen, so that moving down the rail never quits; during a table it also offers Return to Lobby). A screen shows a page (upstream's, like
 `GraphicSettingsPage`, or one of the fork) inside the menu; the pages it opens (sub-pages) are shown in the same frame, with a Back button.
 The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
@@ -99,8 +100,10 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 ## Screens made of several pages
 
 Some screens group options of several pages (`ComposedPage`, layout in `GetSections` of `Screens.cpp`): VR & Room (menu distance and lobby
-room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), Display & Performance (the performance panel switch, saved at once, then the VR rendering options of
-the VR settings, then the graphics settings), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
+room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), Display & Performance (the performance panel switch, saved at once, then the refresh rate and render
+resolution of the VR settings, then the graphics settings), Steam Frame (the performance features of the fork: dynamic resolution and
+foveated rendering from the VR settings, then the simplified meshes: switch, allowed error and status, from a page of the fork saved for
+the table or for all), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
 table (its actions, then its lighting and difficulty options).
 
 - The pages stay whole and alive: they build their items and keep their rules (rebuilds, Open/Close, ResetToDefaults). A section only

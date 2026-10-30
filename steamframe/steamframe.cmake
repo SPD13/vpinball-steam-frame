@@ -42,6 +42,13 @@ target_sources(vpinball PRIVATE
    src/steamframe/PerfPanel.cpp
    src/steamframe/PerfPanelLayer.cpp
 
+   # Simplified render meshes of heavy tables (meshoptimizer's simplifier)
+   src/steamframe/MeshSimplifier.h
+   src/steamframe/MeshSimplifier.cpp
+   third-party/include/meshoptimizer/meshoptimizer.h
+   third-party/include/meshoptimizer/allocator.cpp
+   third-party/include/meshoptimizer/simplifier.cpp
+
    # Web server to manage the tables from a browser (upstream only builds it for the mobile library)
    lib/src/WebServer.h
    lib/src/WebServer.cpp
@@ -54,6 +61,11 @@ target_sources(vpinball PRIVATE
 target_compile_definitions(vpinball PRIVATE
    VPX_STEAM_FRAME
    VPX_TABLE_WEBSERVER
+)
+set_source_files_properties(
+   third-party/include/meshoptimizer/allocator.cpp
+   third-party/include/meshoptimizer/simplifier.cpp
+   PROPERTIES SKIP_PRECOMPILE_HEADERS ON
 )
 
 # The fork's code in the PinUP Player and PinMAME plugins is guarded by VPX_STEAM_FRAME too. The plugins are defined after this file

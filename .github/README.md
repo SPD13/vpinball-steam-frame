@@ -1,6 +1,6 @@
 # Visual Pinball X: Steam Frame Edition
 
-An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) that runs as a standalone app on the Valve Steam Frame: natively on the headset (SteamOS on ARM64, OpenXR, Vulkan), with no PC and no cable. It adds a table launcher that works from inside the headset, a table library and picker, a lobby, uploading tables and ROMs from a browser, scores and leaderboards, eye-tracked foveated rendering, and a menu made for the VR controllers. It keeps following the upstream project and merges its work.
+An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) that runs as a standalone app on the Valve Steam Frame: natively on the headset (SteamOS on ARM64, OpenXR, Vulkan), with no PC and no cable. It adds a table launcher that works from inside the headset, a table library and picker, a lobby, uploading tables and ROMs from a browser, scores and leaderboards, automatic performance tuning for the Steam Frame (Foveated rendering, Mesh simplification, Object culling and Dynamic resolution), and a menu made for the VR controllers. It keeps following the upstream project and merges its work.
 
 **Status: Working and tested as a standalone app on the Steam Frame.**
 
@@ -15,12 +15,16 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 
 **▶ [Get help with the tutorials](/docs/tutorials/tutorials.md)**: step-by-step guides with screenshots and videos, starting with adding tables and ROMs.
 
+**▶ [Getting started - Install on your Steam Frame](#how-to-install)**
+
 ## What the player gets
 
 In the standalone builds (the Steam Frame app, and the standalone desktop builds):
 
-- **Eye-tracked foveated rendering, exclusive to this fork and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches ([full technical reference](/docs/Foveated%20Rendering%20on%20the%20Steam%20Frame.md)).
-- **Dynamic resolution in the headset**: the rendering resolution follows the GPU time of the frames, between a minimum and the table's resolution, so heavy tables and a hot headset keep their frame rate instead of judder on head movements, and light tables keep the full sharpness; a switch, a target and a minimum in the VR settings page, with a status line.
+- **Eye-tracked foveated rendering, exclusive to this fork and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the Steam Frame screen of the menu (the VR settings page in the classic menu). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches ([full technical reference](/docs/Foveated%20Rendering%20on%20the%20Steam%20Frame.md)).
+- **Dynamic resolution in the headset**: the rendering resolution follows the GPU time of the frames, between a minimum and the table's resolution, so heavy tables and a hot headset keep their frame rate instead of judder on head movements, and light tables keep the full sharpness; a switch, a target and a minimum in the Steam Frame screen of the menu (the VR settings page in the classic menu), with a status line.
+- **Simplified meshes, exclusive to this fork**: the large 3D parts of heavy tables (tables built from scans or exports, like the Addams Family VR room) are drawn with fewer triangles wherever the difference cannot be seen from the player's eyes, and in full when the player leans in close. Measured on the Steam Frame: 1.3 ms less per frame on the Addams Family at the native 2160×2160 per eye, which then stays at the full resolution 95 % of the time instead of 45 %; 0.2 to 0.5 ms on other heavy tables, nothing to pay on light ones. Made while the table loads (about a second longer on the heaviest tables), without changing the table's file or its physics. On by default on the Steam Frame, off on the desktop builds; a switch, the allowed error in pixels and a status line in the Steam Frame screen of the menu, applied at once and saved for the table or for all tables; the performance panel shows the share of triangles left out ([details](/docs/Performance%20on%20the%20Steam%20Frame.md)).
+- **Steam Frame screen in the menu**: the performance features of this fork in one place, behind their own icon on the menu's rail: dynamic resolution, foveated rendering and simplified meshes.
 - **Scores and leaderboards**: the score of every game played on a library table is recorded automatically, for the player chosen in the lobby ("Player: <name>"), with a result screen (rank, personal best, table record) when the lobby comes back, a Scores tab with the leaderboard of each table, the 10 best scores in each table's page, and a Scores page in the browser to filter, reassign, delete or clear scores (with confirmation) and manage the players ([details](/docs/Table%20Scores%20and%20Leaderboards.md)).
 - **Lobby rooms**: the lobby is a real room around the player, built in Blender with its lighting baked into its textures, so it costs almost nothing per frame on the Frame. Three rooms are shipped: the **Game room**, a lounge at night with arcade cabinets, a pinball machine, a neon sign and a city skyline through a big window (the default); the **Modern room**, with an oak slat wall, cove lighting and a sofa; and the **Sunlit studio**, with sunbeams from a garden through tall windows, dartboards and a desk. The previous lobby, a floor of tiles, is kept as the **Empty room**. All are made from CC0 assets and artwork drawn for them ([credits](/steamframe/lobby-room/CREDITS.md), and [how they are made](/steamframe/lobby-room/DESIGNING-ROOMS.md) to design more).
 - **Lobby room selector**: "Choose a lobby room", in the Menu and lobby section at the top of the VR & Room screen (and in the System screen), shows a picture of each room; the room picked is used at once and kept for the next starts.
@@ -47,6 +51,10 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 ## How to install
 
 The game is not on the Steam store. It is installed on the Frame from a computer on the same network: the **installer app** finds the Frame, checks that it is ready, then downloads the latest version of the game and installs it, with its entry and artwork in the Steam library. The same app updates the game later. Nothing is installed on the computer itself.
+
+**▶ [See the instruction in video](https://youtu.be/HmzkSPvwXjg)**
+
+**▶ [See instructions](/docs/tutorials/Installing%20the%20Game.md)**
 
 ### What you need
 
@@ -103,9 +111,15 @@ On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Editio
 
 ### 5. Add tables
 
+**▶ [See this in video](https://youtu.be/4qvbUkFgUvI)**
+
+**▶ [See instructions](/docs/tutorials/Adding%20Tables%20and%20ROMs.md)**
+
 - **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder. Upload a table's download as it is: when its readme asks to add an alias to `VPMAlias.txt`, the game does it.
 - **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
   `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
+
+**▶ [Where to find tables, ROMs and artwork?](https://virtualpinballspreadsheet.github.io/)**
 
 > [!NOTE]
 > **Backglass files (`.directb2s`) are optional.** Tables made for VR carry their backglass in the `.vpx`, as parts of their cabinet that the script lights and animates: they need no `.directb2s`. A table made for a desktop or a real cabinet has no backglass in the headset of its own: put its `.directb2s` next to it and turn on **Add Backglass** (off by default; **Virtual Reality Settings** in the in-game menu, or **Room** in the new VR menu) to show it above the cabinet. Tables whose script talks to the backglass (B2S) play the same without the file, and their scores are still recorded. PinUP Player tables take their backglass videos from their PuP pack, not from a `.directb2s`. Uploading a table's download as it is keeps its `.directb2s` with it, ready if you turn the setting on.
@@ -257,6 +271,10 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 
 A fresh installation of the Frame, or a new headset, starts with an empty library. Back up what you keep on the Frame to your computer, and restore it there later.
 
+**▶ [See this in video](https://youtu.be/cOnA14bBJLU)**
+
+**▶ [See instructions](/docs/tutorials/Backup%20and%20Restore.md)**
+
 ### What a backup holds
 
 | Item | Content |
@@ -296,6 +314,10 @@ The page refuses to back up or restore while a table is being played: close it f
 
 A table that emulates a real machine asks PinMAME for its game by the name written in its script (`cGameName`). Some tables use a name that is not PinMAME's own: an older or shorter name (`simp` for `simp_a27`), or, for many mods, a name of their own (the Simpsons Treehouse of Horror mod asks for `simpprtyh`, which is the game `simpprty`). An **alias** tells PinMAME which game to run for that name. Without one, the table loads but does not play: PinMAME stops with "Game name not found". Original tables, which do not use PinMAME, never need an alias.
 
+**▶ [See this in video](https://youtu.be/LTy3QAzT5rQ)**
+
+**▶ [See instructions](/docs/tutorials/ROM%20Aliases.md)**
+
 ### What the game does by itself
 
 - **The standard aliases** of Visual PinMAME (about 120, such as `simp,simp_a27`) are installed with the alias file, the first time the game starts.
@@ -326,6 +348,10 @@ Over ssh, the file can also be edited directly, for example `ssh steamos@frame.l
 ## How to patch a broken table?
 
 Some tables do not work on the Frame as they are, even with their ROM: they close as soon as they start, or a game can not be started. Often the cause is not the game: a bug in the table script that recent versions of Visual Pinball refuse, or a ROM that needs to be set up from its service menu before it gives credits. For the ones found so far, the game ships a **fix**: a recipe that says which tables or ROMs it applies to, what it changes and why. New fixes come with the updates of the game.
+
+**▶ [See this in video](https://youtu.be/OcG5zoDzA2M)**
+
+**▶ [See instructions](/docs/tutorials/Table%20Fixes.md)**
 
 The fixes shipped today:
 
@@ -427,6 +453,10 @@ Your fixes show in **⋮ > Advanced > Table and ROM fixes**, marked **local**, a
 
 The Steam Frame controllers work out of the box. Each button has a default role, shown below; the roles can be changed in the menu, under **Input Settings**.
 
+**▶ [See this in video](https://youtu.be/ix_3tqUOZho)**
+
+**▶ [See instructions](/docs/tutorials/Controller%20Buttons.md)**
+
 ![The Steam Frame controllers with the role of each control: on the left controller, the view button opens the menu, the d-pad navigates the menu, the thumbstick nudges, the grip is the left magna-save; on the right controller, the menu button quits the table, B inserts a coin, A starts a game, X and Y are free, the thumbstick is the plunger, the grip is the right magna-save; the Steam buttons stay with SteamOS; underneath, the triggers are the flippers and the bumpers nudge](/docs/img/steam-frame-controllers.svg)
 
 | Control | Controller | During a game | In the menu |
@@ -446,6 +476,38 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 | B | Right | Insert a coin | Settings pages: undo the changes |
 | X, Y | Right | Not used: free to map to another action | |
 | Steam button | Left / right | Kept by SteamOS, not used by the game | |
+
+## Cabinet position
+
+The cabinet can stand wherever suits the place where you play: a free spot of your room, or a real table under your hands. Hold the two controllers where the two ends of the lockbar should be and press the **left thumbstick**: the cabinet follows the controllers until the next press. Fine-tune its height and position in the menu, under **VR & Room**. The position belongs to your room, not to a table, so every table starts at the same place.
+
+**▶ [See this in video](https://youtu.be/77ja0ALSwuw)**
+
+**▶ [See instructions](/docs/tutorials/Cabinet%20Position.md)**
+
+## Lobby rooms
+
+The lobby is the room around you while you choose a table. The game ships four rooms: the **Game room** (the default), the **Modern room**, the **Sunlit studio** and the **Empty room**. To change it, open **VR & Room** in the menu and select **Choose a lobby room**: the lobby reloads at once, and your choice is kept for the next starts of the game. The VR room of a table can be the lobby too: while playing that table, select **Use this VR room in the lobby** in the menu.
+
+**▶ [See this in video](https://youtu.be/ncKmyZOIl-E)**
+
+**▶ [See instructions](/docs/tutorials/Lobby%20Rooms.md)**
+
+## Names and thumbnails
+
+The table picker shows each table under the name of its file, with a screenshot taken in the game or the image that came with the table. Both can be changed from a browser: turn on **Wi-Fi upload** in the menu, open its address, and use the **...** menu of a table on the **Tables** page. **Display name** gives the table a shorter name, without renaming its files. **Thumbnail from table directory** picks an image from the table's own folder, such as a wheel image, and **Upload thumbnail** picks one from your computer. The headset shows the changes without restarting the game.
+
+**▶ [See this in video](https://youtu.be/wdBclu0nV1g)**
+
+**▶ [See instructions](/docs/tutorials/Names%20and%20Thumbnails.md)**
+
+## Players and scores
+
+The score of every game played on a table of the library is recorded for the player who played it, and each table keeps a leaderboard. Create your profile under **Scores** in the menu, where **Who is playing?** also gives a profile to each of the players 1 to 6 of the games. Scores are saved when a game ends, and the lobby then shows your score and its rank. A game left while it runs is not saved. From a browser, the **Scores** page lists every score, gives a score to another player, manages the players and resets the scores of a table.
+
+**▶ [See this in video](https://youtu.be/bmA_Hl-xeLc)**
+
+**▶ [See instructions](/docs/tutorials/Players%20and%20Scores.md)**
 
 ## Candidates for merge upstream
 
