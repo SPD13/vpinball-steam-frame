@@ -1426,6 +1426,8 @@ void VRDevice::LogRuntimeStatus()
    PLOGI << status;
 }
 
+static void CloseTableOnRuntimeRequest(bool exitApplication);
+
 // The session is opened with the first table played with this instance, and kept from one table to the next when the device is (see SetKeepSession
 // and VPApp::AcquireVRDevice): SteamVR (2.17.10 on the Steam Frame) does not support a second session on an instance. What depends on BGFX (started
 // again for each table, on the same graphics device) and on the table is created by AttachTable and destroyed by DetachTable.
@@ -1438,6 +1440,10 @@ void VRDevice::CreateSession()
       PLOGI << "OpenXR session kept from the previous table";
    AttachTable();
    PLOGI << "Table attached to the OpenXR session in " << ((usec() - start) / 1000) << "ms";
+   #if defined(VPX_STEAM_FRAME)
+   if (m_runtimeExitDuringBridge) // The runtime asked the application to quit while the bridge submitted the frames (src/steamframe/XRBridge.cpp)
+      CloseTableOnRuntimeRequest(true);
+   #endif
 }
 
 void VRDevice::OpenSession()
@@ -1605,6 +1611,10 @@ void VRDevice::CreateSwapchains()
       }
    }
    #endif
+
+   #if defined(VPX_STEAM_FRAME)
+   CreateLoadingLayerSwapchain(); // Steam Frame Edition: the loading message (src/steamframe/XRBridge.cpp)
+   #endif
 }
 
 // The textures and render targets BGFX wraps the swapchain images with, for the BGFX of the table (see AttachTable)
@@ -1634,6 +1644,9 @@ void VRDevice::CreateSwapchainViews()
          m_uiSwapchainInfo.swapchain = XR_NULL_HANDLE;
       }
    }
+   #if defined(VPX_STEAM_FRAME)
+   CreateLoadingLayerViews();
+   #endif
 }
 
 // What depends on the table and on BGFX, which is started again for each table: from the render thread, once BGFX is initialized
@@ -2122,6 +2135,10 @@ void VRDevice::ReleaseSession()
    DetachTable();
    if (!m_keepSession)
       CloseSession();
+   #if defined(VPX_STEAM_FRAME)
+   else
+      StartBridge(); // Steam Frame Edition: frames with the loading message until the next table (src/steamframe/XRBridge.cpp)
+   #endif
 }
 
 void VRDevice::DetachTable()
@@ -2138,6 +2155,7 @@ void VRDevice::DetachTable()
 
    #if defined(VPX_STEAM_FRAME)
    DestroyPerfPanel();
+   DestroyLoadingLayerViews();
    #endif
 
    // Destroy the swapchian render targets, and color/depth image views
@@ -2202,6 +2220,9 @@ void VRDevice::DetachTable()
 void VRDevice::DestroySwapchains()
 {
    assert(m_colorSwapchainInfo.imageViews.empty() && m_depthSwapchainInfo.imageViews.empty() && m_uiSwapchainInfo.imageViews.empty());
+   #if defined(VPX_STEAM_FRAME)
+   DestroyLoadingLayerSwapchain();
+   #endif
 
    // Free the Swapchain Image Data.
    if (m_colorSwapchainInfo.swapchain)
@@ -2232,6 +2253,9 @@ void VRDevice::DestroySwapchains()
 // Ends the session (letting the runtime stop it) then destroys it and all its objects, the instance is kept. After DetachTable.
 void VRDevice::CloseSession()
 {
+   #if defined(VPX_STEAM_FRAME)
+   StopBridge();
+   #endif
    if (m_session == XR_NULL_HANDLE)
       return;
 
@@ -2997,6 +3021,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          }
          #if defined(VPX_STEAM_FRAME)
          AcquirePerfPanelImage(rd); // Steam Frame Edition: the performance panel, when it has new content (src/steamframe/PerfPanelLayer.cpp)
+         AcquireLoadingLayerImage(rd); // and the loading message, while it is shown (src/steamframe/XRBridge.cpp)
          #endif
 
          submitFrame(vrRenderTarget);
@@ -3031,6 +3056,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          }
          #if defined(VPX_STEAM_FRAME)
          ReleasePerfPanelImage();
+         ReleaseLoadingLayerImage();
          #endif
 
          // Add passthrough layer first (background)
@@ -3064,6 +3090,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             renderLayerInfo.layerQuad.size = { 1.f, uiHeight };
             renderLayerInfo.layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&renderLayerInfo.layerQuad));
          }
+         #if defined(VPX_STEAM_FRAME)
+         AddLoadingLayer(renderLayerInfo.layers); // Over everything
+         #endif
       }
    }
 
@@ -3074,6 +3103,14 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
    frameEndInfo.layerCount = static_cast<uint32_t>(renderLayerInfo.layers.size());
    frameEndInfo.layers = renderLayerInfo.layers.data();
    OPENXR_CHECK(xrEndFrame(m_session, &frameEndInfo), "Failed to end the XR Frame.");
+   #if defined(VPX_STEAM_FRAME)
+   if (m_bridgeEndTime != std::chrono::steady_clock::time_point {}) // The first frame after the bridge (src/steamframe/XRBridge.cpp)
+   {
+      PLOGI << "First frame of the table submitted " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_bridgeEndTime).count()
+            << "ms after the bridge stopped" << (m_loadingHasImage ? "" : " (without the loading message)");
+      m_bridgeEndTime = {};
+   }
+   #endif
 
    // Perform desktop display rendering only
    if (!rendered)

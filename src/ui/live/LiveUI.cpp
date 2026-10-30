@@ -428,8 +428,13 @@ void LiveUI::RenderUI()
       VPX::PerfPanel::Get().OnLogicFrame(m_player);
    #endif
 
+   ImDrawList* loadingDrawList = nullptr;
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   if (m_player->m_vrDevice) // Steam Frame Edition: the render thread acquires an image of the loading layer for the next frames while it is shown (src/steamframe/XRBridge.cpp)
+      m_player->m_vrDevice->SetLoadingLayerShown(IsLoadingScreenShown());
+   #endif
    if (IsLoadingScreenShown())
-      RenderLoadingScreen();
+      loadingDrawList = RenderLoadingScreen();
    else
       m_inGameUI.Update(); // Tweak UI (aligned to playfield view, using custom flipper controls)
 
@@ -606,7 +611,7 @@ void LiveUI::RenderUI()
    {
       const ImDrawList * const cmd_list = draw_data->CmdLists[n];
       #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
-      if (cmd_list == perfPanelDrawList) // Drawn into its own layer, below
+      if (cmd_list == perfPanelDrawList || cmd_list == loadingDrawList) // Drawn into their own layers, below
          continue;
       #endif
       const unsigned int numVertices = cmd_list->VtxBuffer.size();
@@ -675,16 +680,26 @@ void LiveUI::RenderUI()
    if (perfPanelDrawList && m_player->m_vrDevice->GetPerfPanelRenderTarget()
       && VPX::PerfPanel::Get().Render(m_rd, m_player->m_vrDevice->GetPerfPanelRenderTarget(), perfPanelDrawList, m_perfPanelMeshBuffer))
       m_player->m_vrDevice->SetPerfPanelDrawn();
+   if (loadingDrawList && VPX::PerfPanel::RenderDrawList(m_rd, m_player->m_vrDevice->GetLoadingLayerRenderTarget(), loadingDrawList, m_loadingLayerMeshBuffer, "LoadingLayer"s))
+      m_player->m_vrDevice->SetLoadingLayerDrawn(m_loadingLayerWindowSize[0], m_loadingLayerWindowSize[1]);
    #endif
 
    NewFrame();
 }
 
 // A message with a spinner in the middle of the display. Outside VR, what is behind is darkened (when the previous table closes); in VR the UI covers
-// a large panel standing in the room, so only the message window is drawn on it.
-void LiveUI::RenderLoadingScreen()
+// a large panel standing in the room, so only the message window is drawn on it. In the Steam Frame Edition, the message goes into a layer of its own,
+// standing in the table's forward direction, which stays there while the next table starts (src/steamframe/XRBridge.cpp): the window is placed at the top left of the
+// layer's image, and its draw list is returned to be drawn there.
+ImDrawList* LiveUI::RenderLoadingScreen()
 {
    const ImGuiIO& io = ImGui::GetIO();
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   // The first frame that shows the message has no image of the layer yet (the render thread acquires one from the next frame): nothing rather than the
+   // message on the UI panel, which follows the head while the menu is closed, then a jump to where the layer stands
+   if (m_player->m_vrDevice && m_player->m_vrDevice->IsLoadingLayerUsable() && m_player->m_vrDevice->GetLoadingLayerRenderTarget() == nullptr)
+      return nullptr;
+   #endif
    if (m_player->m_vrDevice == nullptr)
       ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0.f, 0.f), io.DisplaySize, IM_COL32(0, 0, 0, 160));
 
@@ -693,8 +708,22 @@ void LiveUI::RenderLoadingScreen()
    const float radius = ImGui::GetFontSize() * 0.75f;
    const ImVec2 padding(ImGui::GetFontSize() * 1.2f, ImGui::GetFontSize() * 0.9f);
    const ImVec2 textSize = ImGui::CalcTextSize(m_loadingText.c_str());
+   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   const bool onLayer = m_player->m_vrDevice && m_player->m_vrDevice->GetLoadingLayerRenderTarget() != nullptr;
+   const ImVec2 size(min(padding.x * 2.f + radius * 3.f + textSize.x, static_cast<float>(VRDevice::kLoadingLayerWidth)),
+      min(padding.y * 2.f + max(radius * 2.f, textSize.y), static_cast<float>(VRDevice::kLoadingLayerHeight)));
+   if (onLayer)
+   {
+      ImGui::SetNextWindowPos(ImVec2(0.f, 0.f), ImGuiCond_Always);
+      m_loadingLayerWindowSize[0] = static_cast<int>(ceilf(size.x));
+      m_loadingLayerWindowSize[1] = static_cast<int>(ceilf(size.y));
+   }
+   else
+   #else
+   constexpr bool onLayer = false;
    const ImVec2 size(padding.x * 2.f + radius * 3.f + textSize.x, padding.y * 2.f + max(radius * 2.f, textSize.y));
-   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+   #endif
+      ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
    ImGui::SetNextWindowBgAlpha(0.85f);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
@@ -719,6 +748,7 @@ void LiveUI::RenderLoadingScreen()
    ImGui::End();
    ImGui::PopStyleVar(2);
    ImGui::PopFont();
+   return onLayer ? drawList : nullptr;
 }
 
 void LiveUI::UpdateTouchUI()
