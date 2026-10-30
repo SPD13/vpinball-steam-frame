@@ -132,6 +132,12 @@
    #include <openxr/openxr_platform.h>
 
    #include "input/XRInputHandler.h"
+
+   #if defined(VPX_STEAM_FRAME)
+   #include <condition_variable>
+   #include <mutex>
+   #include <thread>
+   #endif
 #endif
 
 #include "math/matrix.h"
@@ -313,6 +319,29 @@ public:
    // draws the panel into it, then says so, else the image released is not shown
    RenderTarget* GetPerfPanelRenderTarget() const { return m_perfPanelRenderTarget; }
    void SetPerfPanelDrawn() { m_perfPanelDrawn = true; }
+   // Steam Frame Edition: the loading message (see LiveUI::RenderLoadingScreen), drawn in a quad layer of its own standing in the table's forward direction
+   // (src/steamframe/XRBridge.cpp), so that it stays there from one table to the next: between two tables, the bridge submits the frames with the last image of the layer.
+   // Size of the layer in pixels of the UI (the UI panel is the width of the eye images), and acquired swapchain target of the layer for the frame
+   // being prepared while the loading screen is shown (nullptr otherwise): the logic thread draws the message into it, then says so
+   static constexpr int kLoadingLayerWidth = 2048;
+   static constexpr int kLoadingLayerHeight = 256;
+   RenderTarget* GetLoadingLayerRenderTarget() const { return m_loadingRenderTarget; }
+   void SetLoadingLayerDrawn(int width, int height) // The part of the image covered by the message, from its top left
+   {
+      m_loadingDrawnWidth = width;
+      m_loadingDrawnHeight = height;
+      m_loadingDrawn = true;
+   }
+   void SetLoadingLayerShown(bool shown) { m_loadingShown = shown; } // By the logic thread, for each frame it prepares
+   bool IsLoadingLayerUsable() const { return m_loadingLayerUsable; } // The message is drawn into the layer (else on the UI panel)
+   // The bridge keeps the session fed with frames while no table is played, from the end of a table (ReleaseSession, when the session is kept) to
+   // the first frame of the next one: the main thread says when the next table is about to draw it (OnTableReadyForFrames), and the render thread
+   // of that table takes the frame loop back before its first frame (EndBridge)
+   bool OnTableReadyForFrames(); // False when no bridge runs
+   void EndBridge();
+   // The graphics queue is shared with the runtime, which uses it in xrEndFrame: BGFX takes this lock while it starts or shuts down, as the bridge
+   // may submit frames at the same time
+   std::mutex& GetQueueMutex() { return m_queueMutex; }
    #endif
    void UpdateVisibilityMask(class RenderDevice* rd);
    bool UseDepthBuffer() const { return m_depthExtensionSupported; }
@@ -583,6 +612,45 @@ private:
    void ReleasePerfPanelImage(); // After the frame is submitted
    void AddPerfPanelLayer(std::vector<XrCompositionLayerBaseHeader*>& layers);
    void DestroyPerfPanel(); // With the session
+
+   SwapchainInfo m_loadingSwapchainInfo = {};
+   std::vector<std::unique_ptr<RenderTarget>> m_loadingRenderTargets;
+   RenderTarget* m_loadingRenderTarget = nullptr; // As m_uiRenderTarget: written by the render thread before the frame is prepared
+   bool m_loadingImageAcquired = false; // Kept acquired until drawn (see AcquireLoadingLayerImage)
+   uint32_t m_loadingImageIndex = 0;
+   std::atomic<bool> m_loadingDrawn = false; // The logic thread drew into the acquired image
+   std::atomic<int> m_loadingDrawnWidth = 0, m_loadingDrawnHeight = 0;
+   XrExtent2Di m_loadingLayerRect = { 0, 0 }; // Part of the last image released that the layer shows
+   std::atomic<bool> m_loadingShown = false; // The loading screen is shown (by the last frame prepared, kept from one table to the next)
+   bool m_loadingHasImage = false; // An image drawn by the logic thread was released: the layer can be shown
+   XrExtent2Df m_loadingLayerSize = { 0.f, 0.f }; // Meters, and distance from the player: taken when an image is drawn, the bridge shows it as it was
+   float m_loadingLayerDistance = 1.f;
+   bool m_loadingLayerPlaced = false; // Placed when the message appears, kept until it is hidden (see AddLoadingLayer)
+   XrPosef m_loadingLayerPose = { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } }; // In the reference space
+   std::atomic<bool> m_loadingLayerUsable = false; // For the logic thread: the layer can be drawn for this table
+   XrCompositionLayerQuad m_loadingLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+   void CreateLoadingLayerSwapchain(); // With the other swapchains
+   void CreateLoadingLayerViews();
+   void DestroyLoadingLayerViews();
+   void DestroyLoadingLayerSwapchain();
+   bool IsLoadingLayerAvailable() const;
+   void AcquireLoadingLayerImage(class RenderDevice* rd); // Before the frame is prepared
+   void ReleaseLoadingLayerImage(); // After the frame is submitted
+   void AddLoadingLayer(std::vector<XrCompositionLayerBaseHeader*>& layers);
+
+   std::thread m_bridgeThread;
+   std::atomic<bool> m_bridgeStop = false;
+   std::atomic<bool> m_bridgeRunning = false; // For the main thread (the thread object belongs to the render threads)
+   std::mutex m_queueMutex;
+   std::mutex m_tableReadyMutex;
+   std::condition_variable m_tableReadyCondition;
+   bool m_tableReady = false;
+   bool m_runtimeExitDuringBridge = false; // The runtime asked the application to quit while the bridge submitted the frames
+   std::chrono::steady_clock::time_point m_bridgeEndTime {}; // When the render thread took the frames back from the bridge, to log the time to its first frame
+   void StartBridge(); // From the render thread, once the table is detached
+   void StopBridge();
+   void BridgeLoop();
+   void BridgePollEvents();
    #endif
 
    Matrix3D m_nextProj[2];

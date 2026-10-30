@@ -257,6 +257,10 @@ Player::Player(PinTable *const table, const PlayMode playMode, LoadProgress &loa
          else
             m_vrDevice->ApplyTableSettings(m_ptable->GetSettings());
       }
+      #if defined(VPX_STEAM_FRAME)
+      else // Steam Frame Edition: a VR device kept from the previous table is released, the headset showing its loading message meanwhile (src/steamframe/XRBridge.cpp)
+         g_app->ReleaseVRDevice(true);
+      #endif
    #endif
 
    #ifdef ENABLE_DX9
@@ -377,6 +381,19 @@ Player::Player(PinTable *const table, const PlayMode playMode, LoadProgress &loa
    if (g_app->m_keepDisplayBetweenTables)
    {
       m_liveUI->SetLoadingText(g_launcher->GetLoadingText(m_ptable->m_filename, m_isLobby));
+      #ifdef ENABLE_XR
+      // In VR, the session may be kept from the previous table, its frames submitted meanwhile by the bridge (src/steamframe/XRBridge.cpp): the render thread
+      // takes them back now, then asks for the first frame, which shows the loading message without a gap
+      if (m_vrDevice && m_vrDevice->OnTableReadyForFrames())
+      {
+         const auto start = std::chrono::steady_clock::now();
+         while (!m_renderer->m_renderDevice->m_frameRequested && std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500))
+         {
+            ProcessOSMessages();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+         }
+      }
+      #endif
       RenderLoadingFrame(true);
    }
    #endif
@@ -2723,7 +2740,7 @@ void Player::RenderLoadingFrame(bool ownsFrameMutex)
 #ifdef ENABLE_BGFX
    RenderDevice* const rd = m_renderer->m_renderDevice;
    // Not before the render thread asks for a frame: in VR, it only does when the headset requests one, which needs the session to be running
-   if (m_liveUI == nullptr || !m_liveUI->IsLoadingScreenShown() || rd->m_framePending)
+   if (m_liveUI == nullptr || !m_liveUI->IsLoadingScreenShown() || !rd->m_frameRequested || rd->m_framePending)
       return;
    // At the display pace at most (for the spinner), not to take time from the loading
    const auto now = std::chrono::steady_clock::now();
@@ -2733,7 +2750,7 @@ void Player::RenderLoadingFrame(bool ownsFrameMutex)
    {
       if (!rd->m_frameMutex.try_lock())
          return;
-      if (rd->m_framePending) // Another thread submitted a frame (texture upload) since the check above
+      if (!rd->m_frameRequested || rd->m_framePending) // Another thread submitted a frame (texture upload) since the check above, or the render thread stopped waiting
       {
          rd->m_frameMutex.unlock();
          return;

@@ -466,6 +466,13 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 
    init.swapChain.flags &= ~BGFX_SWAP_CHAIN_HDR10; // Handle HDR10 color space (actually BGFX select colorspace based on the backbuffer format and discard this flag)
    init.swapChain.flags |= init.swapChain.formatColor == bgfx::TextureFormat::RGB10A2 ? BGFX_SWAP_CHAIN_HDR10 : 0;
+#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   // Steam Frame Edition: the bridge may submit the frames of the session kept from the previous table while BGFX starts on the graphics queue that
+   // the runtime uses too, and while the table is attached to the session (src/steamframe/XRBridge.cpp)
+   std::unique_lock<std::mutex> xrQueueLock;
+   if (g_pplayer->IsVR())
+      xrQueueLock = std::unique_lock<std::mutex>(g_pplayer->m_vrDevice->GetQueueMutex());
+#endif
    bgfx::renderFrame();
    if (!bgfx::init(init))
    {
@@ -541,6 +548,11 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
       rd->m_framePending = false; // Request first frame to be prepared as soon as possible
    }
 
+#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   if (xrQueueLock.owns_lock())
+      xrQueueLock.unlock();
+#endif
+
    // Unlock requesting thread and start render loop
    rd->m_rendererInitialized.release();
 
@@ -561,6 +573,12 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 
    // Wait until main thread has released all native resources
    rd->m_rendererInitialized.acquire();
+
+#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+   // Steam Frame Edition: BGFX submits its last work and shuts down while the bridge submits the frames (src/steamframe/XRBridge.cpp)
+   if (xrQueueLock.mutex() != nullptr)
+      xrQueueLock.lock();
+#endif
 
    // Everything should be destroyed by now: report what is left. Not a problem as long as BGFX is shut down with each table, but these would
    // add up from one table to the next if the device was kept. A frame is submitted first since BGFX frees the destroyed handles with frames.
@@ -584,6 +602,9 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
 {
    // OpenXR renderloop, synchronized on headset (using xrWaitFrame), with game logic preparing frames when headset request them
    m_frameIndex = 0;
+#if defined(VPX_STEAM_FRAME)
+   g_pplayer->m_vrDevice->EndBridge(); // Steam Frame Edition: the frames of the session kept from the previous table (src/steamframe/XRBridge.cpp)
+#endif
    while (m_renderDeviceAlive)
    {
       // Process OpenXR events (headset status, ...)

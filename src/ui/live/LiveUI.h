@@ -92,7 +92,7 @@ public:
 
 private:
    string m_loadingText;
-   void RenderLoadingScreen();
+   ImDrawList* RenderLoadingScreen(); // The draw list of the message when it goes into the loading layer of the VR device, to be left out of the UI
 
    std::mutex m_messageMutex;
    std::deque<std::pair<string, string>> m_pendingMessages; // Title and text
@@ -109,6 +109,8 @@ private:
    vector<std::shared_ptr<MeshBuffer>> m_meshBuffers;
    #if defined(VPX_STEAM_FRAME)
    std::shared_ptr<MeshBuffer> m_perfPanelMeshBuffer; // Steam Frame Edition: the performance panel's (src/steamframe/PerfPanel.cpp), released with the player as the others
+   std::shared_ptr<MeshBuffer> m_loadingLayerMeshBuffer; // Steam Frame Edition: the loading message's in VR (src/steamframe/XRBridge.cpp)
+   int m_loadingLayerWindowSize[2] = { 0, 0 }; // Pixels of the loading layer's image covered by the message
    #endif
    std::shared_ptr<MeshBuffer> m_vrPointerRayMesh; // Ray from the VR controller to the pointed position on the UI panel
 

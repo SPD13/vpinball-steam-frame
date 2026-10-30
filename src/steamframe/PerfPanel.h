@@ -75,6 +75,9 @@ public:
    // Logic thread, after ImGui::Render: renders the draw list of the panel into the panel's image, false if nothing was drawn. The mesh buffer is
    // the caller's: it must not outlive the player (its GPU buffers are released with it), while the panel lives as long as the application
    bool Render(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer);
+   // Draws an ImGui window into a target of its own (a quad layer), its pixel coordinates mapped to the target from its top left (also used by the
+   // loading message, see LiveUI::RenderLoadingScreen)
+   static bool RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name);
 
    // A sample was taken since the panel was last drawn: the render thread acquires an image of the panel's swapchain for the next frame
    bool IsDirty() const { return m_dirty; }
