@@ -1145,6 +1145,7 @@ void Player::ShutdownTableSession()
          g_launcher->m_lastSessionResult = Launcher::SessionResult { m_scoreTracker->GetTableUuid(), m_scoreTracker->GetRecordedScoreIds() };
       m_scoreTracker = nullptr;
    }
+   g_launcher->OnTableClosed(this);
 #endif
 
    if (m_scriptInterpreter)

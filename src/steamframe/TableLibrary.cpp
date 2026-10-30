@@ -76,7 +76,7 @@ string NameFromStem(const fs::path& path)
 bool SameTable(const Table& a, const Table& b)
 {
    return a.uuid == b.uuid && a.name == b.name && a.path == b.path && a.image == b.image && a.createdAt == b.createdAt && a.modifiedAt == b.modifiedAt
-      && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite && a.usesPup == b.usesPup && a.pupPacks == b.pupPacks
+      && a.lastPlayedAt == b.lastPlayedAt && a.playCount == b.playCount && a.favorite == b.favorite && a.performance == b.performance && a.usesPup == b.usesPup && a.pupPacks == b.pupPacks
       && a.pupScannedAt == b.pupScannedAt && a.hasPupPack == b.hasPupPack && a.rom == b.rom && a.madeForVR == b.madeForVR;
 }
 
@@ -302,6 +302,14 @@ static void ParseStats(const nlohmann::json& stats, std::vector<Table>& tables)
          table.lastPlayedAt = it->value("lastPlayedAt", int64_t(0));
          table.playCount = it->value("playCount", 0);
          table.favorite = it->value("favorite", false);
+         if (const auto performance = it->find("performance"); performance != it->end()) {
+            table.performance.rating = performance->value("rating", ""s);
+            table.performance.reason = performance->value("reason", ""s);
+            table.performance.nativePercent = performance->value("nativePercent", 0.);
+            table.performance.onTimePercent = performance->value("onTimePercent", 0.);
+            table.performance.playedSeconds = performance->value("playedSeconds", 0);
+            table.performance.ratedAt = performance->value("ratedAt", int64_t(0));
+         }
          table.usesPup = it->value("usesPup", false);
          table.pupPacks = it->value("pupPacks", std::vector<string>());
          table.pupScannedAt = it->value("pupScannedAt", int64_t(0));
@@ -347,6 +355,11 @@ void TableLibrary::SaveJson()
       tables.push_back({ { "uuid", table.uuid }, { "name", table.name }, { "path", table.path }, { "image", table.image }, { "createdAt", table.createdAt }, { "modifiedAt", table.modifiedAt } });
       if (table.lastPlayedAt != 0 || table.playCount != 0 || table.favorite || table.pupScannedAt != 0) {
          stats[table.uuid] = { { "playCount", table.playCount }, { "lastPlayedAt", table.lastPlayedAt }, { "favorite", table.favorite } };
+         if (table.performance.ratedAt != 0) {
+            const TablePerformance& performance = table.performance;
+            stats[table.uuid]["performance"] = { { "rating", performance.rating }, { "reason", performance.reason }, { "nativePercent", performance.nativePercent },
+               { "onTimePercent", performance.onTimePercent }, { "playedSeconds", performance.playedSeconds }, { "ratedAt", performance.ratedAt } };
+         }
          if (table.pupScannedAt != 0) {
             stats[table.uuid]["usesPup"] = table.usesPup;
             stats[table.uuid]["pupPacks"] = table.pupPacks;
@@ -430,6 +443,8 @@ std::map<string, string> TableLibrary::ImportMetadata(const string& tablesJson, 
       local->favorite = local->favorite || backup.favorite;
       local->playCount = std::max(local->playCount, backup.playCount);
       local->lastPlayedAt = std::max(local->lastPlayedAt, backup.lastPlayedAt);
+      if (backup.performance.ratedAt > local->performance.ratedAt)
+         local->performance = backup.performance;
       if (backup.createdAt != 0 && (local->createdAt == 0 || backup.createdAt < local->createdAt))
          local->createdAt = backup.createdAt;
       local->modifiedAt = std::max(Now(), local->modifiedAt + 1);
@@ -1340,6 +1355,23 @@ bool TableLibrary::RecordPlay(const fs::path& fullPath)
    return Update(it->uuid, [](Table& table) {
       table.playCount++;
       table.lastPlayedAt = Now();
+      return true;
+   }, false);
+}
+
+bool TableLibrary::RecordPerformance(const fs::path& fullPath, const TablePerformance& performance)
+{
+   std::lock_guard operationLock(m_operationMutex);
+   if (!m_loaded)
+      LoadJson();
+   if (!IsInsideTables(fullPath))
+      return false;
+   const string relativePath = RelativePath(fullPath);
+   const auto it = std::find_if(m_tables.begin(), m_tables.end(), [&](const Table& table) { return table.path == relativePath; });
+   if (it == m_tables.end())
+      return false;
+   return Update(it->uuid, [&performance](Table& table) {
+      table.performance = performance;
       return true;
    }, false);
 }

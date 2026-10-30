@@ -1231,7 +1231,7 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    }
    m_lastPredictedDisplayTime = predictedDisplayTime;
    #if defined(VPX_STEAM_FRAME)
-   const bool perfPanel = VPX::PerfPanel::Get().IsEnabled(); // Steam Frame Edition: the performance panel needs the GPU time too
+   constexpr bool perfPanel = true; // Steam Frame Edition: the rating of the performance panel needs the GPU time too, even with the panel off
    #else
    constexpr bool perfPanel = false;
    #endif

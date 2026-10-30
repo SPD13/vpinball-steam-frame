@@ -401,6 +401,12 @@ TEST_CASE("TableLibrary: play statistics and favorites are kept apart from table
       CHECK(library.GetTable(uuidA)->modifiedAt == modifiedAt); // Playing is not a change of the table
       CHECK(library.GetTable(uuidB)->favorite);
       CHECK(library.GetRevision() == revision + 3);
+
+      CHECK(library.RecordPerformance(f.tables / "A" / "a.vpx", { "red", "GPU bound", 41.5, 93.2, 754, 1000 }));
+      CHECK_FALSE(library.RecordPerformance(f.root / "outside.vpx", { "green", "", 100., 100., 60, 1000 }));
+      CHECK_FALSE(library.RecordPerformance(f.tables / "A" / "unknown.vpx", { "green", "", 100., 100., 60, 1000 }));
+      CHECK(library.GetTable(uuidA)->modifiedAt == modifiedAt);
+      CHECK(library.GetTable(uuidB)->performance.rating.empty());
    }
 
    // tables.json keeps the exact format of the mobile launchers, which reject unknown fields
@@ -410,12 +416,15 @@ TEST_CASE("TableLibrary: play statistics and favorites are kept apart from table
    const auto stats = nlohmann::json::parse(Fixture::Read(f.json.parent_path() / "table-stats.json"));
    CHECK(stats.at(uuidA).at("playCount") == 2);
    CHECK(stats.at(uuidB).at("favorite") == true);
+   CHECK(stats.at(uuidA).at("performance").at("rating") == "red");
+   CHECK_FALSE(stats.at(uuidB).contains("performance"));
 
    // Survives a restart, even when a table is played before the first rescan
    TableLibrary library(f.Config());
    CHECK(library.RecordPlay(f.tables / "A" / "a.vpx"));
    library.Rescan();
    CHECK(library.GetTable(uuidA)->playCount == 3);
+   CHECK(library.GetTable(uuidA)->performance == TablePerformance { "red", "GPU bound", 41.5, 93.2, 754, 1000 });
    CHECK(library.GetTable(uuidB)->favorite);
    CHECK(library.SetFavorite(uuidB, false));
    CHECK_FALSE(nlohmann::json::parse(Fixture::Read(f.json.parent_path() / "table-stats.json")).contains(uuidB));

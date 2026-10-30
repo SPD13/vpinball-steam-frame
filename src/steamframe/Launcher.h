@@ -39,6 +39,8 @@ public:
       vector<string> scoreIds;
    };
    std::optional<SessionResult> m_lastSessionResult;
+   // The table closes: its rating in the headset is kept for its page in the menu (see PerfPanel)
+   void OnTableClosed(const Player* player);
 
 #ifdef VPX_TABLE_WEBSERVER
    // Web server to manage the table library from a browser. It runs from its activation in the table picker until the application is closed,
