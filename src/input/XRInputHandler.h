@@ -25,6 +25,7 @@ private:
    struct ActionTracker
    {
       std::string path;
+      std::string name; // Path sanitized as an OpenXR action name, also the name of the input in the input manager
       XrAction action;
       XrActionType type;
       bool isActive = false;
@@ -40,17 +41,16 @@ private:
 
 public:
    // eyeGaze: the runtime has XR_EXT_eye_gaze_interaction enabled, so the gaze pose is bound too (used by the foveated rendering)
-   XRInputHandler(InputManager& pininput, XrInstance instance, XrSession session, bool eyeGaze = false)
-      : m_pininput(pininput)
-      , m_instance(instance)
+   // The actions are attached to the session, which can only be done once per session: the handler lives as long as the session. When the
+   // session is kept from one table to the next (see VRDevice::CreateSession), the handler is bound to the input manager of each table (Bind).
+   XRInputHandler(XrInstance instance, XrSession session, bool eyeGaze = false)
+      : m_instance(instance)
       , m_session(session)
    {
       XrActionSetCreateInfo actionSetInfo { XR_TYPE_ACTION_SET_CREATE_INFO };
       CopyToXrBuffer(actionSetInfo.actionSetName, "vpx_generic_input"s);
       CopyToXrBuffer(actionSetInfo.localizedActionSetName, "VPX Generic Input"s);
       xrCreateActionSet(m_instance, &actionSetInfo, &m_actionSet);
-
-      m_joyId = m_pininput.RegisterDevice("OpenXR", InputManager::DeviceType::VRController, "VR Controller");
 
       // There is no way to enumerate and listen for change in OpenXR, so we do it the other way: we define all known input paths and listen for changes on all of them
       std::vector<std::pair<std::string, XrActionType>> allPaths = { // Common Buttons (Boolean)
@@ -120,20 +120,12 @@ public:
          XrPath xrPath;
          xrStringToPath(m_instance, path.c_str(), &xrPath);
          bindings.push_back({ tracker.action, xrPath });
+         tracker.name = name;
          m_trackers.push_back(tracker);
 
-         if (type == XR_ACTION_TYPE_BOOLEAN_INPUT || type == XR_ACTION_TYPE_FLOAT_INPUT)
-            m_pininput.RegisterElementName(m_joyId, type == XR_ACTION_TYPE_FLOAT_INPUT, tracker.pinInputId, name);
-         else if (type == XR_ACTION_TYPE_VIBRATION_OUTPUT)
+         if (type == XR_ACTION_TYPE_VIBRATION_OUTPUT)
             m_hapticActions.push_back(tracker.action);
       }
-
-      #if defined(VPX_STEAM_FRAME)
-      // Steam Frame Edition: readable names of the inputs in the Controls page, instead of their OpenXR paths (src/steamframe/XRInputLabels.h)
-      for (const ActionTracker& t : m_trackers)
-         if (t.type == XR_ACTION_TYPE_BOOLEAN_INPUT || t.type == XR_ACTION_TYPE_FLOAT_INPUT)
-            m_pininput.RegisterElementName(m_joyId, t.type == XR_ACTION_TYPE_FLOAT_INPUT, t.pinInputId, VPX::SteamFrame::GetXRInputLabel(t.path));
-      #endif
 
       // Register these bindings for major profiles
       std::vector<const char*> profiles { //
@@ -155,45 +147,65 @@ public:
       attachInfo.countActionSets = 1;
       attachInfo.actionSets = &m_actionSet;
       xrAttachSessionActionSets(m_session, &attachInfo);
+   }
 
-      auto defaultMapping = [this](InputManager::MappingSetupHandler& map)
+   // Registers the controllers as a device of the input manager of a table, with their inputs and default mapping. Bound to one input manager at a time:
+   // the handler is given to it (InputManager::AddInputHandler) after this, and taken back (RemoveInputHandler) before Unbind.
+   void Bind(InputManager& pininput)
+   {
+      m_pininput = &pininput;
+      m_joyId = m_pininput->RegisterDevice("OpenXR", InputManager::DeviceType::VRController, "VR Controller");
+      for (const ActionTracker& t : m_trackers)
+         if (t.type == XR_ACTION_TYPE_BOOLEAN_INPUT || t.type == XR_ACTION_TYPE_FLOAT_INPUT)
+            m_pininput->RegisterElementName(m_joyId, t.type == XR_ACTION_TYPE_FLOAT_INPUT, t.pinInputId, t.name);
+
+      #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: readable names of the inputs in the Controls page, instead of their OpenXR paths (src/steamframe/XRInputLabels.h)
+      for (const ActionTracker& t : m_trackers)
+         if (t.type == XR_ACTION_TYPE_BOOLEAN_INPUT || t.type == XR_ACTION_TYPE_FLOAT_INPUT)
+            m_pininput->RegisterElementName(m_joyId, t.type == XR_ACTION_TYPE_FLOAT_INPUT, t.pinInputId, VPX::SteamFrame::GetXRInputLabel(t.path));
+      #endif
+
+      auto defaultMapping = [pininput = m_pininput, joyId = m_joyId](InputManager::MappingSetupHandler& map)
       {
-         map.MapAction(ButtonMapping::Create(m_joyId, 16, 0.3f), m_pininput.GetLeftFlipperActionId()); // Trigger
-         map.MapAction(ButtonMapping::Create(m_joyId, 17, 0.3f), m_pininput.GetRightFlipperActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 16, 0.6f), m_pininput.GetStagedLeftFlipperActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 17, 0.6f), m_pininput.GetStagedRightFlipperActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 12), m_pininput.GetVRControllerViewCenteringActionId()); // Left Thumbstick click
-         map.MapAction(ButtonMapping::Create(m_joyId, 13), m_pininput.GetLaunchBallActionId()); // Right Thumbstick click
-         map.MapAction(ButtonMapping::Create(m_joyId, 4), m_pininput.GetLeftMagnaActionId()); // Squeeze
-         map.MapAction(ButtonMapping::Create(m_joyId, 5), m_pininput.GetRightMagnaActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 11), m_pininput.GetAddCreditActionId(0)); // Right buttons
-         map.MapAction(ButtonMapping::Create(m_joyId, 10), m_pininput.GetStartActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 8), m_pininput.GetOpenInGameUIActionId()); // Left buttons
-         map.MapAction(ButtonMapping::Create(m_joyId, 9), m_pininput.GetExitGameActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 21, -0.9f, true), m_pininput.GetUIDownActionId()); // Left vertical stick
-         map.MapAction(ButtonMapping::Create(m_joyId, 21, 0.9f), m_pininput.GetUIUpActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 22, -0.9f, true), m_pininput.GetUILeftActionId()); // Right horizontal stick
-         map.MapAction(ButtonMapping::Create(m_joyId, 22, 0.9f), m_pininput.GetUIRightActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 16, 0.3f), pininput->GetLeftFlipperActionId()); // Trigger
+         map.MapAction(ButtonMapping::Create(joyId, 17, 0.3f), pininput->GetRightFlipperActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 16, 0.6f), pininput->GetStagedLeftFlipperActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 17, 0.6f), pininput->GetStagedRightFlipperActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 12), pininput->GetVRControllerViewCenteringActionId()); // Left Thumbstick click
+         map.MapAction(ButtonMapping::Create(joyId, 13), pininput->GetLaunchBallActionId()); // Right Thumbstick click
+         map.MapAction(ButtonMapping::Create(joyId, 4), pininput->GetLeftMagnaActionId()); // Squeeze
+         map.MapAction(ButtonMapping::Create(joyId, 5), pininput->GetRightMagnaActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 11), pininput->GetAddCreditActionId(0)); // Right buttons
+         map.MapAction(ButtonMapping::Create(joyId, 10), pininput->GetStartActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 8), pininput->GetOpenInGameUIActionId()); // Left buttons
+         map.MapAction(ButtonMapping::Create(joyId, 9), pininput->GetExitGameActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 21, -0.9f, true), pininput->GetUIDownActionId()); // Left vertical stick
+         map.MapAction(ButtonMapping::Create(joyId, 21, 0.9f), pininput->GetUIUpActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 22, -0.9f, true), pininput->GetUILeftActionId()); // Right horizontal stick
+         map.MapAction(ButtonMapping::Create(joyId, 22, 0.9f), pininput->GetUIRightActionId());
          // Valve Frame controller, which has no left hand face buttons
-         map.MapAction(ButtonMapping::Create(m_joyId, 38), m_pininput.GetOpenInGameUIActionId()); // Left view button
-         map.MapAction(ButtonMapping::Create(m_joyId, 3), m_pininput.GetExitGameActionId()); // Right menu button
-         map.MapAction(ButtonMapping::Create(m_joyId, 34), m_pininput.GetUIUpActionId()); // D-pad
-         map.MapAction(ButtonMapping::Create(m_joyId, 35), m_pininput.GetUIDownActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 36), m_pininput.GetUILeftActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 37), m_pininput.GetUIRightActionId());
-         map.MapAction(ButtonMapping::Create(m_joyId, 39), m_pininput.GetLeftNudgeActionId()); // Bumpers
-         map.MapAction(ButtonMapping::Create(m_joyId, 40), m_pininput.GetRightNudgeActionId());
-         std::unique_ptr<PlungerSensor> plunger = std::make_unique<PlungerSensor>(&m_pininput);
-         plunger->GetPositionSensor()->SetMapping(SensorMapping::Create(m_joyId, 23, SensorMapping::Type::Position)); // Right stick Y
+         map.MapAction(ButtonMapping::Create(joyId, 38), pininput->GetOpenInGameUIActionId()); // Left view button
+         map.MapAction(ButtonMapping::Create(joyId, 3), pininput->GetExitGameActionId()); // Right menu button
+         map.MapAction(ButtonMapping::Create(joyId, 34), pininput->GetUIUpActionId()); // D-pad
+         map.MapAction(ButtonMapping::Create(joyId, 35), pininput->GetUIDownActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 36), pininput->GetUILeftActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 37), pininput->GetUIRightActionId());
+         map.MapAction(ButtonMapping::Create(joyId, 39), pininput->GetLeftNudgeActionId()); // Bumpers
+         map.MapAction(ButtonMapping::Create(joyId, 40), pininput->GetRightNudgeActionId());
+         std::unique_ptr<PlungerSensor> plunger = std::make_unique<PlungerSensor>(pininput);
+         plunger->GetPositionSensor()->SetMapping(SensorMapping::Create(joyId, 23, SensorMapping::Type::Position)); // Right stick Y
          plunger->GetPositionSensor()->GetMapping().SetScale(-1.f);
          map.MapPlunger(std::move(plunger));
-         std::unique_ptr<VPX::Physics::GamepadNudge> nudge = std::make_unique<VPX::Physics::GamepadNudge>(&m_pininput);
-         nudge->GetXSensor().SetMapping(SensorMapping::Create(m_joyId, 20, SensorMapping::Type::Position)); // Left stick X
-         nudge->GetYSensor().SetMapping(SensorMapping::Create(m_joyId, 21, SensorMapping::Type::Position)); // Left stick Y
+         std::unique_ptr<VPX::Physics::GamepadNudge> nudge = std::make_unique<VPX::Physics::GamepadNudge>(pininput);
+         nudge->GetXSensor().SetMapping(SensorMapping::Create(joyId, 20, SensorMapping::Type::Position)); // Left stick X
+         nudge->GetYSensor().SetMapping(SensorMapping::Create(joyId, 21, SensorMapping::Type::Position)); // Left stick Y
          map.MapNudge(std::move(nudge));
       };
-      m_pininput.SetDeviceDefaultMapping(m_joyId, defaultMapping);
+      m_pininput->SetDeviceDefaultMapping(m_joyId, defaultMapping);
    }
+
+   void Unbind() { m_pininput = nullptr; }
 
    ~XRInputHandler() override
    {
@@ -222,7 +234,7 @@ public:
             if (state.isActive && state.changedSinceLastSync)
             {
                //PLOGI << "[BTN] " << t.path << " -> " << (state.currentState ? "ON" : "OFF");
-               m_pininput.PushButtonEvent(m_joyId, t.pinInputId, usec() * 1000ULL, state.currentState);
+               m_pininput->PushButtonEvent(m_joyId, t.pinInputId, usec() * 1000ULL, state.currentState);
             }
          }
          else if (t.type == XR_ACTION_TYPE_FLOAT_INPUT)
@@ -234,7 +246,7 @@ public:
             {
                // -1 .. 1 for sticks / 0 (unpressed) .. 1 (pressed) for triggers
                //PLOGI << "[ANA] " << t.path << " -> " << state.currentState;
-               m_pininput.PushAxisEvent(m_joyId, t.pinInputId, usec() * 1000ULL, state.currentState);
+               m_pininput->PushAxisEvent(m_joyId, t.pinInputId, usec() * 1000ULL, state.currentState);
             }
          }
       }
@@ -320,12 +332,12 @@ public:
 
 private:
 
-   InputManager& m_pininput;
+   InputManager* m_pininput = nullptr; // See Bind
    XrInstance m_instance;
    XrSession m_session;
    XrActionSet m_actionSet;
    std::vector<ActionTracker> m_trackers;
    std::vector<XrAction> m_hapticActions;
 
-   uint16_t m_joyId;
+   uint16_t m_joyId = 0;
 };

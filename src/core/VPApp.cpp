@@ -344,16 +344,23 @@ VRDevice* VPApp::AcquireVRDevice(const Settings& settings)
       PLOGI << "VR device kept from the previous table (same OpenXR instance)";
    else
       m_vrDevice = new VRDevice(settings);
+   m_vrDevice->SetKeepSession(KeepVRDeviceBetweenTables());
    return m_vrDevice;
 }
 
 void VPApp::ReleaseVRDevice(bool discard)
 {
-   if (m_vrDevice && (discard || !m_keepDisplayBetweenTables || !m_keepVRDeviceBetweenTables || m_vrDevice->IsLost()))
+   if (m_vrDevice && (discard || !KeepVRDeviceBetweenTables() || m_vrDevice->IsLost()))
    {
       delete m_vrDevice;
       m_vrDevice = nullptr;
    }
+}
+
+bool VPApp::KeepVRDeviceBetweenTables() const
+{
+   static const bool perTable = getenv("VPX_XR_SESSION_PER_TABLE") != nullptr && atoi(getenv("VPX_XR_SESSION_PER_TABLE")) != 0;
+   return m_keepDisplayBetweenTables && !perTable;
 }
 #endif
 

@@ -438,13 +438,8 @@ VRDevice::~VRDevice()
       if (m_xrInstance == XR_NULL_HANDLE)
          return;
 
-      // The session is released by the render thread before BGFX is shut down (see ReleaseSession), and the device is only destroyed after it
-      if (m_session != XR_NULL_HANDLE)
-      {
-         PLOGE << "OpenXR session still alive when destroying the VR device";
-         OPENXR_CHECK(xrDestroySession(m_session), "Failed to destroy Session.");
-         m_session = XR_NULL_HANDLE;
-      }
+      // The render thread detaches the table before BGFX is shut down (see ReleaseSession), the session itself may have been kept for the next table
+      CloseSession();
 
       if (m_debugUtilsExtensionSupported && m_debugUtilsMessenger != XR_NULL_HANDLE)
       {
@@ -1425,7 +1420,21 @@ void VRDevice::LogRuntimeStatus()
    PLOGI << status;
 }
 
+// The session is opened with the first table played with this instance, and kept from one table to the next when the device is (see SetKeepSession
+// and VPApp::AcquireVRDevice): SteamVR (2.17.10 on the Steam Frame) does not support a second session on an instance. What depends on BGFX (started
+// again for each table, on the same graphics device) and on the table is created by AttachTable and destroyed by DetachTable.
 void VRDevice::CreateSession()
+{
+   const uint64_t start = usec();
+   if (m_session == XR_NULL_HANDLE)
+      OpenSession();
+   else
+      PLOGI << "OpenXR session kept from the previous table";
+   AttachTable();
+   PLOGI << "Table attached to the OpenXR session in " << ((usec() - start) / 1000) << "ms";
+}
+
+void VRDevice::OpenSession()
 {
    assert(m_xrInstance != XR_NULL_HANDLE);
    assert(m_systemID != XR_NULL_SYSTEM_ID);
@@ -1438,39 +1447,6 @@ void VRDevice::CreateSession()
    m_sessionState = XR_SESSION_STATE_UNKNOWN;
    m_sessionRunning = false;
 
-   m_visibilityMaskDirty = true;
-
-   // Evaluate scene size to be able to define a good far plane
-   // Adjust near/far plane for each projected bounding box
-   vector<Vertex3Ds> bounds;
-   bounds.reserve(16);
-   Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
-   Vertex3Ds sceneMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-   for (IEditable* editable : g_pplayer->m_ptable->GetParts())
-   {
-      bool prevVisibility;
-      Primitive* prim = editable->GetItemType() == ItemTypeEnum::eItemPrimitive ? static_cast<Primitive*>(editable) : nullptr;
-      if (prim)
-      {
-         prevVisibility = prim->m_d.m_visible;
-         prim->m_d.m_visible = true;
-      }
-      editable->GetBoundingVertices(bounds, nullptr);
-      if (prim)
-         prim->m_d.m_visible = prevVisibility;
-      for (const auto& v : bounds)
-      {
-         sceneMin.x = min(sceneMin.x, v.x);
-         sceneMin.y = min(sceneMin.y, v.y);
-         sceneMin.z = min(sceneMin.z, v.z);
-         sceneMax.x = max(sceneMax.x, v.x);
-         sceneMax.y = max(sceneMax.y, v.y);
-         sceneMax.z = max(sceneMax.z, v.z);
-      }
-      bounds.clear();
-   }
-   m_sceneSize = (sceneMax - sceneMin).Length();
-
    // Create an XrSessionCreateInfo structure.
    XrSessionCreateInfo sessionCI { XR_TYPE_SESSION_CREATE_INFO };
    sessionCI.next = m_backend->GetGraphicsBinding();
@@ -1478,29 +1454,6 @@ void VRDevice::CreateSession()
    sessionCI.systemId = m_systemID;
    OPENXR_CHECK(xrCreateSession(m_xrInstance, &sessionCI, &m_session), "Failed to create Session.");
    assert(m_session);
-
-   // Initialize passthrough if supported (Meta Quest MR feature)
-   if (m_passthroughExtensionSupported && g_pplayer && g_settingsService.GetActiveSettings().GetPlayerVR_UsePassthroughColor())
-   {
-      PFN_xrCreatePassthroughFB xrCreatePassthroughFB;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&xrCreatePassthroughFB), "Failed to get xrCreatePassthroughFB.");
-
-      XrPassthroughCreateInfoFB passthroughCI { XR_TYPE_PASSTHROUGH_CREATE_INFO_FB };
-      passthroughCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
-      OPENXR_CHECK(xrCreatePassthroughFB(m_session, &passthroughCI, &m_passthrough), "Failed to create passthrough.");
-
-      PFN_xrCreatePassthroughLayerFB xrCreatePassthroughLayerFB;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&xrCreatePassthroughLayerFB), "Failed to get xrCreatePassthroughLayerFB.");
-
-      XrPassthroughLayerCreateInfoFB passthroughLayerCI { XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB };
-      passthroughLayerCI.passthrough = m_passthrough;
-      passthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
-      passthroughLayerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
-      OPENXR_CHECK(xrCreatePassthroughLayerFB(m_session, &passthroughLayerCI, &m_passthroughLayer), "Failed to create passthrough layer.");
-
-      m_passthroughEnabled = true;
-      PLOGI << "Meta Quest passthrough initialized successfully";
-   }
 
    // Fill out an XrReferenceSpaceCreateInfo structure and create a reference XrSpace, specifying an identity pose as the origin and a stage space, defaulting to a local space.
    uint32_t referenceSpaceCount;
@@ -1528,105 +1481,17 @@ void VRDevice::CreateSession()
    // Get the supported swapchain formats as an array of int64_t and ordered by runtime preference.
    uint32_t formatCount = 0;
    OPENXR_CHECK(xrEnumerateSwapchainFormats(m_session, 0, &formatCount, nullptr), "Failed to enumerate Swapchain Formats");
-   std::vector<int64_t> formats(formatCount);
-   OPENXR_CHECK(xrEnumerateSwapchainFormats(m_session, formatCount, &formatCount, formats.data()), "Failed to enumerate Swapchain Formats");
-   if (m_backend->SelectDepthSwapchainFormat(formats) == 0)
+   m_swapchainFormats.resize(formatCount);
+   OPENXR_CHECK(xrEnumerateSwapchainFormats(m_session, formatCount, &formatCount, m_swapchainFormats.data()), "Failed to enumerate Swapchain Formats");
+   if (m_backend->SelectDepthSwapchainFormat(m_swapchainFormats) == 0)
    {
       PLOGE << "Failed to find depth format for Swapchain." ;
       assert(false);
    }
 
-   for (int i = 0; i < 2; i++)
-   {
-      SwapchainInfo& swapchain = i == 0 ? m_colorSwapchainInfo : m_depthSwapchainInfo;
-      swapchain.backendFormat = i == 0 ? m_backend->SelectColorSwapchainFormat(formats) : m_backend->SelectDepthSwapchainFormat(formats);
-      swapchain.width = m_eyeWidth;
-      swapchain.height = m_eyeHeight;
-      swapchain.arraySize = static_cast<uint32_t>(m_viewConfigurationViews.size());
+   CreateSwapchains();
 
-      XrSwapchainCreateInfo swapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
-      swapchainCreateInfo.arraySize = swapchain.arraySize;
-      swapchainCreateInfo.format = swapchain.backendFormat;
-      swapchainCreateInfo.width = swapchain.width;
-      swapchainCreateInfo.height = swapchain.height;
-      swapchainCreateInfo.mipCount = 1;
-      swapchainCreateInfo.faceCount = 1;
-      swapchainCreateInfo.sampleCount = m_viewConfigurationViews[0].recommendedSwapchainSampleCount;
-      swapchainCreateInfo.createFlags = 0;
-      swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT
-         | (i == 0 ? (XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT) : (XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT));
-      // Let the runtime attach fragment density maps to the color swapchain: the foveation profile is applied to it in ApplyFoveation
-      XrSwapchainCreateInfoFoveationFB foveationCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO_FOVEATION_FB };
-      foveationCreateInfo.flags = XR_SWAPCHAIN_CREATE_FOVEATION_FRAGMENT_DENSITY_MAP_BIT_FB;
-      if (i == 0 && m_foveationExtensionSupported)
-         swapchainCreateInfo.next = &foveationCreateInfo;
-      OPENXR_CHECK(xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.swapchain), "Failed to create Swapchain");
-
-      uint32_t swapchainImageCount;
-      OPENXR_CHECK(xrEnumerateSwapchainImages(swapchain.swapchain, 0, &swapchainImageCount, nullptr), "Failed to enumerate Swapchain Images.");
-      m_backend->RequestFoveationImages(i == 0 && m_foveationExtensionSupported);
-      XrSwapchainImageBaseHeader* swapchainImages = m_backend->AllocateSwapchainImageData(swapchain.swapchain, i == 0 ? SwapchainType::COLOR : SwapchainType::DEPTH, swapchainImageCount);
-      OPENXR_CHECK(xrEnumerateSwapchainImages(swapchain.swapchain, swapchainImageCount, &swapchainImageCount, swapchainImages), "Failed to enumerate Swapchain Images.");
-      m_backend->CreateImageViews(swapchain);
-      if (i == 0 && m_foveationExtensionSupported)
-      {
-         if (m_backend->CreateFoveationTextures(swapchain))
-            PLOGI << "Foveated rendering: " << swapchain.foveationTextures.size() << " density maps of " << swapchain.foveationWidth << 'x' << swapchain.foveationHeight << " received from the runtime";
-         else
-            PLOGI << "Foveated rendering: no density map from the runtime" << (m_backend->IsFragmentDensityMapSupported() ? "" : " (fragment density maps not supported by this build or driver)");
-      }
-   }
-   m_swapchainRenderTargets.resize(m_colorSwapchainInfo.imageViews.size() * m_depthSwapchainInfo.imageViews.size());
-   ApplyFoveation();
-   if (m_foveationExtensionSupported)
-      CreateOwnFoveationMap();
-
-   #ifndef VPX_STEAM_FRAME // Steam Frame Edition: the UI is a panel standing in the room, drawn with the scene (see UpdateUIPanel)
-   // Create a dedicated mono swapchain for the LiveUI, submitted as a view-locked quad composition layer. This avoids
-   // the compositor reprojection shaking the (head-locked) UI, as well as the fake stereo offset that made it unfocusable.
-   if (m_viewSpace != XR_NULL_HANDLE)
-   {
-      m_uiSwapchainInfo.backendFormat = m_backend->SelectColorSwapchainFormat(formats);
-      m_uiSwapchainInfo.width = m_eyeWidth;
-      m_uiSwapchainInfo.height = m_eyeHeight;
-      m_uiSwapchainInfo.arraySize = 1;
-
-      XrSwapchainCreateInfo swapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
-      swapchainCreateInfo.arraySize = 1;
-      swapchainCreateInfo.format = m_uiSwapchainInfo.backendFormat;
-      swapchainCreateInfo.width = m_uiSwapchainInfo.width;
-      swapchainCreateInfo.height = m_uiSwapchainInfo.height;
-      swapchainCreateInfo.mipCount = 1;
-      swapchainCreateInfo.faceCount = 1;
-      swapchainCreateInfo.sampleCount = 1;
-      swapchainCreateInfo.createFlags = 0;
-      swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
-      OPENXR_CHECK(xrCreateSwapchain(m_session, &swapchainCreateInfo, &m_uiSwapchainInfo.swapchain), "Failed to create UI Swapchain");
-      if (m_uiSwapchainInfo.swapchain != XR_NULL_HANDLE)
-      {
-         uint32_t swapchainImageCount;
-         OPENXR_CHECK(xrEnumerateSwapchainImages(m_uiSwapchainInfo.swapchain, 0, &swapchainImageCount, nullptr), "Failed to enumerate UI Swapchain Images.");
-         XrSwapchainImageBaseHeader* swapchainImages = m_backend->AllocateSwapchainImageData(m_uiSwapchainInfo.swapchain, SwapchainType::COLOR, swapchainImageCount);
-         OPENXR_CHECK(xrEnumerateSwapchainImages(m_uiSwapchainInfo.swapchain, swapchainImageCount, &swapchainImageCount, swapchainImages), "Failed to enumerate UI Swapchain Images.");
-         m_backend->CreateImageViews(m_uiSwapchainInfo);
-         m_uiRenderTargets.resize(m_uiSwapchainInfo.imageViews.size());
-         if (m_uiSwapchainInfo.imageViews.empty())
-         { // Image enumeration failed, release the swapchain and fallback to rendering the UI inside the projection layer
-            m_backend->FreeSwapchainImageData(m_uiSwapchainInfo.swapchain);
-            OPENXR_CHECK(xrDestroySwapchain(m_uiSwapchainInfo.swapchain), "Failed to destroy UI Swapchain");
-            m_uiSwapchainInfo.swapchain = XR_NULL_HANDLE;
-         }
-      }
-   }
-   #endif
-
-   // The runtime's performance counters (app GPU frame time on the Steam Frame, logged every 5 s): for the dynamic resolution, and when
-   // measuring (VPX_XR_METRICS=1 for the counters alone, VPX_GPU_PROFILE=1 for the counters and bgfx's per-target breakdown). They cost the
-   // runtime a timestamp query per frame, and SteamVR mishandles them across sessions (see ReleaseSession)
-   if (m_dynamicResolution || getenv("VPX_XR_METRICS") != nullptr || getenv("VPX_GPU_PROFILE") != nullptr)
-      EnablePerformanceCounters();
-
-   auto inputHandler = std::make_unique<XRInputHandler>(g_pplayer->m_pininput, m_xrInstance, m_session, m_eyeGazeSystemSupported);
+   auto inputHandler = std::make_unique<XRInputHandler>(m_xrInstance, m_session, m_eyeGazeSystemSupported);
    if (m_eyeGazeSystemSupported)
    {
       if (const XrAction gazeAction = inputHandler->GetAction("/user/eyes_ext/input/gaze_ext/pose"); gazeAction != XR_NULL_HANDLE)
@@ -1665,7 +1530,195 @@ void VRDevice::CreateSession()
       }
    }
    m_xrInputHandler = inputHandler.get();
-   g_pplayer->m_pininput.AddInputHandler(std::move(inputHandler));
+   m_xrInputHandlerOwned = std::move(inputHandler); // Given to the input manager of each table (see AttachTable)
+}
+
+// The color and depth swapchains (and the UI one, except in the Steam Frame Edition) at the size of the eyes, without the textures BGFX wraps them with
+void VRDevice::CreateSwapchains()
+{
+   for (int i = 0; i < 2; i++)
+   {
+      SwapchainInfo& swapchain = i == 0 ? m_colorSwapchainInfo : m_depthSwapchainInfo;
+      swapchain.backendFormat = i == 0 ? m_backend->SelectColorSwapchainFormat(m_swapchainFormats) : m_backend->SelectDepthSwapchainFormat(m_swapchainFormats);
+      swapchain.width = m_eyeWidth;
+      swapchain.height = m_eyeHeight;
+      swapchain.arraySize = static_cast<uint32_t>(m_viewConfigurationViews.size());
+
+      XrSwapchainCreateInfo swapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
+      swapchainCreateInfo.arraySize = swapchain.arraySize;
+      swapchainCreateInfo.format = swapchain.backendFormat;
+      swapchainCreateInfo.width = swapchain.width;
+      swapchainCreateInfo.height = swapchain.height;
+      swapchainCreateInfo.mipCount = 1;
+      swapchainCreateInfo.faceCount = 1;
+      swapchainCreateInfo.sampleCount = m_viewConfigurationViews[0].recommendedSwapchainSampleCount;
+      swapchainCreateInfo.createFlags = 0;
+      swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT
+         | (i == 0 ? (XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT) : (XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT));
+      // Let the runtime attach fragment density maps to the color swapchain: the foveation profile is applied to it in ApplyFoveation
+      XrSwapchainCreateInfoFoveationFB foveationCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO_FOVEATION_FB };
+      foveationCreateInfo.flags = XR_SWAPCHAIN_CREATE_FOVEATION_FRAGMENT_DENSITY_MAP_BIT_FB;
+      if (i == 0 && m_foveationExtensionSupported)
+         swapchainCreateInfo.next = &foveationCreateInfo;
+      OPENXR_CHECK(xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.swapchain), "Failed to create Swapchain");
+
+      uint32_t swapchainImageCount;
+      OPENXR_CHECK(xrEnumerateSwapchainImages(swapchain.swapchain, 0, &swapchainImageCount, nullptr), "Failed to enumerate Swapchain Images.");
+      m_backend->RequestFoveationImages(i == 0 && m_foveationExtensionSupported);
+      XrSwapchainImageBaseHeader* swapchainImages = m_backend->AllocateSwapchainImageData(swapchain.swapchain, i == 0 ? SwapchainType::COLOR : SwapchainType::DEPTH, swapchainImageCount);
+      OPENXR_CHECK(xrEnumerateSwapchainImages(swapchain.swapchain, swapchainImageCount, &swapchainImageCount, swapchainImages), "Failed to enumerate Swapchain Images.");
+   }
+
+   #ifndef VPX_STEAM_FRAME // Steam Frame Edition: the UI is a panel standing in the room, drawn with the scene (see UpdateUIPanel)
+   // Create a dedicated mono swapchain for the LiveUI, submitted as a view-locked quad composition layer. This avoids
+   // the compositor reprojection shaking the (head-locked) UI, as well as the fake stereo offset that made it unfocusable.
+   if (m_viewSpace != XR_NULL_HANDLE)
+   {
+      m_uiSwapchainInfo.backendFormat = m_backend->SelectColorSwapchainFormat(m_swapchainFormats);
+      m_uiSwapchainInfo.width = m_eyeWidth;
+      m_uiSwapchainInfo.height = m_eyeHeight;
+      m_uiSwapchainInfo.arraySize = 1;
+
+      XrSwapchainCreateInfo swapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
+      swapchainCreateInfo.arraySize = 1;
+      swapchainCreateInfo.format = m_uiSwapchainInfo.backendFormat;
+      swapchainCreateInfo.width = m_uiSwapchainInfo.width;
+      swapchainCreateInfo.height = m_uiSwapchainInfo.height;
+      swapchainCreateInfo.mipCount = 1;
+      swapchainCreateInfo.faceCount = 1;
+      swapchainCreateInfo.sampleCount = 1;
+      swapchainCreateInfo.createFlags = 0;
+      swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+      OPENXR_CHECK(xrCreateSwapchain(m_session, &swapchainCreateInfo, &m_uiSwapchainInfo.swapchain), "Failed to create UI Swapchain");
+      if (m_uiSwapchainInfo.swapchain != XR_NULL_HANDLE)
+      {
+         uint32_t swapchainImageCount;
+         OPENXR_CHECK(xrEnumerateSwapchainImages(m_uiSwapchainInfo.swapchain, 0, &swapchainImageCount, nullptr), "Failed to enumerate UI Swapchain Images.");
+         XrSwapchainImageBaseHeader* swapchainImages = m_backend->AllocateSwapchainImageData(m_uiSwapchainInfo.swapchain, SwapchainType::COLOR, swapchainImageCount);
+         OPENXR_CHECK(xrEnumerateSwapchainImages(m_uiSwapchainInfo.swapchain, swapchainImageCount, &swapchainImageCount, swapchainImages), "Failed to enumerate UI Swapchain Images.");
+      }
+   }
+   #endif
+}
+
+// The textures and render targets BGFX wraps the swapchain images with, for the BGFX of the table (see AttachTable)
+void VRDevice::CreateSwapchainViews()
+{
+   for (int i = 0; i < 2; i++)
+   {
+      SwapchainInfo& swapchain = i == 0 ? m_colorSwapchainInfo : m_depthSwapchainInfo;
+      m_backend->CreateImageViews(swapchain);
+      if (i == 0 && m_foveationExtensionSupported)
+      {
+         if (m_backend->CreateFoveationTextures(swapchain))
+            PLOGI << "Foveated rendering: " << swapchain.foveationTextures.size() << " density maps of " << swapchain.foveationWidth << 'x' << swapchain.foveationHeight << " received from the runtime";
+         else
+            PLOGI << "Foveated rendering: no density map from the runtime" << (m_backend->IsFragmentDensityMapSupported() ? "" : " (fragment density maps not supported by this build or driver)");
+      }
+   }
+   m_swapchainRenderTargets.resize(m_colorSwapchainInfo.imageViews.size() * m_depthSwapchainInfo.imageViews.size());
+   if (m_uiSwapchainInfo.swapchain != XR_NULL_HANDLE)
+   {
+      m_backend->CreateImageViews(m_uiSwapchainInfo);
+      m_uiRenderTargets.resize(m_uiSwapchainInfo.imageViews.size());
+      if (m_uiSwapchainInfo.imageViews.empty())
+      { // Image enumeration failed, release the swapchain and fallback to rendering the UI inside the projection layer
+         m_backend->FreeSwapchainImageData(m_uiSwapchainInfo.swapchain);
+         OPENXR_CHECK(xrDestroySwapchain(m_uiSwapchainInfo.swapchain), "Failed to destroy UI Swapchain");
+         m_uiSwapchainInfo.swapchain = XR_NULL_HANDLE;
+      }
+   }
+}
+
+// What depends on the table and on BGFX, which is started again for each table: from the render thread, once BGFX is initialized
+void VRDevice::AttachTable()
+{
+   assert(m_session != XR_NULL_HANDLE);
+   m_visibilityMaskDirty = true;
+   m_controllerModelsDirty = true;
+
+   // Evaluate scene size to be able to define a good far plane
+   // Adjust near/far plane for each projected bounding box
+   vector<Vertex3Ds> bounds;
+   bounds.reserve(16);
+   Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
+   Vertex3Ds sceneMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (IEditable* editable : g_pplayer->m_ptable->GetParts())
+   {
+      bool prevVisibility;
+      Primitive* prim = editable->GetItemType() == ItemTypeEnum::eItemPrimitive ? static_cast<Primitive*>(editable) : nullptr;
+      if (prim)
+      {
+         prevVisibility = prim->m_d.m_visible;
+         prim->m_d.m_visible = true;
+      }
+      editable->GetBoundingVertices(bounds, nullptr);
+      if (prim)
+         prim->m_d.m_visible = prevVisibility;
+      for (const auto& v : bounds)
+      {
+         sceneMin.x = min(sceneMin.x, v.x);
+         sceneMin.y = min(sceneMin.y, v.y);
+         sceneMin.z = min(sceneMin.z, v.z);
+         sceneMax.x = max(sceneMax.x, v.x);
+         sceneMax.y = max(sceneMax.y, v.y);
+         sceneMax.z = max(sceneMax.z, v.z);
+      }
+      bounds.clear();
+   }
+   m_sceneSize = (sceneMax - sceneMin).Length();
+
+   // Initialize passthrough if supported (Meta Quest MR feature)
+   if (m_passthroughExtensionSupported && g_pplayer && g_settingsService.GetActiveSettings().GetPlayerVR_UsePassthroughColor())
+   {
+      PFN_xrCreatePassthroughFB xrCreatePassthroughFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&xrCreatePassthroughFB), "Failed to get xrCreatePassthroughFB.");
+
+      XrPassthroughCreateInfoFB passthroughCI { XR_TYPE_PASSTHROUGH_CREATE_INFO_FB };
+      passthroughCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+      OPENXR_CHECK(xrCreatePassthroughFB(m_session, &passthroughCI, &m_passthrough), "Failed to create passthrough.");
+
+      PFN_xrCreatePassthroughLayerFB xrCreatePassthroughLayerFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&xrCreatePassthroughLayerFB), "Failed to get xrCreatePassthroughLayerFB.");
+
+      XrPassthroughLayerCreateInfoFB passthroughLayerCI { XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB };
+      passthroughLayerCI.passthrough = m_passthrough;
+      passthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+      passthroughLayerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+      OPENXR_CHECK(xrCreatePassthroughLayerFB(m_session, &passthroughLayerCI, &m_passthroughLayer), "Failed to create passthrough layer.");
+
+      m_passthroughEnabled = true;
+      PLOGI << "Meta Quest passthrough initialized successfully";
+   }
+
+   // The swapchains have the size of the eyes chosen by the table (ResFactor): created again within the session when it changed
+   if (m_colorSwapchainInfo.width != m_eyeWidth || m_colorSwapchainInfo.height != m_eyeHeight)
+   {
+      PLOGI << "Eye resolution changed since the previous table, the swapchains are created again";
+      DestroySwapchains();
+      CreateSwapchains();
+   }
+   CreateSwapchainViews();
+   ApplyFoveation();
+   if (m_foveationExtensionSupported)
+      CreateOwnFoveationMap();
+
+   // The runtime's performance counters (app GPU frame time on the Steam Frame, logged every 5 s): for the dynamic resolution, and when
+   // measuring (VPX_XR_METRICS=1 for the counters alone, VPX_GPU_PROFILE=1 for the counters and bgfx's per-target breakdown). They cost the
+   // runtime a timestamp query per frame, and SteamVR mishandles them across sessions (see CloseSession)
+   if (m_dynamicResolution || getenv("VPX_XR_METRICS") != nullptr || getenv("VPX_GPU_PROFILE") != nullptr)
+      EnablePerformanceCounters();
+
+   // The controllers, as a device of the table's input manager
+   if (m_xrInputHandlerOwned)
+   {
+      m_xrInputHandlerOwned->Bind(g_pplayer->m_pininput);
+      g_pplayer->m_pininput.AddInputHandler(std::move(m_xrInputHandlerOwned));
+   }
+
+   // Applied when the session starts running (see PollEvents), so here for a session kept from the previous table
+   if (m_sessionRunning)
+      ApplyDisplayRefreshRate();
 }
 
 void VRDevice::SetTableCaptureViewPoses(std::vector<XrView>& views, float vpuToWorldScale, TableCaptureView captureView) const
@@ -2056,35 +2109,26 @@ void VRDevice::DrainEvents()
    }
 }
 
+// From the render thread, before BGFX is shut down: what AttachTable created, then the session itself unless it is kept for the next table
 void VRDevice::ReleaseSession()
 {
    assert(m_session);
+   DetachTable();
+   if (!m_keepSession)
+      CloseSession();
+}
 
-   EndSession();
-
-   // Performance counters off before the session goes: SteamVR keeps their enabled state with the instance, destroys the timestamp query
-   // pools it created for them with the session, and reads those pools again from the next session's xrEndFrame when they were left enabled
-   // (crash in the driver on the Steam Frame, SteamVR 2.17.10, when a table was played after the lobby)
-   if (m_performanceCountersEnabled)
-   {
-      XrPerformanceMetricsStateMETA state { XR_TYPE_PERFORMANCE_METRICS_STATE_META };
-      state.enabled = XR_FALSE;
-      OPENXR_CHECK(m_xrSetPerformanceMetricsStateMETA(m_session, &state), "Failed to disable performance counters.");
-      m_performanceCountersEnabled = false;
-      m_performanceCounters.clear();
-      m_gpuFrameTimePath = XR_NULL_PATH;
-   }
-
-   // The action spaces of the controllers, then the input handler which owns their actions
+void VRDevice::DetachTable()
+{
    m_gazeRayValid = m_gazePointValid = false;
-   for (XrSpace* space : { &m_leftControllerSpace, &m_rightControllerSpace, &m_leftAimSpace, &m_rightAimSpace, &m_gazeSpace })
+
+   // The controllers: taken back from the table's input manager
+   if (m_xrInputHandler && m_xrInputHandlerOwned == nullptr)
    {
-      if (*space != XR_NULL_HANDLE)
-         OPENXR_CHECK(xrDestroySpace(*space), "Failed to destroy Controller Space.");
-      *space = XR_NULL_HANDLE;
+      std::unique_ptr<InputManager::InputHandler> handler = g_pplayer->m_pininput.RemoveInputHandler(m_xrInputHandler);
+      m_xrInputHandlerOwned.reset(static_cast<XRInputHandler*>(handler.release()));
+      m_xrInputHandlerOwned->Unbind();
    }
-   g_pplayer->m_pininput.RemoveInputHandler(m_xrInputHandler);
-   m_xrInputHandler = nullptr;
 
    #if defined(VPX_STEAM_FRAME)
    DestroyPerfPanel();
@@ -2115,15 +2159,43 @@ void VRDevice::ReleaseSession()
       m_foveationShadingRate = false;
       m_gazeMarker = nullptr;
    }
-   for (const auto& imageView : m_colorSwapchainInfo.imageViews)
-      bgfx::destroy(imageView);
-   for (const auto& imageView : m_depthSwapchainInfo.imageViews)
-      bgfx::destroy(imageView);
-   for (const auto& imageView : m_uiSwapchainInfo.imageViews)
-      bgfx::destroy(imageView);
+   for (SwapchainInfo* swapchain : { &m_colorSwapchainInfo, &m_depthSwapchainInfo, &m_uiSwapchainInfo })
+   {
+      for (const auto& imageView : swapchain->imageViews)
+         bgfx::destroy(imageView);
+      swapchain->imageViews.clear();
+   }
 
-   // Process BGFX resource destruction before XR resource destruction
+   // Process BGFX resource destruction before XR resource destruction (not in DestroySwapchains: a kept session is closed after BGFX is shut down)
    bgfx::frame(BGFX_FRAME_FLUSH);
+
+   DiscardVisibilityMask();
+
+   // The controller models (the renderer of the table built its meshes from them), and the passthrough (a setting of the table)
+   DestroyControllerModels();
+   m_controllerModelsDirty = true;
+   m_controllerModelsRetryTime = 0.;
+   if (m_passthroughLayer != XR_NULL_HANDLE)
+   {
+      PFN_xrDestroyPassthroughLayerFB xrDestroyPassthroughLayerFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughLayerFB), "Failed to get xrDestroyPassthroughLayerFB.");
+      OPENXR_CHECK(xrDestroyPassthroughLayerFB(m_passthroughLayer), "Failed to destroy passthrough layer.");
+      m_passthroughLayer = XR_NULL_HANDLE;
+   }
+   if (m_passthrough != XR_NULL_HANDLE)
+   {
+      PFN_xrDestroyPassthroughFB xrDestroyPassthroughFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughFB), "Failed to get xrDestroyPassthroughFB.");
+      OPENXR_CHECK(xrDestroyPassthroughFB(m_passthrough), "Failed to destroy passthrough.");
+      m_passthrough = XR_NULL_HANDLE;
+   }
+   m_passthroughEnabled = false;
+}
+
+// The swapchains, once BGFX does not use their images anymore (see DetachTable)
+void VRDevice::DestroySwapchains()
+{
+   assert(m_colorSwapchainInfo.imageViews.empty() && m_depthSwapchainInfo.imageViews.empty() && m_uiSwapchainInfo.imageViews.empty());
 
    // Free the Swapchain Image Data.
    if (m_colorSwapchainInfo.swapchain)
@@ -2146,42 +2218,52 @@ void VRDevice::ReleaseSession()
       OPENXR_CHECK(xrDestroySwapchain(m_depthSwapchainInfo.swapchain), "Failed to destroy Depth Swapchain");
    if (m_uiSwapchainInfo.swapchain)
       OPENXR_CHECK(xrDestroySwapchain(m_uiSwapchainInfo.swapchain), "Failed to destroy UI Swapchain");
-   m_colorSwapchainInfo.swapchain = XR_NULL_HANDLE;
-   m_colorSwapchainInfo.imageViews.clear();
-   m_depthSwapchainInfo.swapchain = XR_NULL_HANDLE;
-   m_depthSwapchainInfo.imageViews.clear();
-   m_uiSwapchainInfo.swapchain = XR_NULL_HANDLE;
-   m_uiSwapchainInfo.imageViews.clear();
+   m_uiSwapchainInfo = {};
    m_colorSwapchainInfo = {};
    m_depthSwapchainInfo = {};
+}
 
-   DiscardVisibilityMask();
+// Ends the session (letting the runtime stop it) then destroys it and all its objects, the instance is kept. After DetachTable.
+void VRDevice::CloseSession()
+{
+   if (m_session == XR_NULL_HANDLE)
+      return;
 
-   // The objects created with the session: controller models, reference space, passthrough
-   DestroyControllerModels();
-   m_controllerModelsDirty = true;
-   m_controllerModelsRetryTime = 0.;
+   EndSession();
+
+   // Performance counters off before the session goes: SteamVR keeps their enabled state with the instance, destroys the timestamp query
+   // pools it created for them with the session, and reads those pools again from the next session's xrEndFrame when they were left enabled
+   // (crash in the driver on the Steam Frame, SteamVR 2.17.10, when a table was played after the lobby)
+   if (m_performanceCountersEnabled)
+   {
+      XrPerformanceMetricsStateMETA state { XR_TYPE_PERFORMANCE_METRICS_STATE_META };
+      state.enabled = XR_FALSE;
+      OPENXR_CHECK(m_xrSetPerformanceMetricsStateMETA(m_session, &state), "Failed to disable performance counters.");
+      m_performanceCountersEnabled = false;
+      m_performanceCounters.clear();
+      m_gpuFrameTimePath = XR_NULL_PATH;
+   }
+
+   // The action spaces of the controllers, then the input handler which owns their actions
+   for (XrSpace* space : { &m_leftControllerSpace, &m_rightControllerSpace, &m_leftAimSpace, &m_rightAimSpace, &m_gazeSpace })
+   {
+      if (*space != XR_NULL_HANDLE)
+         OPENXR_CHECK(xrDestroySpace(*space), "Failed to destroy Controller Space.");
+      *space = XR_NULL_HANDLE;
+   }
+   assert(m_xrInputHandler == nullptr || m_xrInputHandlerOwned != nullptr); // Taken back from the input manager of the last table (see DetachTable)
+   m_xrInputHandlerOwned = nullptr;
+   m_xrInputHandler = nullptr;
+
+   DestroySwapchains();
+
+   // The reference spaces
    if (m_referenceSpace != XR_NULL_HANDLE)
       OPENXR_CHECK(xrDestroySpace(m_referenceSpace), "Failed to destroy Space.");
    m_referenceSpace = XR_NULL_HANDLE;
    if (m_viewSpace != XR_NULL_HANDLE)
       OPENXR_CHECK(xrDestroySpace(m_viewSpace), "Failed to destroy View Space.");
    m_viewSpace = XR_NULL_HANDLE;
-   if (m_passthroughLayer != XR_NULL_HANDLE)
-   {
-      PFN_xrDestroyPassthroughLayerFB xrDestroyPassthroughLayerFB;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughLayerFB), "Failed to get xrDestroyPassthroughLayerFB.");
-      OPENXR_CHECK(xrDestroyPassthroughLayerFB(m_passthroughLayer), "Failed to destroy passthrough layer.");
-      m_passthroughLayer = XR_NULL_HANDLE;
-   }
-   if (m_passthrough != XR_NULL_HANDLE)
-   {
-      PFN_xrDestroyPassthroughFB xrDestroyPassthroughFB;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughFB), "Failed to get xrDestroyPassthroughFB.");
-      OPENXR_CHECK(xrDestroyPassthroughFB(m_passthrough), "Failed to destroy passthrough.");
-      m_passthrough = XR_NULL_HANDLE;
-   }
-   m_passthroughEnabled = false;
 
    OPENXR_CHECK(xrDestroySession(m_session), "Failed to destroy Session.");
    m_session = XR_NULL_HANDLE;

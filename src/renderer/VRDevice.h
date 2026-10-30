@@ -140,9 +140,10 @@
 class MeshBuffer;
 
 // The VR device lives as long as the OpenXR instance: when tables are played one after another, the application can keep it from one table
-// to the next (see VPApp::AcquireVRDevice), so the runtime does not see the application quit and start again. Each table then creates its
-// own session (CreateSession / ReleaseSession, from the render thread) and applies its settings (ApplyTableSettings). SteamVR 2.17.10 does
-// not survive a second session on one instance (see VPApp::m_keepVRDeviceBetweenTables), so the device is created again for each table there.
+// to the next (see VPApp::AcquireVRDevice), so the runtime does not see the application quit and start again. The session is kept with it
+// (SetKeepSession): SteamVR 2.17.10 does not survive a second session on one instance. Each table attaches to the session what depends on it
+// and on BGFX, which is started again for each table on the same graphics device (CreateSession / ReleaseSession, from the render thread),
+// and applies its settings (ApplyTableSettings).
 class VRDevice final
 {
 public:
@@ -296,8 +297,10 @@ public:
    static bgfx::RendererType::Enum SelectRendererType(const Settings& settings);
    // The runtime lost the session or the instance: the device can't be used anymore and must be created again
    bool IsLost() const { return m_lost; }
-   void CreateSession();
-   void ReleaseSession(); // Ends the session (letting the runtime stop it) then destroys it and all its objects, the instance is kept
+   void CreateSession(); // Opens the session if it was not kept from the previous table, then attaches the table to it (see AttachTable)
+   void ReleaseSession(); // Detaches the table, then ends the session (letting the runtime stop it) and destroys it unless it is kept (the instance is kept)
+   // Keep the session when the table is released, for the next table played with this device (see VPApp::AcquireVRDevice)
+   void SetKeepSession(bool keep) { m_keepSession = keep; }
    void* GetGraphicContext() const;
    void* GetGraphicPlatformQueue() const;
    bgfx::RendererType::Enum GetGraphicContextType() const;
@@ -394,6 +397,15 @@ private:
    bool m_sessionRunning = false;
    bool m_exitRequested = false; // We asked the runtime to stop the session (see EndSession), so its EXITING state is expected
    std::atomic<bool> m_lost = false;
+   bool m_keepSession = false; // See SetKeepSession
+   void OpenSession(); // The session and what lives as long as it: reference spaces, swapchains, actions
+   void CloseSession(); // Ends and destroys the session (after DetachTable)
+   void AttachTable(); // What depends on the table and on its BGFX: textures wrapping the swapchain images, table settings, input manager
+   void DetachTable();
+   void CreateSwapchains();
+   void DestroySwapchains();
+   void CreateSwapchainViews(); // The textures and render targets BGFX wraps the swapchain images with
+   std::vector<int64_t> m_swapchainFormats; // Supported by the session, by order of preference of the runtime
    void EndSession();
    void DrainEvents();
    void UpdateEyeResolution(const Settings& settings);
@@ -529,7 +541,7 @@ private:
    PFN_xrSetPerformanceMetricsStateMETA m_xrSetPerformanceMetricsStateMETA = nullptr;
    PFN_xrQueryPerformanceMetricsCounterMETA m_xrQueryPerformanceMetricsCounterMETA = nullptr;
    vector<std::pair<string, XrPath>> m_performanceCounters;
-   bool m_performanceCountersEnabled = false; // Enabled on the current session (see CreateSession and ReleaseSession)
+   bool m_performanceCountersEnabled = false; // Enabled on the current session (see AttachTable and CloseSession)
    void EnablePerformanceCounters(); // On the current session, if the runtime has them and they are not enabled yet
    XrPath m_gpuFrameTimePath = XR_NULL_PATH; // Counter of the application's GPU time per frame (/perfmetrics_meta/app/gpu_frametime), if listed
 
@@ -636,5 +648,6 @@ private:
    float m_sceneSize = 0.f;
 
    XRInputHandler* m_xrInputHandler = nullptr;
+   std::unique_ptr<XRInputHandler> m_xrInputHandlerOwned; // The handler while no table's input manager has it (see AttachTable and DetachTable)
 #endif
 };
