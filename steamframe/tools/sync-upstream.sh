@@ -98,6 +98,6 @@ echo
 echo
 echo "$(git rev-list --count "$UPSTREAM..HEAD") commits of ours on top of upstream. Next:"
 echo "   - review the upstream commits above (kept in $REPORT): they can change what the fork relies on without any conflict"
-echo "   - review what changed in our commits: git range-diff $(git merge-base "$PREVIOUS" "$UPSTREAM" | cut -c1-12)..$PREVIOUS $UPSTREAM..HEAD"
+echo "   - review what changed in our commits: git range-diff $(git merge-base "$PREVIOUS" "$UPSTREAM" | cut -c1-12)..$PREVIOUS $UPSTREAM..HEAD -- . ':(exclude)src/assets/pinmame/memmaps/maps/**'   # generated files excluded: with them, it ran for hours on 2026-10-30"
 echo "   - build: macOS (cmake --build build), Steam Frame (Doc/steam-frame-build/build-linux-arm64.sh app), and test on the Frame"
 echo "   - publish, with the owner's approval: see the weekly routine in steamframe/README.md"
