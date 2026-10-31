@@ -4,7 +4,8 @@
 72 Hz (13.9 ms per frame), Standard FXAA, specular AA, foveated rendering, two tables: the Ghostbusters VR room (light, no ROM) and the
 Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
 (section 7), 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15) and the simplified meshes
-(section 8.2), and 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3).*
+(section 8.2), 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3), and the same day with
+the welding of meshes exported as separate triangles and the culling of the reflection, from Albator78 (section 8.2).*
 
 ## 1. Summary
 
@@ -37,6 +38,10 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
   both together 2.12 and 2.69 ms (10.56 → 8.44 ms, 9.94 → 7.25 ms), and 12 °C less on the GPU. A lighter playfield reflection only pays
   when it leaves out the dynamic parts: coarser meshes, a lower resolution or fewer parts in the probe save 0.1–0.5 ms of its
   1.05–1.23 ms. With the simplified meshes, both tables now hold 2160² with dynamic resolution (section 8.3).
+- **A table with meshes exported as separate triangles was the worst case for the simplified meshes (2026-10-30).** Albator78 lost only
+  9 % in its simplified meshes and ran at 36 fps (19.8 ms at 2160²): 8 flat-shaded meshes hold 1.30 M triangles the simplifier could not
+  touch. Welding them first and leaving out of the reflection what cannot land on the playfield gives 11.1–12.1 ms and 72 fps, for
+  4.5 s more loading (section 8.2).
 
 ## 2. Method
 
@@ -351,7 +356,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Measured** 2026-10-30 (8.3); next to implement, with a check worn |
 | 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | Bound measured 2026-10-30 (8.3); after item 10 |
 | 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Measured** 2026-10-30 (8.3); next after item 10 |
-| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29) |
+| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
 | 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | Not measurable on Addams and Ghostbusters (8.3): both hold 2160² at any target; to try on a table below the ceiling (LOTR) |
 
@@ -555,6 +560,59 @@ resolution as the player has it. Results on the Frame in `~/perf-test/results-si
 - Still to do: the owner's check worn (image up close, level switches while leaning in, the real field of view). The branch, built
   without the test hooks, is in the developer slot of the Frame since 2026-10-29 (package `steam-frame-package-simplify/`, its own folder;
   the libraries left in the build volume by older builds, SDL3 0.4.16, winevbs 0.8.5, ffmpeg 62 in the plugins, removed from it).
+
+**Albator78: meshes exported as separate triangles (2026-10-30).** The simplifier removed about 9 % on this table (595 626 → 503 806
+triangles at 0.5 VPU, 41 meshes simplified, 18 skipped) and the table was red. Eight meshes (`FEMME ALBATOR` 484 820 triangles, `Primitive026`
+294 072, `FEMME ROBE`, `Primitive044`, `Primitive027`, `ALBATOR`, `Moonbase`, `FEMME ROSE`) hold 1.30 M of the 1.78 M candidate triangles
+and are flat-shaded triangle soup, about 3 vertices per triangle: each position has several unrelated vertices, the simplifier's seams
+lock everything. They also cost 2.44 vertex shader runs per triangle, against 0.97 on Addams. Welding alone is not enough: the weight of
+the attributes, relative to the size of the mesh, is far too strict on a statue of 3500 VPU (positions only: `FEMME ALBATOR` → about 11 000
+triangles at 4 VPU). What the GPU spends (headless, fixed 2160², `~/perf-test/albator-series.sh` on the Frame, parts hidden by a sidecar
+script; 13.9 ms is the budget):
+
+| Run | Runtime GPU | Triangles per frame | Note |
+|---|---|---|---|
+| Base (2 runs) | 19.43, 19.64 ms | 2.64 M | 36 fps; reflection probe 5.5 ms, against 1.05 on Addams |
+| Simplified meshes off | 19.79 ms | 2.81 M | |
+| PuP off | 19.02 ms | | |
+| Reflection off | 14.46 ms | 1.40 M | |
+| The 8 meshes out of the reflection only | 17.09 ms | | noisy (14.69 to 28.40); the probe itself 5.5 → 1.23 ms |
+| The 8 meshes hidden | 10.32 ms | 0.38 M | |
+| Room geometry hidden | 10.79 ms | 0.54 M | |
+| Room geometry and sky hidden | 8.56 ms | | the sky costs about 2 ms |
+| Dynamic resolution | 10.22 ms | | 1526² on average, near the floor |
+
+Two changes, described in `docs/Steam Frame Branch.md` section 19. **Welding**: a mesh with at least 1.5 vertices per triangle is
+simplified from a welded copy, with weights independent of its size and meshoptimizer's permissive mode, and its levels draw one existing
+vertex per place. **Reflection culling**: a part is left out of a horizontal reflection when the lines from the mirrored eye through its
+box cannot land on the parts showing the probe. In the simulated headset the culling saves 133 000 of 635 000 triangles at the lockbar,
+modest now that the statues are cheap; it has no switch, so the Frame's numbers below are of both together.
+
+| Fixed 2160², headless (`~/perf-test/results-weld`) | Before | After |
+|---|---|---|
+| Albator78, runtime GPU (2 runs, alternated) | 19.84, 20.27 ms | **11.14, 12.06 ms** |
+| Frame rate | 36.0 fps | 71.8, 71.6 fps |
+| Triangles per frame | 2.64 M | 0.57 M |
+| Scene pass / reflection probe | 9.27 / 5.61 ms | 4.66 / 1.47 ms |
+| Frames missed per 5 s, late in the run | 180 | 0–2 |
+| Time from the table loaded to the start | 8.4 s | 12.9 s (simplification 13.8 → 34.5 s of CPU) |
+| Simplified meshes | 595 626 → 502 918 at 1 VPU, 18 skipped | 1 703 684 → 798 017 at 1 VPU, 10 skipped |
+| Addams, runtime GPU | 10.61 ms | 10.39 ms |
+| Addams, triangles per frame / start | 1.36 M / 3.10 s | 1.29 M / 3.26 s |
+
+- With dynamic resolution Albator78 now averages 2022² (mostly 2050 to 2160, 0–2 frames missed per 5 s), against 1526².
+- The GPU estimate from hiding the 8 meshes held: 10.3 ms hidden, 11.1–12.1 ms simplified.
+- Visual check in the simulated headset (6 poses, up to 3× crops, against the simplification off): the statues, ship, room and reflection
+  look the same, without smeared textures. The skull on the playfield loses its facets and comes out smoothly shaded, with slightly softer
+  teeth; a few tiny dark specks may show on the statue at 3×. The owner played the build in the headset on 2026-10-30: it works.
+- On Addams, 14 small meshes (82 000 triangles: `RGP10_steelbrushed*`, `Thing`, habit trails, static targets) also take the welded path;
+  the close-ups of the wire ramps and `Thing` look right.
+- Not settled: the runs last 100 s, with the GPU at 89–92 °C and the CPU at 93–97 °C at 72 fps, so a long play is not measured. Two 5 s
+  readings around 16 ms in one of the fixed runs, and one fall of dynamic resolution to the 1512² floor, remain unexplained, as does the
+  bloom pass at 1.5–2.8 ms instead of 1.0 ms. The same source gives fewer triangles on the Frame than on the Mac (798 017 against 859 966
+  at 1 VPU; not investigated), so the Mac's visual check is close to the Frame's meshes, not identical. Other tables of the library with
+  such meshes now take this path and were not surveyed. The levels stop at 16 VPU while parts as far as `Primitive026` (about 33 000 VPU)
+  could take about 36, and the sky's 2 ms is untouched.
 
 **Working without the Frame (2026-10-29).** The macOS build with the simulated headset (branch `xr-sim`, `docs/XR Simulator Branch.md`)
 does not give timings that transfer to the Frame: the Apple GPU and bgfx's Metal backend handle geometry and memory differently (more
