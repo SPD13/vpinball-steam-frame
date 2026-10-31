@@ -101,6 +101,9 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, bgfx:
       m_color_sampler = std::make_shared<Sampler>(rd, name + ".Color", type, colorTex, colFormat, width, height, false);
    if (bgfx::isValid(depthTex))
       m_depth_sampler = std::make_shared<Sampler>(rd, name + ".Depth", type, depthTex, depthFormat, width, height, false);
+   #if defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
+   m_plainFramebuffer = fbh; // A headset swapchain image may be foveated too (post-processing, see VRDevice)
+   #endif
 }
 #endif
 

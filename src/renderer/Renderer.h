@@ -289,6 +289,8 @@ public:
    void SetFragmentDensityMap(bgfx::TextureHandle map, bool shadingRate = false);
    // Offsets of the map's high density area for this frame, in pixels of the scene buffer, one (x, y) pair per eye
    void SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayers);
+   // The shading rate image of each post-processing target for this frame, given its size (an invalid handle shades it at full rate)
+   void SetPostProcessShadingRate(const std::function<bgfx::TextureHandle(int width, int height)>& imageForSize);
    #endif
 
    unsigned int GetPlayerModeVisibilityMask() const { return m_visibilityMask; }

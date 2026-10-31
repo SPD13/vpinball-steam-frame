@@ -553,6 +553,14 @@ void Renderer::SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayer
    if (m_pOffscreenBackBufferTexture2)
       m_pOffscreenBackBufferTexture2->SetFragmentDensityMapOffsets(offsetsXY, nLayers);
 }
+
+void Renderer::SetPostProcessShadingRate(const std::function<bgfx::TextureHandle(int width, int height)>& imageForSize)
+{
+   // The targets made so far (they are made on first use: one made later in the frame is foveated from the next frame on)
+   for (RenderTarget* const rt : { m_pPostProcessRenderTarget1, m_pPostProcessRenderTarget2, m_pPostProcessRenderTarget3 })
+      if (rt)
+         rt->SetFragmentDensityMap(imageForSize(rt->GetWidth(), rt->GetHeight()), true);
+}
 #endif
 
 void Renderer::DisableBallLighting(bool disableLightingForBalls)
