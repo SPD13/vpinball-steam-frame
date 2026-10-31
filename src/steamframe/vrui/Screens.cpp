@@ -11,6 +11,7 @@
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/SceneBufferFormat.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/ScoresPage.h"
@@ -218,6 +219,31 @@ private:
    }
 };
 
+// The format of the scene buffers (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
+class SceneBufferPage final : public InGameUIPage
+{
+public:
+   SceneBufferPage()
+      : InGameUIPage("Scene buffer"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_CompactSceneBuffer, //
+         []() { return SceneBufferFormat::IsCompactRequested(); }, //
+         [](bool v) { SceneBufferFormat::SetCompactRequested(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Scene buffer status"s, "Format the scene is rendered in"s,
+         [](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(("Scene buffer: " + SceneBufferFormat::GetStatus()).c_str());
+         }));
+   }
+};
+
 // The controls which have pages of their own (Controls screen)
 class MoreControlsPage final : public InGameUIPage
 {
@@ -278,6 +304,7 @@ constexpr const char* kMenuAndLobby = "vrui/menu-lobby";
 constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
+constexpr const char* kSceneBuffer = "vrui/scene-buffer";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
 // The items of a page which no section lists (an option added upstream) are shown by its 'rest' section.
@@ -321,6 +348,7 @@ static vector<Section> GetSections(Screen screen)
          Section { "Foveated rendering"s, kVR, { Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Prop(Settings::m_propPlayerVR_FoveateTonemapping),
                Prop(Settings::m_propPlayerVR_FoveateAntialiasing), Label("Foveation status"s) }, false, false },
          Section { "Simplified meshes"s, kSimplifiedMeshes, {}, true },
+         Section { "Scene buffer"s, kSceneBuffer, {}, true },
       };
 
    case Screen::Sound:
@@ -458,6 +486,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       if (vr)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
+      sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
       return CreateComposed(screen, "Steam Frame"s, "What the Steam Frame Edition adds to keep heavy tables at the headset's full resolution"s, std::move(sources));
    case Screen::Sound:
       sources.push_back(source(kAudio, std::make_unique<AudioSettingsPage>()));

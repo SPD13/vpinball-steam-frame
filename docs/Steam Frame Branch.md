@@ -38,6 +38,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Dynamic resolution in the headset**: the rendering resolution follows the GPU time of the frames, between a minimum and the table's resolution, so heavy tables and a hot headset keep their frame rate instead of judder on head movements, and light tables keep the full sharpness; a switch, a target and a minimum in the VR settings page, with a status line (section 13).
 - **Performance panel** (a tool to tune the tables, Display & Performance > Performance panel, off by default, saved at once): a panel standing left of the cabinet, facing the player, with the target (2160×2160 per eye at 72 Hz on the Frame), a rating of the table every 30 seconds (green: native resolution 95 % of the time and frames on time; yellow: on time at a lower resolution; red: frames missed, GPU or CPU bound) and the frame rate, resolution, GPU time and use, CPU per thread (logic, render, PinMAME, audio), clocks and temperatures of the last 3 minutes (section 18). The table page of the menu shows the last rating of the table, with its badge, whether the panel was on or not.
 - **Simplified meshes** (Steam Frame > Simplified meshes, on by default in the Frame build, per table or for all): the large 3D parts of heavy tables are drawn with fewer triangles where the difference cannot be seen from the player's eyes, and in full when the player leans in (section 19).
+- **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
 - **No passthrough between tables**: from choosing a table to its first frame, and back to the lobby, the "Loading <table>..." message stands in front of the player, in the table's forward direction (not where the head looks), on a black background, instead of the headset falling back to SteamVR's own scene (the passthrough on the Frame) while the previous table closes and the next one loads.
 
@@ -401,11 +402,45 @@ Switching between the lobby and a table showed SteamVR's own scene (the passthro
 - **Memory from table to table (Linux).** The process grew by about 10 MB per lobby ↔ table cycle on the Frame, still growing after 15 cycles (Addams Family 964 → 1207 MB at the table, 587 → 722 MB in the lobby), all of it heap: not a leak of VPX, but memory glibc kept. Its mmap threshold (the size above which a block gets its own mapping, given back when freed) rises after such a block is freed, up to 32 MB, so the big buffers of a table's loading (decoded textures) came from the heaps of the threads that allocate (an arena per thread, up to 8 per core; each table starts its own loading threads) and fragmented them. With `malloc_trim(0)` between two tables and a fixed threshold, the process went back to 125-133 MB between tables at every cycle; with the default threshold, what the trim could not give back rose from 158 to 643 MB. Measured over 15 cycles (table / lobby load, then memory at the table / in the lobby after the last one): default 2891 / 1835 ms, 1207 / 722 MB and growing; `MALLOC_ARENA_MAX=2` 3031 / 1850 ms, about 790 / 390 MB, flat; `MALLOC_ARENA_MAX=4` 2933 / 1859 ms, still growing (951 / 436 MB); the trim alone gave back 128-137 MB in 7-9 ms each time but did not stop the growth; a threshold of 256 KB or 1 MB with the trim 3086 / 1908 and 3057 / 1916 ms, about 780 / 258 MB, flat; the threshold of 1 MB alone 2982 / 1896 ms, 781 / 258 MB, flat (721 / 233 MB after the first cycle). **Fix:** the threshold is fixed at 1 MB before `main` on glibc (`mallopt(M_MMAP_THRESHOLD)` in `src/steamframe/Launcher.cpp`), which also stops glibc from adjusting it. Tables load 3 to 5 % slower (fresh pages for the big buffers); the process uses about 430 MB less at the table and 460 MB less in the lobby.
 - **Seen in the headset (2026-10-29)**: the switches work without the passthrough. The message then followed the head; at the owner's request it now stands in the table's forward direction, also checked in the headset.
 
+## 21. Compact scene buffer (2026-10-31)
+
+Files: `src/steamframe/SceneBufferFormat.h/.cpp` (new), `src/renderer/RenderTarget.cpp`, `src/renderer/Renderer.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`.
+
+VPX renders the scene into targets it asks as `RGB16F`, which bgfx makes RGBA16F: 8 bytes per pixel, written and blended by the scene pass
+(direct on the Frame, not tiled, so through memory) and read again by the bloom, the tonemap and the probes. RG11B10F holds the same range
+in 4 bytes. Measured on the Frame (headless, fixed 2160², foveated post-processing on, 2026-10-31): Addams 8.82 → 7.94 ms (−0.88 ms),
+Ghostbusters 8.23 → 6.71 ms (−1.52 ms); details and checks in `docs/Performance on the Steam Frame.md`, item 12 and section 8.4.
+
+- **What changes format.** `Player.CompactSceneBuffer` (on by default in the Frame build, off in the others) makes every target asked as `RGB16F` an RG11B10F one where the GPU
+  can render to it (`SceneBufferFormat::GetRGB16FFormat`, from `RenderTarget`'s constructor; MSAA needs its own capability): the scene
+  buffers, bloom, screen space reflection and motion blur buffers, the static prerender and the reflection and refraction probes. Nothing
+  else asks for `RGB16F`.
+- **Checks in the code (2026-10-31).** No alpha: every shader reads these targets as `.rgb` (tonemap, bloom, blur, SSR, motion blur, AO,
+  probes in the material shader, ball reflection of the previous frame, copy, mirror, stereo), no blend state uses the destination alpha,
+  and the blits between them are between targets made together. No negative value stored: the lights and additive flashers write a
+  negative color into a reverse subtract blend (`light.cpp`, `flasher.cpp`: dst · (1 − src) − src · α), whose result,
+  dst · (1 + |src|) + |src| · α, stays positive since blending runs on the unclamped shader output (floating-point attachments are not
+  clamped); the bloom clamps its own output at 0. Precision: 6 bits of mantissa for red and green, 5 for blue (10 in half floats), a step
+  of 1.6 % and 3.1 %, about one step of the 8-bit output in mid-tones, under the tonemap's dither; what may show is banding in smooth
+  blue gradients and where many additive layers stack, each blend being rounded.
+- **Live.** The menu sets the requested format; at the start of the next frame `Renderer::ApplySceneBufferFormat` (defined in
+  `SceneBufferFormat.cpp`, called from `Render3DScene` after `ResizeRenderTargets`) makes the scene buffers and bloom buffers again at the
+  same size, leaves the post-processing, reflection, motion blur, AO, static prerender and desktop display targets to be made again on
+  first use, and releases the probes' targets; the previous targets are deleted once the frames that use them are done, as
+  `ResizeRenderTargets` does for a resized window. The foveation images are attached again to the new targets with the next frame.
+- **Steam Frame screen.** A "Scene buffer" section (page of the fork, saved for the table or for all like the simplified meshes): the
+  switch and a status line (the format in use, or "Not supported by the GPU").
+- **Tested** on the Frame (switched live during a run: one frame of 11.9 ms, no error) and on the Mac (from a start in either format,
+  switched both ways), then checked in the headset by the owner on 2026-10-31, after which it was turned on by default in the Frame
+  build. The switch could first not be turned on with the pointer: the menu gave it the ID of the simplified meshes switch (fixed by
+  giving each section of a composed screen its own ID scope, `ComposedPage::Render`).
+
 ## Effects on existing builds
 
 - `-Play`, the editor and the Visual Studio build behave as before, except for the OpenXR changes that apply everywhere: the Vulkan extension filter, the extra controller inputs and default mappings, the menu panel and pointer, and the upstream VR fixes of section 8.
 - Standalone builds on Linux (glibc) fix the mmap threshold of malloc at 1 MB (section 20): less memory, no growth from table to table, tables load 3 to 5 % slower.
 - Standalone desktop builds have the simplified meshes (section 19) off by default (`Player.SimplifyMeshes`); on, they work in desktop views too.
+- Standalone desktop builds have the compact scene buffer (section 21) too, off by default (`Player.CompactSceneBuffer`); on, it applies to desktop views as well.
 - The dynamic resolution plumbing (render scale on passes and targets) is inert outside VR: the scale stays 1 and every view rect and texture coordinate is what it was.
 - Every build with the bgfx renderer gets the specular anti-aliasing of the material shader (section 12), except through Direct3D 11/12 until the shader headers are regenerated on Windows.
 - Standalone desktop builds record the scores of the library tables they play (`profiles.json`, `scores.json` in the preferences folder) and their PinMAME plugin falls back to the bundled memory maps (section 14); the table picker gets a Scores tab and a player item.
@@ -470,6 +505,8 @@ src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h
 src/steamframe/MeshSimplifier.h
 src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19)
+src/steamframe/SceneBufferFormat.h
+src/steamframe/SceneBufferFormat.cpp    scene buffers in RG11B10F, switched live (section 21)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md

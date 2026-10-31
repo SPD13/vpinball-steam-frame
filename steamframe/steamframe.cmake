@@ -45,6 +45,10 @@ target_sources(vpinball PRIVATE
    # Simplified render meshes of heavy tables (meshoptimizer's simplifier)
    src/steamframe/MeshSimplifier.h
    src/steamframe/MeshSimplifier.cpp
+
+   # Scene buffers in RG11B10F, switched live
+   src/steamframe/SceneBufferFormat.h
+   src/steamframe/SceneBufferFormat.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
