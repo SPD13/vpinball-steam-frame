@@ -8,6 +8,8 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 
 > [!CAUTION]
 > **This fork is not endorsed by, affiliated with, or supported by the Visual Pinball team or community.** It is developed with extensive AI-assisted coding, which is why it is kept apart from the official project. Please do **not** ask support questions about it in the Visual Pinball repositories, Discord servers or community forums: report problems and ask questions in [this fork's issues](https://github.com/SPD13/vpinball-steam-frame/issues). The official project is [vpinball/vpinball](https://github.com/vpinball/vpinball).
+>
+> **This fork applies and respects the licence terms of the upstream project** ([LICENSE](/LICENSE)): it is totally free and open source.
 
 [![Visual Pinball X, Steam Frame Edition: the trailer](/docs/img/steam-frame-trailer.jpg)](https://youtu.be/YvKycmiTYIY)
 
