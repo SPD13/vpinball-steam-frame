@@ -170,7 +170,11 @@ void ComposedPage::Render(float elapsedS)
       // Only the section of the selected item shows a selection
       const int selected = m_selected.section == s ? m_selected.index : -1;
       InGameUIPageView::SetSelectedIndex(*page, selected);
+      // The rows are identified by their index in their page: each section in its own ID scope, or the first items of two pages would
+      // share their widgets' IDs (a click on one switch then went to the other)
+      ImGui::PushID(s);
       Shell::RenderSection(*page, filter, elapsedS);
+      ImGui::PopID();
       // A click selects the clicked item (and adjusts it)
       if (const int clicked = InGameUIPageView::GetSelectedIndex(*page); clicked != selected && clicked >= 0)
          m_selected = { s, clicked };
