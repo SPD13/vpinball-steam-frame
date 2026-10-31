@@ -162,6 +162,8 @@ public:
    static constexpr float kOnTimeRatio = 0.98f;
    static constexpr float kNativeFraction = 0.95f;
    static constexpr double kMinValidSeconds = 15.;
+   // Not rated: every table starts at the lowest resolution with frames missed, whatever it needs afterwards (40 frames missed in these seconds on Addams, none later)
+   static constexpr double kStartupSeconds = 10.;
    static RatingResult Rate(const WindowStats& stats, float budgetMs, float targetMs);
    // Logic thread, when the table closes: the rating of all its valid frames since it started
    RatingResult GetRunRating();
@@ -180,7 +182,8 @@ private:
    int m_sampleCount = 0;
    int m_nextSample = 0;
    WindowStats m_window; // Current rating window
-   WindowStats m_run; // All the valid frames of the table
+   WindowStats m_run; // All the valid frames of the table, after its first seconds
+   double m_startupSeconds = 0.; // Played since the table started, up to kStartupSeconds
    int m_windowSamples = 0;
    RatingResult m_lastRating;
    FrameInfo m_target; // Last frame given: target, swapchain size, budget

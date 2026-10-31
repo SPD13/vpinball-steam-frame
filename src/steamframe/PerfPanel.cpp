@@ -500,6 +500,7 @@ void PerfPanel::SamplerThread()
          {
             ResetHistory();
             m_run = {};
+            m_startupSeconds = 0.;
          }
          m_sampleSerial++;
          m_samples[m_nextSample] = sample;
@@ -508,21 +509,25 @@ void PerfPanel::SamplerThread()
          m_system = system;
          if (frame.nativeWidth > 0)
             m_target = frame;
-         // Rating window and whole run: the valid frames only (headset worn, game played)
-         for (WindowStats* stats : { &m_window, &m_run })
-         {
-            stats->frames += frames.validFrames;
-            stats->periods += frames.validPeriods;
-            stats->nativeFrames += frames.nativeFrames;
-            stats->floorFrames += frames.floorFrames;
-            if (frame.budgetMs > 0.f)
-               stats->validSeconds += static_cast<double>(frames.validPeriods) * frame.budgetMs / 1000.;
-            if (frames.validFrames > 0 && frames.gpuReadings > 0)
+         // Rating window and whole run: the valid frames only (headset worn, game played), after the first seconds of the table
+         const bool rated = m_startupSeconds >= kStartupSeconds;
+         if (frame.budgetMs > 0.f)
+            m_startupSeconds += static_cast<double>(frames.validPeriods) * frame.budgetMs / 1000.;
+         if (rated)
+            for (WindowStats* stats : { &m_window, &m_run })
             {
-               stats->gpuMsSum += frames.gpuMsSum;
-               stats->gpuReadings += frames.gpuReadings;
+               stats->frames += frames.validFrames;
+               stats->periods += frames.validPeriods;
+               stats->nativeFrames += frames.nativeFrames;
+               stats->floorFrames += frames.floorFrames;
+               if (frame.budgetMs > 0.f)
+                  stats->validSeconds += static_cast<double>(frames.validPeriods) * frame.budgetMs / 1000.;
+               if (frames.validFrames > 0 && frames.gpuReadings > 0)
+               {
+                  stats->gpuMsSum += frames.gpuMsSum;
+                  stats->gpuReadings += frames.gpuReadings;
+               }
             }
-         }
          if (++m_windowSamples >= kWindowSamples)
          {
             m_lastRating = Rate(m_window, frame.budgetMs, frame.targetMs);
@@ -545,6 +550,7 @@ ImDrawList* PerfPanel::BuildWindow()
    static std::array<float, kNumSamples> times;
    static int count = 0, windowSamples = 0;
    static WindowStats window;
+   static bool startup = false;
    static RatingResult rating;
    static FrameInfo target;
    static SystemInfo system;
@@ -553,6 +559,7 @@ ImDrawList* PerfPanel::BuildWindow()
    {
       const std::lock_guard lock(m_historyMutex);
       copiedSerial = m_sampleSerial;
+      startup = m_startupSeconds < kStartupSeconds;
       count = m_sampleCount;
       for (int i = 0; i < count; i++)
       {
@@ -667,7 +674,7 @@ ImDrawList* PerfPanel::BuildWindow()
       const int secondsLeft = static_cast<int>(ceilf(static_cast<float>(kWindowSamples - windowSamples) * kSampleSeconds));
       ImGui::TextUnformatted(window.periods > 0
             ? std::format("In {} s: {:.0f} % native, {:.1f} % on time", secondsLeft, window.NativeFraction() * 100.f, window.FpsRatio() * 100.f).c_str()
-            : std::format("In {} s (not played)", secondsLeft).c_str());
+            : std::format("In {} s ({})", secondsLeft, startup ? "table starting" : "not played").c_str());
       ImGui::PopStyleColor();
       ImGui::PopFont();
       ImGui::EndGroup();
