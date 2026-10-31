@@ -346,7 +346,8 @@ static vector<Section> GetSections(Screen screen)
                Label("Dynamic resolution status"s) },
             false, false },
          Section { "Foveated rendering"s, kVR, { Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Prop(Settings::m_propPlayerVR_FoveateTonemapping),
-               Prop(Settings::m_propPlayerVR_FoveateAntialiasing), Label("Foveation status"s) }, false, false },
+               Prop(Settings::m_propPlayerVR_FoveateAntialiasing), Label("Foveation status"s),
+               Label("Foveated anti-aliasing status"s) }, false, false },
          Section { "Simplified meshes"s, kSimplifiedMeshes, {}, true },
          Section { "Scene buffer"s, kSceneBuffer, {}, true },
       };

@@ -66,6 +66,7 @@ void VRDevice::ReportPerfPanelFrame(int periods, float gpuMs)
    frame.foveationLevel = !m_foveationExtensionSupported ? -1 : (m_foveationMode == 0 || !m_foveationApplied) ? 0 : m_foveationMode;
    frame.foveationEyeTracked = frame.foveationLevel > 0 && m_foveationEyeTracked && m_foveationEyeTrackedSystemSupported && m_foveationEyeTrackedActive;
    frame.foveationFixedLow = frame.foveationLevel > 0 && !frame.foveationEyeTracked && m_foveationShadingRate;
+   frame.foveatedAntialiasing = frame.foveationLevel <= 0 || !m_foveationShadingRate || !IsFoveateAntialiasing() ? 0 : m_foveateAntialiasingMode == 1 ? 1 : 2;
    VPX::PerfPanel::Get().OnFrame(frame);
 }
 

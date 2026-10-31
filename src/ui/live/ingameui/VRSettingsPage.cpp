@@ -245,13 +245,19 @@ void VRSettingsPage::BuildPage()
       [this](bool v) { m_player->m_vrDevice->SetFoveateTonemapping(v); }));
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayerVR_FoveateAntialiasing, //
-      [this]() { return m_player->m_vrDevice->IsFoveateAntialiasing(); }, //
-      [this](bool v) { m_player->m_vrDevice->SetFoveateAntialiasing(v); }));
+      [this]() { return m_player->m_vrDevice->GetFoveateAntialiasingMode(); }, //
+      [this](int, int v) { m_player->m_vrDevice->SetFoveateAntialiasingMode(v); }));
    AddItem(std::make_unique<InGameUIItem>("Foveation status"s, "What the runtime does with the foveated rendering setting"s,
       [this](int, const InGameUIItem*)
       {
          ImGui::AlignTextToFramePadding();
          ImGui::TextUnformatted(("Foveation status: " + m_player->m_vrDevice->GetFoveationStatus()).c_str());
+      }));
+   AddItem(std::make_unique<InGameUIItem>("Foveated anti-aliasing status"s, "Whether the anti-aliasing pass is foveated, and why in automatic mode"s,
+      [this](int, const InGameUIItem*)
+      {
+         ImGui::AlignTextToFramePadding();
+         ImGui::TextUnformatted(("Anti-aliasing: " + m_player->m_vrDevice->GetFoveatedAntialiasingStatus()).c_str());
       }));
 
    // Rendering resolution (PlayerVR/ResFactor, a factor of the headset's recommended size, unset meaning 100 %). The swapchains are created

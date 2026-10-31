@@ -341,13 +341,24 @@ In the order they came, with the dead ends, since each one cost a build-and-run 
 Until then the image was attached to the scene buffers only: the periphery was shaded coarsely in the scene, then tonemapped and
 anti-aliased at full rate, 3.2 ms of the Addams frame at 2160². The rate attachment works on any frame buffer in the driver's direct
 path, so the tonemap and anti-aliasing passes get the same pattern, each with its own switch to judge them apart:
-`PlayerVR/FoveateTonemapping` and `PlayerVR/FoveateAntialiasing` (both on by default, "Foveated tone mapping" and "Foveated anti-aliasing"
-in the Steam Frame screen and the VR settings page, live). `Renderer::SetPostProcessShadingRate` attaches an image to the post-processing
+`PlayerVR/FoveateTonemapping` (on by default) and `PlayerVR/FoveateAntialiasing` (Always Off, Always On or Automatic, the default; see
+below), "Foveated tone mapping" and "Foveated anti-aliasing" in the Steam Frame screen and the VR settings page, live. `Renderer::SetPostProcessShadingRate` attaches an image to the post-processing
 targets made so far, `PostProcess1` (the tonemap's output) with the first switch, `PostProcess2/3` (the anti-aliasing passes and those
 after it) with the second, and the VR device attaches one to the headset swapchain image it wraps for the frame with the switch of the
 pass that writes it last (`Renderer::IsTonemapLastPostProcess`: FXAA, or the tonemap when no pass follows it). The anti-aliasing switch
 covers the sharpening and upscaling passes too, except a sharpening after FXAA, which writes `PostProcess1` again. The wrapped swapchain
 targets know their plain frame buffer for that (`RenderTarget` constructor taking a frame buffer).
+
+The foveated anti-aliasing is the one that shows most (2026-10-31): its edges are the last step before the headset. **Automatic** keeps it
+at full rate while the table holds its full resolution, and foveates it for the rest of the table once the table was below its full
+resolution for most frames of 10 of the last 60 seconds of play (`VRDevice::UpdateAutoFoveatedAntialiasing`, from the render thread's
+dynamic resolution update: the scale under 100 %, or at a fixed resolution the GPU time over the dynamic resolution target), the first
+minute of the table not counted. Tables start below their full resolution for up to half a minute: the first version, which counted it,
+turned it on for Lord of the Rings after 12 s, while with it Always Off the table was at 2160² after 35 s and stayed there (2158 px on
+average over two minutes, 11.0 ms of the 11.8 ms target, headless on 2026-10-31). A short heavy moment does not turn it on, and once on it stays on for the table: the time it saves (about 0.8 ms at 2160²) is what lets the
+table climb back to its full resolution, and turning it off there would take it down again. Each table starts with it off. The status
+line under the switch says which state it is in and why ("at full rate (automatic: 3 of the last 60 s below full resolution, foveated
+from 10)"), the log says when it turns on, and the performance panel's foveation line ends with "+ AA (auto)".
 
 The image is sized on its target and the pattern placed in the target's rendered part (all of them render their top left part at the
 dynamic resolution scale), so `UpdateShadingRateImage` keeps one image per target size: a single one in the usual case where the scene,

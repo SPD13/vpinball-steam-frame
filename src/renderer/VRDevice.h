@@ -329,10 +329,14 @@ public:
    // The tonemap and anti-aliasing passes shaded at the foveated rate as well (with the shading rate image only, see m_foveateTonemapping)
    bool IsFoveateTonemapping() const { return m_foveateTonemapping; }
    void SetFoveateTonemapping(bool foveate) { m_foveateTonemapping = foveate; }
-   bool IsFoveateAntialiasing() const { return m_foveateAntialiasing; }
-   void SetFoveateAntialiasing(bool foveate) { m_foveateAntialiasing = foveate; }
+   // Anti-aliasing: 0 always off, 1 always on, 2 automatic (on for the rest of the table once it could not hold its full resolution)
+   int GetFoveateAntialiasingMode() const { return m_foveateAntialiasingMode; }
+   void SetFoveateAntialiasingMode(int mode) { m_foveateAntialiasingMode = mode; }
+   bool IsFoveateAntialiasing() const { return m_foveateAntialiasingMode == 1 || (m_foveateAntialiasingMode == 2 && m_foveateAntialiasingAutoOn); }
+   bool IsFoveateAntialiasingAutoOn() const { return m_foveateAntialiasingAutoOn; } // Turned on by the automatic mode for this table
    // One line for the settings page: "not supported", "fixed", "eye-tracked", ...
    string GetFoveationStatus() const;
+   string GetFoveatedAntialiasingStatus() const; // Foveated or at full rate, and why in automatic mode
    // Dynamic resolution (see the private members below): the render scale follows the GPU time of the frames reported by the runtime
    bool IsDynamicResolution() const { return m_dynamicResolution; }
    void SetDynamicResolution(bool enabled);
@@ -611,7 +615,12 @@ private:
    // The post-processing passes too (only with the shading rate image): the tonemap, and the anti-aliasing with the passes after it; set
    // by the settings page while the render thread reads them
    std::atomic<bool> m_foveateTonemapping = true;
-   std::atomic<bool> m_foveateAntialiasing = true;
+   std::atomic<int> m_foveateAntialiasingMode = 2;
+   std::atomic<bool> m_foveateAntialiasingAutoOn = false; // Render thread (see UpdateAutoFoveatedAntialiasing), reset for each table
+   uint64_t m_autoAABelowSeconds = 0; // One bit per second of play, the latest in bit 0: most of its frames were below the full resolution
+   unsigned int m_autoAAFrames = 0, m_autoAABelowFrames = 0; // In the current second
+   float m_autoAAWarmupMs = 0.f; // Time played on the table so far, up to the warm-up that is not counted
+   void UpdateAutoFoveatedAntialiasing(bool belowFullResolution); // Render thread, once per frame with a GPU time reading
    bool ReadGaze(); // Updates m_foveationCenter from the runtime, true when the gaze is valid
    // Gaze as a ray (XR_EXT_eye_gaze_interaction), preferred over the runtime's foveation center since it can be taken with the head pose of its
    // sample and projected with the views of the frame: the point looked at stays put while the head moves. See LocateGaze.
