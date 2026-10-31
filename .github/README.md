@@ -4,7 +4,7 @@ An independent fork of [Visual Pinball X](https://github.com/vpinball/vpinball) 
 
 **Status: Working and tested as a standalone app on the Steam Frame.**
 
-**No tables or ROMs are included in this package**: bring your own. To learn more about Visual Pinball and find tables to download, see [VPForums](https://www.vpforums.org/); VR tables are in its [VR tables download section](https://www.vpforums.org/index.php?app=downloads&showcat=56).
+**No tables or ROMs are included in this package**: bring your own. To find tables to download, see the [Virtual Pinball Spreadsheet](https://virtualpinballspreadsheet.github.io/), and [VPForums](https://www.vpforums.org/), which is also the place to learn more about Visual Pinball; VR tables are in its [VR tables download section](https://www.vpforums.org/index.php?app=downloads&showcat=56).
 
 > [!CAUTION]
 > **This fork is not endorsed by, affiliated with, or supported by the Visual Pinball team or community.** It is developed with extensive AI-assisted coding, which is why it is kept apart from the official project. Please do **not** ask support questions about it in the Visual Pinball repositories, Discord servers or community forums: report problems and ask questions in [this fork's issues](https://github.com/SPD13/vpinball-steam-frame/issues). The official project is [vpinball/vpinball](https://github.com/vpinball/vpinball).
@@ -272,8 +272,8 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 ## Performance upgrades
 
 The Frame renders the tables natively, on the headset's own GPU, at 2160 × 2160 pixels per eye and 72 frames per second. The heavy
-Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 ms (72 fps),
-and every reference table holds the panel's full resolution.
+Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 to 8.2 ms (72 fps),
+and the reference tables run at 72 fps, at or close to the panel's full resolution.
 
 [![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/WXHtyRk26lo)
 
@@ -292,6 +292,7 @@ and every reference table holds the panel's full resolution.
 - **Culling**: parts entirely outside the view are not drawn: 0.6 ms on Lord of the Rings.
 - **Simplified meshes** (Steam Frame screen): heavy 3D parts drawn with fewer triangles where the eye cannot see the difference: 1.29 ms on Addams.
 - **Welded meshes and reflection culling**: meshes exported as separate triangles can be simplified, and parts that cannot show in the playfield reflection are not drawn in it: Albator78 from 20 to 11–12 ms, 36 → 72 fps.
+- **Reflections** (Steam Frame screen): extra mirrors and the VR room left out of the reflections, On, Off or Automatic, Off by default: Robot Invasion from 22.7 to 9.4 ms and 2001 from 14.5 to 8.3 ms; Maverick from 16.4 to 11.1 ms and WildWest from 13.9 to 10.9 ms.
 - **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
 - **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
 - **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).
@@ -549,6 +550,7 @@ Changes of the fork that are not specific to the Steam Frame and could be propos
 - **PinUP Player plugin fixes** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinUP%20Player%20on%20the%20Steam%20Frame.md)): six fixes to upstream's PUP plugin, listed in section 9: the root folder the scripts add the pack to, label images relative to the pack, hardware video decoding with a software fallback, recovery from a blocked hardware decoder, backgrounds that replace a looping media, and the label draw order below.
 - **PinUP Player label draw order** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinUP%20Player%20Label%20Draw%20Order.md)): the labels of a screen positioned on another one were drawn under that screen's labels when it is topmost, so a pack that shows its backglass frame as the overlay of a `ForceOn` screen 2 and its scores on a DMD screen positioned on it lost every score (City Hunter). Only the label passes are reordered; the commit applies to upstream `master` unchanged, and the document explains the rule, the alternatives and has a draft of the pull request.
 - **PinMAME memory maps on 4-bit memory** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinMAME%20Memory%20Maps%20on%204-bit%20Memory.md)): libpinmame applies the mask of a memory map field to the whole byte, where the format takes the nibble of a 4-bit memory first, so the game over lamps of the Bally AS-2518-17/-35 and Stern MPU-100 maps (43 maps, 169 ROMs) read "in game" forever and their games never end. A change of a few lines in libpinmame, checked against the format's reference parser and in VPX with Evel Knievel; the document has a draft of the pull request. Until it is merged, the fork carries the change as a patch of libpinmame (`steamframe/patches/pinmame/`).
+- **PinMAME memory maps on banked memory** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/PinMAME%20Memory%20Maps%20on%20Banked%20Memory.md)): `memory_get_read_ptr` gives no pointer for a bank on an 8-bit CPU and the memory map reader ignores banks, so the Williams System 7 games (3 maps, 18 ROMs), which run their first page of memory on a bank, read scores and game state that nothing ever writes. A change of a few lines in PinMAME; the document has a draft of the pull request. Until it is merged, the fork carries the change as a patch of libpinmame (`steamframe/patches/pinmame/`).
 - **Eye-tracked foveated rendering** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Foveated%20Rendering%20on%20the%20Steam%20Frame.md)): the bgfx patch works with any Vulkan driver that has fragment density maps, and the OpenXR part with any runtime that has the Meta foveation extensions (Quest). It would go to bgfx first; until then it stays in the Linux ARM64 build (section 9).
 - **FXAA with the luma in the alpha channel** ([full document](https://github.com/SPD13/vpinball-steam-frame/blob/master/docs/Performance%20on%20the%20Steam%20Frame.md#85-fxaa-with-the-luma-in-the-alpha-channel-2026-10-31)): the tonemap writes the luma of its output in the alpha channel and FXAA gathers it (4 fetches instead of 9 for the neighbourhood): the same image, the FXAA pass 23 % cheaper on the Frame. Two upstream shaders and the renderer, not guarded.
 
