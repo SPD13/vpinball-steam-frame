@@ -35,7 +35,9 @@ the welding of meshes exported as separate triangles and the culling of the refl
   on such readings, as a safety net (section 7.5).
 - **Two post-processing changes save a quarter of the frame (2026-10-30).** Shading the tonemap and FXAA passes at the foveated rate
   saves 1.35 ms on Addams and 1.53 ms on Ghostbusters at 2160²; a scene buffer in RG11B10F instead of RGBA16F saves 0.66 and 1.28 ms;
-  both together 2.12 and 2.69 ms (10.56 → 8.44 ms, 9.94 → 7.25 ms), and 12 °C less on the GPU. A lighter playfield reflection only pays
+  both together 2.12 and 2.69 ms (10.56 → 8.44 ms, 9.94 → 7.25 ms), and 12 °C less on the GPU. Both are now in the Frame build: the
+  foveated post-processing on by default, the compact scene buffer on by default too, after the owner's check in the headset (0.88 and 1.52 ms on top
+  of the first, measured 2026-10-31, section 8.4). A lighter playfield reflection only pays
   when it leaves out the dynamic parts: coarser meshes, a lower resolution or fewer parts in the probe save 0.1–0.5 ms of its
   1.05–1.23 ms. With the simplified meshes, both tables now hold 2160² with dynamic resolution (section 8.3).
 - **A table with meshes exported as separate triangles was the worst case for the simplified meshes (2026-10-30).** Albator78 lost only
@@ -355,7 +357,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
 | 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Done** (2026-10-30, in master 2026-10-31; `PlayerVR/FoveateTonemapping` and `PlayerVR/FoveateAntialiasing`, on by default): −1.67 ms on Addams, −1.79 ms on Ghostbusters as implemented |
 | 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | Bound measured 2026-10-30 (8.3); after item 10 |
-| 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Measured** 2026-10-30 (8.3); next after item 10 |
+| 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Done** 2026-10-31, a live switch on by default in the Frame build (`Player.CompactSceneBuffer`, Steam Frame > Scene buffer): −0.88 ms on Addams, −1.52 ms on Ghostbusters with item 10 on (8.4); checked worn by the owner |
 | 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
 | 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | Not measurable on Addams and Ghostbusters (8.3): both hold 2160² at any target; to try on a table below the ceiling (LOTR) |
@@ -412,7 +414,8 @@ Details:
    The scene pass runs direct (not tiled), so every scene fragment written or blended goes through memory, and the tonemap, bloom and
    probe read it again. RG11B10F is 4 bytes, renderable on Adreno, and already used by the texture compressor. To check first: that no
    pass reads the back buffer's alpha (screen-space transparency, refraction probes) and that no value is negative; then dark gradients
-   for banding (6-bit mantissa against 10).
+   for banding (6-bit mantissa against 10). Done on 2026-10-31 (section 8.4): no alpha read, no negative value stored, banding left to
+   the check worn.
 13. **Render-only simplification**: the measured gain of item 4 (weight 10, bound by distance): Addams 11.67 → 10.41 ms (0.5 VPU) or
    10.03 ms (1 VPU), its probe included; a coarser mesh in the probe adds about 0.3 ms more (probe 1.02 ms against 0.75 ms with
    strict 2 VPU). Iron Man and LOTR about 0.5 ms, Attack from Mars 0.2, light tables nothing. Approach in section 8.2.
@@ -681,7 +684,37 @@ Ghostbusters: scene 3.89, tonemap 1.66, FXAA 1.53, probe 1.23, bloom 0.88.
 
 Next: item 10 is implemented (on with the shading rate image, one image per target size, a live switch for each pass;
 `docs/Foveated Rendering on the Steam Frame.md`, section 11.2) and measured as implemented on the same day (Addams −1.67 ms, Ghostbusters −1.79 ms at
-2160², section 11.2 of that document); then item 12 after its checks.
+2160², section 11.2 of that document); then item 12 after its checks (section 8.4).
+
+### 8.4 Compact scene buffer: checks and measurements (2026-10-31)
+
+Item 12 as implemented: `Player.CompactSceneBuffer` (Steam Frame > Scene buffer, live; on by default in the Frame build since the owner checked it in the headset on 2026-10-31, off in the desktop builds) makes the targets VPX asks as
+`RGB16F` RG11B10F ones: the scene buffers, bloom, screen space reflection and motion blur buffers, static prerender, reflection and
+refraction probes (`src/steamframe/SceneBufferFormat.h`; mechanism in `docs/Steam Frame Branch.md`, section 21).
+
+Checks in the code:
+
+- **Alpha**: no reader. Every shader samples these targets as `.rgb` (tonemap, bloom, blur, SSR, motion blur, AO, the probes in the
+  material shader, the ball's reflection of the previous frame, copy, mirror, stereo); no blend state uses the destination alpha; the
+  blits between them are between targets made together.
+- **Negative values**: none stored. The lights and additive flashers output a negative color into a reverse subtract blend
+  (dst · (1 − src) − src · α, `light.cpp` and `flasher.cpp`), which gives dst · (1 + |src|) + |src| · α ≥ 0: the trick needs the blend
+  to take the shader output unclamped, which holds for floating-point attachments, RG11B10F included. The bloom clamps its output at 0.
+- **Precision**: 6 bits of mantissa for red and green, 5 for blue (10 in half floats): a step of 1.6 % and 3.1 %, about one step of the
+  8-bit output in mid-tones, under the tonemap's dither. What may show worn: banding in smooth blue gradients, and where many additive
+  layers stack (each blend is rounded).
+
+Measured on the Frame, headless at fixed 2160² with the foveated post-processing on (`Doc/test-hooks/gpu-series.sh`, runs `sboff`,
+`sbon`, `sbtoggle`, results in `~/perf-test/results-sbf`):
+
+| Table | Off | On | Gain | Per target |
+|---|---|---|---|---|
+| Addams | 8.82 ms | 7.94 ms | **−0.88 ms** | scene 5.19 → 4.60, post-processing 0.86 → 0.65, bloom 0.19 → 0.17, probe unchanged (1.02) |
+| Ghostbusters | 8.23 ms | 6.71 ms | **−1.52 ms** | scene 3.72 → 2.90, bloom 0.87 → 0.55, post-processing 0.85 → 0.62, probe unchanged (1.22) |
+
+More than the hook of 2026-10-30 (−0.66, −1.28): the tonemap reads half the bytes too. Switched live during a run (Addams, at frames
+3000 and 6000): the targets are made again with their foveation image, one frame of 11.9 ms, no error; the same on the Mac (Metal) on
+2001 and Star Trek LE, from a start in either format.
 
 ## 9. Reproduction
 

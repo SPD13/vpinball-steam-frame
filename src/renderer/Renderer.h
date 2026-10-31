@@ -375,6 +375,9 @@ private:
    RenderTarget* GetPreviousBackBufferTexture() const { return m_pOffscreenBackBufferTexture2; } // Same as back buffer but for previous frame
    void SwapBackBufferRenderTargets();
    void ResizeRenderTargets(); // Follows the playfield window size (resizable editor window, mobile rotation)
+   #if defined(VPX_STEAM_FRAME)
+   void ApplySceneBufferFormat(); // Scene buffers made again when their format is switched (src/steamframe/SceneBufferFormat.cpp)
+   #endif
 
    RenderTarget* m_pAORenderTarget1 = nullptr;
    RenderTarget* m_pAORenderTarget2 = nullptr;
