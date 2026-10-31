@@ -437,6 +437,7 @@ Ghostbusters 8.23 → 6.71 ms (−1.52 ms); details and checks in `docs/Performa
 
 ## Effects on existing builds
 
+- Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
 - `-Play`, the editor and the Visual Studio build behave as before, except for the OpenXR changes that apply everywhere: the Vulkan extension filter, the extra controller inputs and default mappings, the menu panel and pointer, and the upstream VR fixes of section 8.
 - Standalone builds on Linux (glibc) fix the mmap threshold of malloc at 1 MB (section 20): less memory, no growth from table to table, tables load 3 to 5 % slower.
 - Standalone desktop builds have the simplified meshes (section 19) off by default (`Player.SimplifyMeshes`); on, they work in desktop views too.

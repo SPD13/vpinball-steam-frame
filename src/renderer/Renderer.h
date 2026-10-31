@@ -419,6 +419,7 @@ private:
    RenderTarget* GetMotionBlurBufferTexture() { return m_activeView->GetMotionBlurBufferTexture(); }
    RenderTarget* GetBloomBufferTexture() const { return m_activeView->GetBloomBufferTexture(); }
    RenderTarget* GetBloomTmpBufferTexture() const { return m_activeView->GetBloomTmpBufferTexture(); }
+   bool IsFXAALumaInAlpha(const RenderView* view, const RenderTarget* tonemapRT) const; // The tonemap writes the luma of its output in the alpha channel for the FXAA pass
 
    // Ancillary window rendering
 

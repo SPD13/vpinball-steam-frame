@@ -1541,6 +1541,14 @@ void Renderer::MarkStaticsDirty()
 
 bool Renderer::IsBloomEnabled() const { return !m_bloomOff && (m_table->m_bloom_strength > 0.0f) && (g_pplayer->GetInfoMode() <= IF_DYNAMIC_ONLY); }
 
+// FXAA reads the luma of its source from the alpha channel when the tonemap wrote it there (fs_pp_fxaa.sc): the tonemap writes the 8-bit
+// post-processing target that an FXAA pass reads next (and nothing else reads its alpha). Not in the AO view, drawn by another shader
+bool Renderer::IsFXAALumaInAlpha(const RenderView* view, const RenderTarget* tonemapRT) const
+{
+   return (m_FXAA == Fast_FXAA || m_FXAA == Standard_FXAA || m_FXAA == Quality_FXAA) && tonemapRT == view->m_pPostProcessRenderTarget1
+      && tonemapRT->GetColorFormat() == colorFormat::RGBA8 && g_pplayer->GetInfoMode() != IF_AO_ONLY;
+}
+
 
 // org HDR -> display HDR spline-based remapping
 // inspired by the videolan spline tonemapper

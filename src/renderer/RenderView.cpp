@@ -1333,7 +1333,7 @@ void RenderView::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonema
       r->IsBloomEnabled() ? 1.f : 0.f, // Bloom
       (!isHdr2020 && (outputRT->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
       (pin != nullptr) ? 1.f : 0.f, /* LUT colorgrade */
-      0.f);
+      r->IsFXAALumaInAlpha(this, outputRT) ? 1.f : 0.f); // Luma in alpha
    if (r->IsBloomEnabled())
       rd->AddRenderTargetDependency(GetBloomBufferTexture());
    rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / (double)render_w), (float)(1.0 / (double)render_h),
@@ -1405,7 +1405,7 @@ RenderTarget* RenderView::ApplyTonemapping(RenderTarget* renderedRT, RenderTarge
          r->IsBloomEnabled() ? 1.f : 0.f, // Bloom
          (!isHdr2020 && (GetOutput()->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
          0.f, // No LUT colorgrade
-         0.f);
+         r->IsFXAALumaInAlpha(this, tonemapRT) ? 1.f : 0.f); // Luma in alpha
       for (const vec4& region : r->m_embeddedRegions)
       {
          Vertex3D_TexelOnly regionVerts[4] = { { 2.f * region.z - 1.f + m_screenOffset.x, 1.f - 2.f * region.y + m_screenOffset.y, 0.0f, region.z, region.y },
@@ -1668,8 +1668,9 @@ RenderTarget* RenderView::ApplyPostProcessedAntialiasing(RenderTarget* renderedR
       rd->m_FBShader->SetTexture(ShaderUniform::tex_fb_unfiltered, renderedRT->GetColorSampler());
       rd->AddRenderTargetDependency(GetBackBufferTexture(), true); // Depth is always taken from the MSAA resolved render buffer
       // Depth cannot be used as an early-out for VR since the hidden area mesh writes depth 0 in the render buffer
-      rd->m_FBShader->SetVector(
-         ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), (float)renderedRT->GetWidth(), r->m_stereo3D == STEREO_VR ? 0.f : 1.f);
+      // w: 1 when depth is available, plus 2 when the tonemap wrote the luma in the alpha channel (FXAA only)
+      rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), (float)renderedRT->GetWidth(),
+         (r->m_stereo3D == STEREO_VR ? 0.f : 1.f) + ((FXAA1 || FXAA2 || FXAA3) && r->IsFXAALumaInAlpha(this, renderedRT) ? 2.f : 0.f));
       rd->m_FBShader->SetTechnique(NFAA ? ShaderTechnique::NFAA : FXAA3 ? ShaderTechnique::FXAA3 : FXAA2 ? ShaderTechnique::FXAA2 : FXAA1 ? ShaderTechnique::FXAA1 : ShaderTechnique::FAAA);
       DrawOutputQuad(rd->m_FBShader, outputRT);
       return outputRT;
