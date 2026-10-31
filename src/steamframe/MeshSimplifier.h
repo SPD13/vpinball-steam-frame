@@ -15,7 +15,8 @@
 //
 // Not simplified: animated meshes, grouped parts, additive parts and light maps (unless they coincide with a simplified part), small meshes.
 // Meshes that coincide (same index list and vertex positions, like a part and its 'off' layer) are simplified once and share the result, so
-// that stacked layers stay exactly on top of each other.
+// that stacked layers stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
+// levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
 
 #include "math/Mesh.h"
 #include "math/matrix.h"

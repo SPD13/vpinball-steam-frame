@@ -10,8 +10,11 @@
 #include "ThreadPool.h"
 #include "meshoptimizer/meshoptimizer.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 
 namespace VPX
@@ -37,6 +40,21 @@ static constexpr float kProbeFactor = 2.f;
 static constexpr float kCoarserMargin = 0.8f;
 // Vertex positions of coinciding meshes differ by less than this, in VP units
 static constexpr float kCoincidence = 0.25f;
+// A mesh with this many vertices per triangle (a closed mesh that shares them has 0.5) is an export of separate triangles, usually each with its
+// own face normal. The simplifier cannot collapse anything on it, as every vertex position then has more wedges than it can follow, and each of
+// its triangles costs up to 3 vertex shader runs. Its levels are made from a welded copy (see Weld) and use only one vertex of each welded group.
+static constexpr float kUnweldedVerticesPerTriangle = 1.5f;
+// Welded vertices are within these of each other, in VP units and texture coordinates
+static constexpr float kWeldPosition = 0.01f, kWeldUV = 0.0005f;
+// Vertices with normals further apart than this stay apart: a hard edge of the mesh (cos 30 deg)
+static constexpr float kWeldCrease = 0.866f;
+// Change of the normal, in radians, that a level of a welded mesh may make when it uses all of its error bound
+static constexpr float kWeldNormalChange = 0.15f;
+// Options of the simplifier for a welded mesh. Permissive: it may collapse across seams of the texture, the attribute error above deciding. These
+// exports are cut in many small islands of the texture, which would otherwise keep 4 to 5 times more triangles.
+static constexpr unsigned int kWeldOptions = meshopt_SimplifyPermissive;
+// Texture coordinates beyond this are garbage of the export (seen up to 1e24): kept out of the simplifier's error
+static constexpr float kWeldMaxUV = 100.f;
 
 struct MeshSimplifier::Group
 {
@@ -74,6 +92,132 @@ static bool Coincide(const Primitive* a, const Primitive* b)
    for (size_t i = 0; i < va.size(); i++)
       if (fabsf((va[i].x - vb[i].x) * s.x) > kCoincidence || fabsf((va[i].y - vb[i].y) * s.y) > kCoincidence || fabsf((va[i].z - vb[i].z) * s.z) > kCoincidence)
          return false;
+   return true;
+}
+
+// Builds the welded copy of a mesh: 'pos' and 'attr' hold on return one vertex per group of mesh vertices at the same place with the same texture
+// coordinates and normals within kWeldCrease, its normal the average of the group. 'indices' is the mesh over these, without the triangles that
+// vanish, and 'toMesh' gives for each the vertex of the mesh that draws it: the one of the group with the closest normal. As the simplifier compares
+// attributes with the positions scaled to the mesh extent, 'normalWeight' (to divide by the mesh extent and multiply by a level's bound) and
+// 'uvWeight' make the weights that do not depend on the size of the mesh: a texture coordinate may then shift the artwork by the level's bound on
+// the surface, whatever the size of the part. Returns false for a mesh that holds invalid values, which is then simplified as it is.
+static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, vector<float>& attr, vector<unsigned int>& indices, vector<unsigned int>& toMesh, float& normalWeight, float& uvWeight)
+{
+   const size_t nv = pos.size() / 3;
+   struct Key
+   {
+      int64_t x, y, z;
+      int32_t u, v;
+      unsigned int id;
+   };
+   vector<Key> keys(nv);
+   for (size_t i = 0; i < nv; i++)
+   {
+      if (!std::isfinite(pos[i * 3]) || !std::isfinite(pos[i * 3 + 1]) || !std::isfinite(pos[i * 3 + 2]) || !std::isfinite(attr[i * 5]) || !std::isfinite(attr[i * 5 + 1]) || !std::isfinite(attr[i * 5 + 2]))
+         return false;
+      float& u = attr[i * 5 + 3];
+      float& v = attr[i * 5 + 4];
+      u = std::isfinite(u) ? clamp(u, -kWeldMaxUV, kWeldMaxUV) : 0.f;
+      v = std::isfinite(v) ? clamp(v, -kWeldMaxUV, kWeldMaxUV) : 0.f;
+      keys[i] = Key { std::llround(pos[i * 3] / kWeldPosition), std::llround(pos[i * 3 + 1] / kWeldPosition), std::llround(pos[i * 3 + 2] / kWeldPosition),
+         static_cast<int32_t>(std::lround(u / kWeldUV)), static_cast<int32_t>(std::lround(v / kWeldUV)), static_cast<unsigned int>(i) };
+   }
+   std::sort(keys.begin(), keys.end(), [](const Key& a, const Key& b) { return std::tie(a.x, a.y, a.z, a.u, a.v, a.id) < std::tie(b.x, b.y, b.z, b.u, b.v, b.id); });
+
+   const auto normal = [&attr](unsigned int i)
+   {
+      Vertex3Ds n(attr[i * 5], attr[i * 5 + 1], attr[i * 5 + 2]);
+      n.NormalizeSafe();
+      return n;
+   };
+   vector<unsigned int> group(nv); // The welded vertex of each vertex of the mesh
+   vector<Vertex3Ds> sum; // Sum of the normals of each welded vertex
+   vector<Vertex3Ds> first; // Normal of its first vertex, what the others are compared to
+   for (size_t a = 0, b; a < nv; a = b)
+   {
+      b = a + 1;
+      while (b < nv && std::tie(keys[a].x, keys[a].y, keys[a].z, keys[a].u, keys[a].v) == std::tie(keys[b].x, keys[b].y, keys[b].z, keys[b].u, keys[b].v))
+         b++;
+      const size_t base = sum.size();
+      for (size_t i = a; i < b; i++)
+      {
+         const Vertex3Ds n = normal(keys[i].id);
+         size_t g = base;
+         while (g < sum.size() && first[g].Dot(n) < kWeldCrease)
+            g++;
+         if (g == sum.size())
+         {
+            sum.push_back(Vertex3Ds(0.f, 0.f, 0.f));
+            first.push_back(n);
+         }
+         sum[g] += n;
+         group[keys[i].id] = static_cast<unsigned int>(g);
+      }
+   }
+
+   const size_t nw = sum.size();
+   vector<float> weldedPos(nw * 3), weldedAttr(nw * 5), closest(nw, -2.f);
+   toMesh.resize(nw);
+   for (Vertex3Ds& n : sum)
+      n.NormalizeSafe();
+   for (size_t i = 0; i < nv; i++)
+   {
+      const unsigned int g = group[i];
+      const float d = sum[g].Dot(normal(static_cast<unsigned int>(i)));
+      if (d <= closest[g])
+         continue;
+      closest[g] = d;
+      toMesh[g] = static_cast<unsigned int>(i);
+      std::copy_n(&pos[i * 3], 3, &weldedPos[g * 3]);
+      weldedAttr[g * 5 + 0] = sum[g].x;
+      weldedAttr[g * 5 + 1] = sum[g].y;
+      weldedAttr[g * 5 + 2] = sum[g].z;
+      weldedAttr[g * 5 + 3] = attr[i * 5 + 3];
+      weldedAttr[g * 5 + 4] = attr[i * 5 + 4];
+   }
+
+   // Size of a texture on the surface, in VP units per unit of texture coordinates: the median over the triangles, as a few have garbage ones
+   vector<float> scales;
+   scales.reserve(meshIndices.size() / 3);
+   vector<unsigned int> weldedIndices;
+   weldedIndices.reserve(meshIndices.size());
+   for (size_t i = 0; i + 2 < meshIndices.size(); i += 3)
+   {
+      const unsigned int i0 = meshIndices[i], i1 = meshIndices[i + 1], i2 = meshIndices[i + 2];
+      const unsigned int g0 = group[i0], g1 = group[i1], g2 = group[i2];
+      if (g0 == g1 || g1 == g2 || g0 == g2)
+         continue;
+      weldedIndices.push_back(g0);
+      weldedIndices.push_back(g1);
+      weldedIndices.push_back(g2);
+      const float* const p0 = &pos[i0 * 3], * const p1 = &pos[i1 * 3], * const p2 = &pos[i2 * 3];
+      const Vertex3Ds e1(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]), e2(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
+      const float* const t0 = &attr[i0 * 5 + 3], * const t1 = &attr[i1 * 5 + 3], * const t2 = &attr[i2 * 5 + 3];
+      const float uvArea = fabsf((t1[0] - t0[0]) * (t2[1] - t0[1]) - (t1[1] - t0[1]) * (t2[0] - t0[0]));
+      if (uvArea > 1e-10f && fabsf(t0[0]) < kWeldMaxUV && fabsf(t0[1]) < kWeldMaxUV && fabsf(t1[0]) < kWeldMaxUV && fabsf(t1[1]) < kWeldMaxUV && fabsf(t2[0]) < kWeldMaxUV && fabsf(t2[1]) < kWeldMaxUV)
+         scales.push_back(sqrtf(CrossProduct(e1, e2).Length() / uvArea));
+   }
+   if (weldedIndices.size() < 3 * kMinLevelTriangles)
+      return false;
+
+   Vertex3Ds lo(FLT_MAX, FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (size_t i = 0; i < nw; i++)
+   {
+      lo.x = min(lo.x, weldedPos[i * 3]); lo.y = min(lo.y, weldedPos[i * 3 + 1]); lo.z = min(lo.z, weldedPos[i * 3 + 2]);
+      hi.x = max(hi.x, weldedPos[i * 3]); hi.y = max(hi.y, weldedPos[i * 3 + 1]); hi.z = max(hi.z, weldedPos[i * 3 + 2]);
+   }
+   const float extent = max(max(max(hi.x - lo.x, hi.y - lo.y), hi.z - lo.z), 1e-6f);
+   normalWeight = 1.f / (extent * kWeldNormalChange);
+   if (scales.empty())
+      uvWeight = 0.f;
+   else
+   {
+      std::nth_element(scales.begin(), scales.begin() + scales.size() / 2, scales.end());
+      uvWeight = scales[scales.size() / 2] / extent;
+   }
+   pos.swap(weldedPos);
+   attr.swap(weldedAttr);
+   indices.swap(weldedIndices);
    return true;
 }
 
@@ -173,29 +317,39 @@ void MeshSimplifier::Simplify(const Group& group)
       attr[i * 5 + 3] = v.tu;
       attr[i * 5 + 4] = v.tv;
    }
-   static constexpr float weights[5] = { kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight };
+   float weights[5] = { kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight };
+
+   // Exports of separate triangles: the levels come from a welded copy of the mesh
+   vector<unsigned int> indices(mesh.m_indices), toMesh;
+   float normalWeight = 0.f, uvWeight = 0.f;
+   const bool welded = static_cast<float>(nv) >= kUnweldedVerticesPerTriangle * static_cast<float>(mesh.NumIndices() / 3) && Weld(mesh.m_indices, pos, attr, indices, toMesh, normalWeight, uvWeight);
+   if (welded)
+      weights[3] = weights[4] = uvWeight;
+   const size_t nSimplified = pos.size() / 3;
 
    auto levels = std::make_shared<MeshLevels>();
    levels->loadSize = p->m_d.m_vSize;
    levels->sourceIndices = mesh.NumIndices();
    levels->sourceVertices = nv;
    // The simplifier works on all the vertices it is given: each level is simplified from the vertices the previous one still uses ('local'
-   // indices over 'ids', the vertices of the mesh), which makes the coarser levels cheap
-   vector<unsigned int> ids(nv), local(mesh.m_indices);
-   for (size_t i = 0; i < nv; i++)
+   // indices over 'ids', the vertices given to the simplifier), which makes the coarser levels cheap
+   vector<unsigned int> ids(nSimplified), local(indices);
+   for (size_t i = 0; i < nSimplified; i++)
       ids[i] = static_cast<unsigned int>(i);
    vector<float> localPos = pos, localAttr = attr;
-   vector<int> remap(nv);
-   size_t sourceCount = mesh.NumIndices();
+   vector<int> remap(nSimplified);
+   size_t sourceCount = indices.size();
    float sourceError = 0.f;
    vector<unsigned int> dst(sourceCount);
    for (const float bound : kBounds)
    {
       if (bound <= sourceError)
          continue;
+      if (welded)
+         weights[0] = weights[1] = weights[2] = normalWeight * bound;
       float stepError = 0.f;
       const size_t n = meshopt_simplifyWithAttributes(dst.data(), local.data(), sourceCount, localPos.data(), ids.size(), sizeof(float) * 3, localAttr.data(),
-         sizeof(float) * 5, weights, 5, nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute, &stepError);
+         sizeof(float) * 5, weights, 5, nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute | (welded ? kWeldOptions : 0), &stepError);
       if (n < 3 * kMinLevelTriangles)
          break;
       if (static_cast<float>(n) > kKeepRatio * static_cast<float>(sourceCount))
@@ -231,6 +385,11 @@ void MeshSimplifier::Simplify(const Group& group)
          std::copy_n(&attr[ids[i] * 5], 5, &localAttr[i * 5]);
       }
    }
+   // The levels of a welded mesh draw vertices of the mesh
+   if (welded)
+      for (MeshLevels::Level& level : levels->levels)
+         for (unsigned int& i : level.indices)
+            i = toMesh[i];
 
    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
    const std::lock_guard<std::mutex> lock(m_statsMutex);
