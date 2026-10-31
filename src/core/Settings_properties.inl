@@ -155,6 +155,12 @@ PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts 
 PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, false);
 #endif
 PropFloat(Player, SimplifyMeshesError, "Allowed error"s, "Largest deviation of a simplified part from its mesh, in pixels of the view at its full render resolution"s, 0.25f, 4.f, 1.f);
+// Scene buffers in RG11B10F instead of RGBA16F, see src/steamframe/SceneBufferFormat.h; on in the build of the Steam Frame (checked in the headset)
+#ifdef VPX_STEAM_FRAME_HEADSET
+PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, true);
+#else
+PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, false);
+#endif
 #endif
 PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to manage Depth Buffer on a DirectX 9 build. May solve some rendering issues"s, false);
 PropBool(Player, SoftwareVertexProcessing, "Software Vertex Processing"s, "Activate this on a DirectX 9 build, if you have issues using an old Intel graphics chip"s, false);
