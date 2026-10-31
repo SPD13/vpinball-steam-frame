@@ -18,6 +18,8 @@
 #include "steamframe/PerfPanel.h"
 #endif
 
+#include <bit>
+
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
 //#define MSVC_CONCURRENCY_VIEWER
@@ -173,7 +175,12 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_foveationMode = settings.GetPlayerVR_Foveation();
       m_foveationEyeTracked = settings.GetPlayerVR_FoveationEyeTracked();
       m_foveateTonemapping = settings.GetPlayerVR_FoveateTonemapping();
-      m_foveateAntialiasing = settings.GetPlayerVR_FoveateAntialiasing();
+      m_foveateAntialiasingMode = settings.GetPlayerVR_FoveateAntialiasing();
+      m_foveateAntialiasingAutoOn = false; // The automatic mode decides again for each table
+      m_autoAABelowSeconds = 0;
+      m_autoAAFrames = 0;
+      m_autoAABelowFrames = 0;
+      m_autoAAWarmupMs = 0.f;
       m_foveationFlipX = settings.GetPlayerVR_FoveationFlipX();
       m_foveationFlipY = settings.GetPlayerVR_FoveationFlipY();
       m_dynamicResolution = settings.GetPlayerVR_DynamicResolution();
@@ -1157,6 +1164,21 @@ string VRDevice::GetFoveationStatus() const
                                       : "Fixed: eye tracking not active (enable it in the headset settings)"s + how;
 }
 
+string VRDevice::GetFoveatedAntialiasingStatus() const
+{
+   if (m_foveationMode == 0 || !m_foveationShadingRate)
+      return "at full rate (only foveated with the shading rate image of the foveated rendering)"s;
+   switch (m_foveateAntialiasingMode)
+   {
+   case 0: return "at full rate"s;
+   case 1: return "foveated"s;
+   default:
+      return m_foveateAntialiasingAutoOn ? "foveated (automatic: the table went below its full resolution)"s
+         : m_autoAAWarmupMs < 60000.f    ? "at full rate (automatic: decided after the first minute of the table)"s
+                                         : std::format("at full rate (automatic: {} of the last 60 s below full resolution, foveated from 10)", std::popcount(m_autoAABelowSeconds));
+   }
+}
+
 void VRDevice::EnablePerformanceCounters()
 {
    if (!m_performanceMetricsExtensionSupported || m_performanceCountersEnabled || m_session == XR_NULL_HANDLE)
@@ -1260,7 +1282,15 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
       ReportPerfPanelFrame(periods, gpuMs);
    #endif
    if (!m_dynamicResolution || gpuMs < 1.f) // No reading, or nothing rendered (the headset is not worn): keep the scale
+   {
+      // At a fixed resolution, the frames fall short when their GPU time is over the target dynamic resolution would keep
+      if (gpuMs >= 1.f && m_frameBudgetMs > 0.f)
+      {
+         m_smoothedGpuMs = m_smoothedGpuMs <= 0.f ? gpuMs : m_smoothedGpuMs + (gpuMs - m_smoothedGpuMs) * 0.2f;
+         UpdateAutoFoveatedAntialiasing(m_smoothedGpuMs > m_frameBudgetMs * m_dynamicResolutionTarget);
+      }
       return;
+   }
    const float budgetMs = m_frameBudgetMs;
    const float targetMs = budgetMs * m_dynamicResolutionTarget;
    const float minScale = clamp(m_dynamicResolutionMinScale.load(), 0.5f, 1.f);
@@ -1319,6 +1349,39 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
          scale += riseStep + 0.007f * clamp((targetMs * 0.97f - predictedMs) / (targetMs * 0.2f), 0.f, 1.f);
    }
    m_dynamicRenderScale = clamp(scale, minScale, 1.f);
+   UpdateAutoFoveatedAntialiasing(m_dynamicRenderScale < 0.995f);
+}
+
+// Automatic foveated anti-aliasing (Settings PlayerVR/FoveateAntialiasing = 2): kept at full rate, where its foveation shows most, while the table holds
+// its full resolution; turned on for the rest of the table once most frames of 10 of the last 60 seconds of play were below it (the scale under 100 %
+// with dynamic resolution, the GPU time over the target at a fixed resolution), so that a short heavy moment (a multiball) does not turn it on. It then
+// stays on: the time it saves (about 0.8 ms at 2160x2160) is what lets the table climb back, and turning it off there would take the table down again.
+// The first minute of a table is not counted: tables run below their full resolution for up to half a minute after they start (Lord of the Rings,
+// 2026-10-31: 84 to 96 % for 30 s, then at full size with the anti-aliasing at full rate). Only counted while the scene is foveated with the shading
+// rate image, the only way the anti-aliasing pass is foveated.
+void VRDevice::UpdateAutoFoveatedAntialiasing(bool belowFullResolution)
+{
+   if (m_foveateAntialiasingMode != 2 || m_foveateAntialiasingAutoOn || !m_foveationShadingRate || m_frameBudgetMs <= 0.f)
+      return;
+   if (m_autoAAWarmupMs < 60000.f)
+   {
+      m_autoAAWarmupMs += m_frameBudgetMs;
+      return;
+   }
+   m_autoAAFrames++;
+   if (belowFullResolution)
+      m_autoAABelowFrames++;
+   if (static_cast<float>(m_autoAAFrames) * m_frameBudgetMs < 1000.f)
+      return;
+   constexpr uint64_t lastMinute = (1ull << 60) - 1;
+   m_autoAABelowSeconds = ((m_autoAABelowSeconds << 1) | (m_autoAABelowFrames * 2 > m_autoAAFrames ? 1u : 0u)) & lastMinute;
+   m_autoAAFrames = 0;
+   m_autoAABelowFrames = 0;
+   if (std::popcount(m_autoAABelowSeconds) >= 10)
+   {
+      m_foveateAntialiasingAutoOn = true;
+      PLOGI << "Foveated anti-aliasing turned on (automatic): the table was below its full resolution for 10 of the last 60 seconds";
+   }
 }
 
 string VRDevice::GetDynamicResolutionStatus() const
@@ -2929,7 +2992,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             // The tonemap and anti-aliasing passes with the same pattern, at the size of their targets (the headset swapchain, written by the
             // last of them, gets its image once acquired, below)
             g_pplayer->m_renderer->SetPostProcessShadingRate([this, gazeValid](int w, int h) { return UpdateShadingRateImage(w, h, gazeValid); },
-               shadingRate && m_foveateTonemapping, shadingRate && m_foveateAntialiasing);
+               shadingRate && m_foveateTonemapping, shadingRate && IsFoveateAntialiasing());
             if (!shadingRate)
             {
                // The density map has its high density area in the middle: the gaze moves it through offsets, in pixels of the scene buffer
@@ -3005,7 +3068,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
          // Foveated post-processing: the last pass of the frame (anti-aliasing, or the tonemap without it) writes the swapchain image
          const bool foveateSwapchain = g_pplayer->m_renderer && m_foveationShadingRate
-            && (g_pplayer->m_renderer->IsTonemapLastPostProcess() ? m_foveateTonemapping : m_foveateAntialiasing);
+            && (g_pplayer->m_renderer->IsTonemapLastPostProcess() ? m_foveateTonemapping.load() : IsFoveateAntialiasing());
          vrRenderTarget->SetFragmentDensityMap(foveateSwapchain ? UpdateShadingRateImage(vrRenderTarget->GetWidth(), vrRenderTarget->GetHeight(), m_shadingRateGazeValid)
                                                                 : bgfx::TextureHandle BGFX_INVALID_HANDLE,
             true);
