@@ -353,7 +353,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
 | 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
-| 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Measured** 2026-10-30 (8.3); next to implement, with a check worn |
+| 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Done** (2026-10-30, in master 2026-10-31; `PlayerVR/FoveateTonemapping` and `PlayerVR/FoveateAntialiasing`, on by default): −1.67 ms on Addams, −1.79 ms on Ghostbusters as implemented |
 | 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | Bound measured 2026-10-30 (8.3); after item 10 |
 | 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Measured** 2026-10-30 (8.3); next after item 10 |
 | 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
@@ -679,8 +679,9 @@ Ghostbusters: scene 3.89, tonemap 1.66, FXAA 1.53, probe 1.23, bloom 0.88.
 - **Dynamic resolution above 85 %** cannot be measured on these two tables: since the simplified meshes and the 2026-10-30 sync, both run
   at 2160² with 1.2–1.9 ms below the 11.8 ms target, and no frame was missed at 85, 88 or 90 %.
 
-Next: implement item 10 in the Frame build (on with foveation, the rate image per target), then item 12 after its checks; both need
-the owner's check worn.
+Next: item 10 is implemented (on with the shading rate image, one image per target size, a live switch for each pass;
+`docs/Foveated Rendering on the Steam Frame.md`, section 11.2) and measured as implemented on the same day (Addams −1.67 ms, Ghostbusters −1.79 ms at
+2160², section 11.2 of that document); then item 12 after its checks.
 
 ## 9. Reproduction
 

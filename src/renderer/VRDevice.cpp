@@ -172,6 +172,8 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_displayRefreshRateMode = settings.GetPlayerVR_DisplayRefreshRate();
       m_foveationMode = settings.GetPlayerVR_Foveation();
       m_foveationEyeTracked = settings.GetPlayerVR_FoveationEyeTracked();
+      m_foveateTonemapping = settings.GetPlayerVR_FoveateTonemapping();
+      m_foveateAntialiasing = settings.GetPlayerVR_FoveateAntialiasing();
       m_foveationFlipX = settings.GetPlayerVR_FoveationFlipX();
       m_foveationFlipY = settings.GetPlayerVR_FoveationFlipY();
       m_dynamicResolution = settings.GetPlayerVR_DynamicResolution();
@@ -1003,30 +1005,26 @@ bool VRDevice::ReadGaze()
 // two discs), 2x2 in a ring around it, 4x4 beyond, with the radii of the level. Without a valid gaze, the Low rings at the center of the
 // view, wide enough for where a player looks. Sized in the pixels the frame renders (dynamic resolution renders a sub rectangle at the
 // origin). The image is only uploaded when a disc moved by more than half a texel, or the level or scale changed.
-bool VRDevice::UpdateShadingRateMap(bool gazeValid)
+bgfx::TextureHandle VRDevice::UpdateShadingRateImage(int targetWidth, int targetHeight, bool gazeValid)
 {
    #ifdef BGFX_TEXTURE_FRAGMENT_SHADING_RATE
-   if (!m_backend->IsFragmentShadingRateSupported() || g_pplayer->m_renderer == nullptr)
-      return false;
-   const RenderTarget* const scene = g_pplayer->m_renderer->GetBackBufferTexture();
+   if (!m_backend->IsFragmentShadingRateSupported() || targetWidth <= 0 || targetHeight <= 0)
+      return BGFX_INVALID_HANDLE;
    const uint32_t texel = m_backend->GetFragmentShadingRateTexelSize();
-   const uint32_t w = (static_cast<uint32_t>(scene->GetWidth()) + texel - 1) / texel, h = (static_cast<uint32_t>(scene->GetHeight()) + texel - 1) / texel;
-   if (!bgfx::isValid(m_shadingRateMap) || w != m_shadingRateMapWidth || h != m_shadingRateMapHeight)
+   const uint32_t w = (static_cast<uint32_t>(targetWidth) + texel - 1) / texel, h = (static_cast<uint32_t>(targetHeight) + texel - 1) / texel;
+   auto image = std::ranges::find_if(m_shadingRateImages, [&](const ShadingRateImage& i) { return i.targetWidth == targetWidth && i.targetHeight == targetHeight; });
+   if (image == m_shadingRateImages.end())
    {
-      if (bgfx::isValid(m_shadingRateMap))
-         bgfx::destroy(m_shadingRateMap);
       // Created without data (a texture created with data is immutable for bgfx, which then drops the updates below), filled right after
-      m_shadingRateMap = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h), false, 1, bgfx::TextureFormat::R8U, BGFX_TEXTURE_FRAGMENT_SHADING_RATE, nullptr);
-      m_shadingRateMapWidth = w;
-      m_shadingRateMapHeight = h;
-      m_shadingRateMapKey[0] = -1.f;
-      if (!bgfx::isValid(m_shadingRateMap))
+      const bgfx::TextureHandle texture = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h), false, 1, bgfx::TextureFormat::R8U, BGFX_TEXTURE_FRAGMENT_SHADING_RATE, nullptr);
+      if (!bgfx::isValid(texture))
       {
-         PLOGW << "Foveated rendering: failed to create the shading rate image";
-         return false;
+         PLOGW << "Foveated rendering: failed to create the shading rate image for " << targetWidth << 'x' << targetHeight << " targets";
+         return BGFX_INVALID_HANDLE;
       }
-      bgfx::setName(m_shadingRateMap, "Foveation shading rate image");
-      PLOGI << "Foveated rendering: shading rate image of " << w << 'x' << h << " (texel " << texel << ") for the " << scene->GetWidth() << 'x' << scene->GetHeight() << " scene buffer";
+      bgfx::setName(texture, "Foveation shading rate image");
+      PLOGI << "Foveated rendering: shading rate image of " << w << 'x' << h << " (texel " << texel << ") for " << targetWidth << 'x' << targetHeight << " targets";
+      image = m_shadingRateImages.insert(m_shadingRateImages.end(), ShadingRateImage { texture, targetWidth, targetHeight });
    }
 
    const int level = gazeValid ? clamp(m_foveationMode, 1, 3) : 1;
@@ -1037,9 +1035,10 @@ bool VRDevice::UpdateShadingRateMap(bool gazeValid)
    const float fullRadius = debugSpot ? 0.06f : gazeValid ? kGazeFullRadius[level] : kFoveationFullRadius[level];
    const float halfRadius = debugSpot ? 0.10f : gazeValid ? kGazeHalfRadius[level] : kFoveationHalfRadius[level];
    const int firstEye = debugSpot == 3 ? 1 : 0, lastEye = debugSpot == 2 ? 0 : 1;
-   const float scale = GetDynamicRenderScale(); // The scale the scene renders at
-   const float halfW = 0.5f * static_cast<float>(scene->GetWidth()) * scale / static_cast<float>(texel);
-   const float halfH = 0.5f * static_cast<float>(scene->GetHeight()) * scale / static_cast<float>(texel);
+   // The targets render their top left part at the dynamic resolution scale: the pattern covers that part
+   const float scale = GetDynamicRenderScale();
+   const float halfW = 0.5f * static_cast<float>(targetWidth) * scale / static_cast<float>(texel);
+   const float halfH = 0.5f * static_cast<float>(targetHeight) * scale / static_cast<float>(texel);
    float cx[2], cy[2];
    for (int eye = 0; eye < 2; eye++)
    {
@@ -1049,18 +1048,18 @@ bool VRDevice::UpdateShadingRateMap(bool gazeValid)
       cx[eye] = halfW + gx * halfW;
       cy[eye] = halfH + gy * halfH;
    }
+   const float key[6] = { static_cast<float>(level), scale, cx[0], cy[0], cx[1], cy[1] };
+   bool changed = key[0] != image->key[0] || key[1] != image->key[1];
+   for (int i = 2; i < 6 && !changed; i++)
+      changed = fabsf(key[i] - image->key[i]) > 0.5f;
+   if (!changed)
+      return image->texture;
+   memcpy(image->key, key, sizeof(key));
    if (debugSpot)
    {
       const float ndcX[2] = { cx[0] / halfW - 1.f, cx[1] / halfW - 1.f }, ndcY[2] = { cy[0] / halfH - 1.f, cy[1] / halfH - 1.f };
       UpdateGazeMarker(ndcX, ndcY, fullRadius);
    }
-   const float key[6] = { static_cast<float>(level), scale, cx[0], cy[0], cx[1], cy[1] };
-   bool changed = key[0] != m_shadingRateMapKey[0] || key[1] != m_shadingRateMapKey[1];
-   for (int i = 2; i < 6 && !changed; i++)
-      changed = fabsf(key[i] - m_shadingRateMapKey[i]) > 0.5f;
-   if (!changed)
-      return true;
-   memcpy(m_shadingRateMapKey, key, sizeof(key));
 
    // Rate code: log2 of the fragment width in bits 2-3, of its height in bits 0-1; the driver's largest fragment bounds the coarse one
    const uint8_t coarseLog2 = m_backend->GetFragmentShadingRateMaxFragmentSize() >= 4 ? 2 : 1;
@@ -1077,10 +1076,10 @@ bool VRDevice::UpdateShadingRateMap(bool gazeValid)
          }
          mem->data[y * w + x] = codes[r < fullRadius ? 0 : r < halfRadius ? 1 : 2];
       }
-   bgfx::updateTexture2D(m_shadingRateMap, 0, 0, 0, 0, static_cast<uint16_t>(w), static_cast<uint16_t>(h), mem);
-   return true;
+   bgfx::updateTexture2D(image->texture, 0, 0, 0, 0, static_cast<uint16_t>(w), static_cast<uint16_t>(h), mem);
+   return image->texture;
    #else
-   return false;
+   return BGFX_INVALID_HANDLE;
    #endif
 }
 
@@ -2175,12 +2174,9 @@ void VRDevice::DetachTable()
          bgfx::destroy(m_ownFoveationMap);
          m_ownFoveationMap = BGFX_INVALID_HANDLE;
       }
-      if (bgfx::isValid(m_shadingRateMap))
-      {
-         bgfx::destroy(m_shadingRateMap);
-         m_shadingRateMap = BGFX_INVALID_HANDLE;
-      }
-      m_shadingRateMapWidth = m_shadingRateMapHeight = 0;
+      for (const ShadingRateImage& image : m_shadingRateImages)
+         bgfx::destroy(image.texture);
+      m_shadingRateImages.clear();
       m_foveationShadingRate = false;
       m_gazeMarker = nullptr;
    }
@@ -2909,16 +2905,18 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          // Foveated rendering: the scene is rendered with the density map the runtime keeps for the acquired image (eye-tracked when the headset allows it)
          if (g_pplayer->m_renderer)
          {
-            // The shading rate image where the driver has it (see UpdateShadingRateMap), else our own density map when offsets are
+            // The shading rate image where the driver has it (see UpdateShadingRateImage), else our own density map when offsets are
             // available (the runtime's maps cannot take them), else the runtime's map of the acquired image
             bgfx::TextureHandle map = BGFX_INVALID_HANDLE;
             bool shadingRate = false;
             const bool gazeValid = m_foveationMode != 0 && ReadGaze();
+            m_shadingRateGazeValid = gazeValid;
             if (m_foveationMode != 0)
             {
-               if (UpdateShadingRateMap(gazeValid))
+               const RenderTarget* const scene = g_pplayer->m_renderer->GetBackBufferTexture();
+               if (const bgfx::TextureHandle rate = UpdateShadingRateImage(scene->GetWidth(), scene->GetHeight(), gazeValid); bgfx::isValid(rate))
                {
-                  map = m_shadingRateMap;
+                  map = rate;
                   shadingRate = true;
                }
                else if (bgfx::isValid(m_ownFoveationMap))
@@ -2928,6 +2926,10 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             }
             m_foveationShadingRate = shadingRate;
             g_pplayer->m_renderer->SetFragmentDensityMap(map, shadingRate);
+            // The tonemap and anti-aliasing passes with the same pattern, at the size of their targets (the headset swapchain, written by the
+            // last of them, gets its image once acquired, below)
+            g_pplayer->m_renderer->SetPostProcessShadingRate([this, gazeValid](int w, int h) { return UpdateShadingRateImage(w, h, gazeValid); },
+               shadingRate && m_foveateTonemapping, shadingRate && m_foveateAntialiasing);
             if (!shadingRate)
             {
                // The density map has its high density area in the middle: the gaze moves it through offsets, in pixels of the scene buffer
@@ -3000,6 +3002,14 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             vrRenderTarget = m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()].get();
             vrRenderTarget->m_dynamicResolution = true; // The frame draws its top left part at the dynamic resolution scale (see above)
          }
+         #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
+         // Foveated post-processing: the last pass of the frame (anti-aliasing, or the tonemap without it) writes the swapchain image
+         const bool foveateSwapchain = g_pplayer->m_renderer && m_foveationShadingRate
+            && (g_pplayer->m_renderer->IsTonemapLastPostProcess() ? m_foveateTonemapping : m_foveateAntialiasing);
+         vrRenderTarget->SetFragmentDensityMap(foveateSwapchain ? UpdateShadingRateImage(vrRenderTarget->GetWidth(), vrRenderTarget->GetHeight(), m_shadingRateGazeValid)
+                                                                : bgfx::TextureHandle BGFX_INVALID_HANDLE,
+            true);
+         #endif
 
          // Wrap the acquired UI swapchain image as a render target. This must be done before submitFrame since the
          // submitted frame is recorded by the logic thread which reads GetUIRenderTarget() once unblocked.

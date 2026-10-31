@@ -553,6 +553,34 @@ void Renderer::SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayer
    if (m_pOffscreenBackBufferTexture2)
       m_pOffscreenBackBufferTexture2->SetFragmentDensityMapOffsets(offsetsXY, nLayers);
 }
+
+void Renderer::SetPostProcessShadingRate(const std::function<bgfx::TextureHandle(int width, int height)>& imageForSize, bool tonemap, bool antialiasing)
+{
+   // The targets made so far (they are made on first use: one made later in the frame is foveated from the next frame on). The tonemap
+   // writes PostProcess1, the anti-aliasing passes PostProcess2 and 3 (and a sharpening after FXAA PostProcess1 again, see PrepareVideoBuffers)
+   const auto apply = [&imageForSize](RenderTarget* const rt, bool foveate)
+   {
+      if (rt)
+         rt->SetFragmentDensityMap(foveate ? imageForSize(rt->GetWidth(), rt->GetHeight()) : bgfx::TextureHandle BGFX_INVALID_HANDLE, true);
+   };
+   apply(m_pPostProcessRenderTarget1, tonemap);
+   apply(m_pPostProcessRenderTarget2, antialiasing);
+   apply(m_pPostProcessRenderTarget3, antialiasing);
+}
+
+bool Renderer::IsTonemapLastPostProcess() const
+{
+   // The passes PrepareVideoBuffers runs after the tonemap
+   const bool hasAntialiasPass = m_FXAA != Disabled;
+   const bool hasSharpenPass = m_sharpen != 0;
+   const bool hasUpscalerPass = GetBackBufferTexture()->GetWidth() < m_renderWidth;
+   #ifdef ENABLE_XR
+   const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && m_vrApplyColorKey);
+   #else
+   const bool hasStereoPass = m_stereo3Denabled && (m_stereo3D != STEREO_OFF);
+   #endif
+   return !(hasAntialiasPass || hasSharpenPass || hasStereoPass || hasUpscalerPass);
+}
 #endif
 
 void Renderer::DisableBallLighting(bool disableLightingForBalls)

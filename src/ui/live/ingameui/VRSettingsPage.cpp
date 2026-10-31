@@ -178,6 +178,14 @@ void VRSettingsPage::BuildPage()
       Settings::m_propPlayerVR_FoveationEyeTracked, //
       [this]() { return m_player->m_vrDevice->IsFoveationEyeTracked(); }, //
       [this](bool v) { m_player->m_vrDevice->SetFoveationEyeTracked(v); }));
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayerVR_FoveateTonemapping, //
+      [this]() { return m_player->m_vrDevice->IsFoveateTonemapping(); }, //
+      [this](bool v) { m_player->m_vrDevice->SetFoveateTonemapping(v); }));
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayerVR_FoveateAntialiasing, //
+      [this]() { return m_player->m_vrDevice->IsFoveateAntialiasing(); }, //
+      [this](bool v) { m_player->m_vrDevice->SetFoveateAntialiasing(v); }));
    AddItem(std::make_unique<InGameUIItem>("Foveation status"s, "What the runtime does with the foveated rendering setting"s,
       [this](int, const InGameUIItem*)
       {

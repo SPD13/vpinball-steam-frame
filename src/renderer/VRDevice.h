@@ -273,6 +273,11 @@ public:
    void SetFoveationMode(int mode);
    bool IsFoveationEyeTracked() const { return m_foveationEyeTracked; }
    void SetFoveationEyeTracked(bool eyeTracked);
+   // The tonemap and anti-aliasing passes shaded at the foveated rate as well (with the shading rate image only, see m_foveateTonemapping)
+   bool IsFoveateTonemapping() const { return m_foveateTonemapping; }
+   void SetFoveateTonemapping(bool foveate) { m_foveateTonemapping = foveate; }
+   bool IsFoveateAntialiasing() const { return m_foveateAntialiasing; }
+   void SetFoveateAntialiasing(bool foveate) { m_foveateAntialiasing = foveate; }
    // One line for the settings page: "not supported", "fixed", "eye-tracked", ...
    string GetFoveationStatus() const;
    // Dynamic resolution (see the private members below): the render scale follows the GPU time of the frames reported by the runtime
@@ -536,14 +541,24 @@ private:
    uint32_t m_ownFoveationMapHeight = 0;
    void CreateOwnFoveationMap();
    void FillOwnFoveationMap();
-   // Shading rate image (VK_KHR_fragment_shading_rate), preferred over the density map where the driver has it since Turnip applies it in
-   // its direct render path too: one R8U rate code per texel of the scene buffer, a single image for both eyes, rewritten whenever the gaze
-   // moves with full rate around each eye's gaze (see UpdateShadingRateMap)
-   bgfx::TextureHandle m_shadingRateMap = BGFX_INVALID_HANDLE;
-   uint32_t m_shadingRateMapWidth = 0;
-   uint32_t m_shadingRateMapHeight = 0;
-   float m_shadingRateMapKey[6] = { -1.f, 0.f, 0.f, 0.f, 0.f, 0.f }; // Level, scale and disc centers of the last upload
+   // Shading rate images (VK_KHR_fragment_shading_rate), preferred over the density map where the driver has it since Turnip applies them in
+   // its direct render path too: one R8U rate code per texel, a single image for both eyes, rewritten whenever the gaze moves, with full rate
+   // around each eye's gaze (see UpdateShadingRateImage). One image per size of the targets it foveates: the scene buffers, and with the
+   // post-processing foveated, the post-processing targets and the headset swapchain (all the same size unless the render resolution or a
+   // supersampling makes them differ). Kept until the session ends, since the frame buffers of the targets refer to them.
+   struct ShadingRateImage
+   {
+      bgfx::TextureHandle texture = BGFX_INVALID_HANDLE;
+      int targetWidth = 0, targetHeight = 0; // Size of the targets it is made for, in pixels
+      float key[6] = { -1.f, 0.f, 0.f, 0.f, 0.f, 0.f }; // Level, scale and disc centers of the last upload
+   };
+   vector<ShadingRateImage> m_shadingRateImages;
+   bool m_shadingRateGazeValid = false; // Gaze of the frame being prepared, for the images made after the scene's
    bool m_foveationShadingRate = false; // The scene is foveated through the shading rate image (else the density map)
+   // The post-processing passes too (only with the shading rate image): the tonemap, and the anti-aliasing with the passes after it; set
+   // by the settings page while the render thread reads them
+   std::atomic<bool> m_foveateTonemapping = true;
+   std::atomic<bool> m_foveateAntialiasing = true;
    bool ReadGaze(); // Updates m_foveationCenter from the runtime, true when the gaze is valid
    // Gaze as a ray (XR_EXT_eye_gaze_interaction), preferred over the runtime's foveation center since it can be taken with the head pose of its
    // sample and projected with the views of the frame: the point looked at stays put while the head moves. See LocateGaze.
@@ -555,7 +570,7 @@ private:
    XrVector3f m_gazePoint {};
    XrTime m_gazePointTime = 0;
    void LocateGaze(const std::vector<XrView>& views, XrTime displayTime);
-   bool UpdateShadingRateMap(bool gazeValid); // False when the image is not available
+   bgfx::TextureHandle UpdateShadingRateImage(int targetWidth, int targetHeight, bool gazeValid); // Invalid when not available
    // VPX_FOVEATION_DEBUG: a ring drawn around the full quality spot of each eye, so the spot can be compared with the gaze in the headset
    XrFovf m_viewFov[2] = {};
    std::shared_ptr<MeshBuffer> m_gazeMarker;

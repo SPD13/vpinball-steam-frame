@@ -270,6 +270,11 @@ PropEnum(PlayerVR, Foveation, "Foveated rendering"s, "Reduce the shading quality
 // headset with VPX_FOVEATION_DEBUG=1, which circles the full quality spot. On the Steam Frame (SteamVR 2.17) neither axis is mirrored (checked 2026-10-03)
 PropBool(PlayerVR, FoveationFlipX, "Foveation offset: flip X"s, "Mirror the horizontal gaze offset of the foveated rendering"s, false);
 PropBool(PlayerVR, FoveationFlipY, "Foveation offset: flip Y"s, "Mirror the vertical gaze offset of the foveated rendering"s, false);
+// The tonemap and anti-aliasing passes shaded with the same shading rate image as the scene (Steam Frame), each with its own switch to judge
+// them apart: about 0.8 ms per frame each at 2160x2160 (docs/Foveated Rendering on the Steam Frame.md, section 11.2); the edges in the
+// periphery become as coarse as the shading already is there. The anti-aliasing switch covers the passes after it too (sharpening, upscaling)
+PropBool(PlayerVR, FoveateTonemapping, "Foveated tone mapping"s, "Also apply the foveated rendering to the tone mapping pass: faster, with coarser edges away from the point looked at. Only where the scene is foveated with a shading rate image (Steam Frame)"s, true);
+PropBool(PlayerVR, FoveateAntialiasing, "Foveated anti-aliasing"s, "Also apply the foveated rendering to the anti-aliasing pass (and to the sharpening and upscaling passes after it): faster, with coarser edges away from the point looked at. Only where the scene is foveated with a shading rate image (Steam Frame)"s, true);
 PropBool(PlayerVR, FoveationEyeTracked, "Eye-tracked foveation"s, "Follow the eyes with the foveated rendering when the runtime supports it (XR_META_foveation_eye_tracked) and eye tracking is enabled in the headset settings; otherwise the full quality area is fixed at the center of the view"s, true);
 PropEnum(PlayerVR, DisplayRefreshRate, "Headset Refresh Rate"s, "Refresh rate requested from the headset when supported. Lower rates give the renderer more time per frame and avoid reprojected frames on standalone headsets"s, int, 0, "Runtime default"s, "72 Hz"s, "80 Hz"s, "90 Hz"s, "120 Hz"s);
 PropFloatDyn(PlayerVR, Orientation, "View orientation"s, "VR view orientation"s, -180.f, 180.f, 0.f);
