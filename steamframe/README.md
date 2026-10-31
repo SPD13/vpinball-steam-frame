@@ -10,11 +10,11 @@ upstream's files only get small, guarded hooks into it.
 |---|---|
 | Code of the fork (table library, lobby and launcher mode, scores, web routes, table images) | `src/steamframe/` |
 | Build of the fork: sources, compile definitions, libraries | `steamframe/steamframe.cmake`, included by one line of the root `CMakeLists.txt` |
-| Dependencies the fork adds (libzip for the web server, libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
+| Dependencies the fork adds (libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
 | Patches of libspatialaudio (soundfield rotation fade, see `docs/Spatial Audio Crackle When Turning the Head.md`) | `steamframe/patches/libspatialaudio/`, applied by the `external.sh` of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 |
 | Patches of libpinmame (memory maps of 4-bit memory: nibble before mask, see `docs/PinMAME Memory Maps on 4-bit Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
-| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator | `steamframe/tools/` |
+| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator; `top-tables.py`, which builds `docs/steam-frame/Top Tables.md` | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
 | Fixes of the tables and ROMs that do not work as they are: the recipes, and their record | `src/assets/fixes/fixes.json`, `docs/Table and ROM Fixes.md` |
@@ -93,6 +93,8 @@ The workspace folder holds, side by side:
 3. **Review.** The report, VR and XR first, and `git range-diff`. When upstream built something the fork has too, decide as below.
 4. **Build for macOS** (Homebrew's bison first in the `PATH`: `export PATH="$(brew --prefix bison)/bin:/opt/homebrew/bin:$PATH"`):
    `platforms/macos-arm64/external.sh` (rebuilds only the dependencies whose version changed), then `cmake --build build -j10`.
+   Then `steamframe/tools/check-pinmame-catalog.sh`: a game libpinmame runs and the catalog leaves out would be reported as unknown,
+   so add it to the list in `src/steamframe/RomAliases.cpp`.
 5. **Check on macOS**, with a settings folder of its own (`-PrefPath <folder>`, holding a `VPinballX.ini` with `TablesPath` set to a
    folder of tables with their ROMs, `WebServerAlwaysOn = 1`, `WebServerPairing = 0`):
    - `build/VPinballX_BGFX.app/Contents/MacOS/VPinballX_BGFX -PrefPath <folder> -Launcher`: the lobby reaches `Startup done` in
@@ -116,7 +118,7 @@ The workspace folder holds, side by side:
 
 The fork patches three dependencies that upstream downloads and builds in `platforms/*/external.sh`: bgfx, libspatialaudio and
 libpinmame (table above). Each block applies the `*.patch` of its folder in `steamframe/patches/` after the download, and its cache key
-carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency builds rebuild. At each sync:
+carries a tag (`-turnip4`, `-rotfix1`, `-memmap2`) so that existing dependency builds rebuild. At each sync:
 
 - **Upstream changed the block** (a conflict on the `Steam Frame Edition` lines): keep upstream's new lines and put our two lines back
   (the patch loop after the `cd` into the source, the tag at the end of the `*_EXPECTED_SHA`).
@@ -159,7 +161,11 @@ test: add each one found to the checklist.
 - Scores recorded after a game; sound.
 - Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
   (libpinmame patch, 2026-10-28). It can be checked on macOS too.
+- Scores of a Williams System 7 table (TENACIOUSD Flex Mod, `fpwr2_l2`): shown during the game and recorded at its end (libpinmame patch
+  of banks, 2026-11-01).
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
+- PuP tables (Albator, Blade Runner 2049): no magenta or scrambled areas, in the table or in the text of the panels, and no "GPU memory limit
+  reached" message in the table or back in the lobby. A notification stays where it appeared in the room when the head turns.
 - The loading message stays steady in the headset while a table loads, from the lobby and from another table: no doubled or moving
   image (frames without anything to present keep the swapchain image, in upstream's frame gate since 2026-10-30, `m_frameRequested`).
 
@@ -169,7 +175,8 @@ The history of the fork was squashed into one commit per area (tag `pre-squash-2
 upstream (528 commits). What changed in the fork with it:
 
 - OpenXR on Linux is upstream's (`ENABLE_XR` and the loader of `platforms/linux-*/external.sh`): `steamframe/deps/openxr-loader.sh` was dropped.
-- Upstream no longer builds libzip for the desktop: `steamframe/deps/libzip.sh` builds it for the web server (macOS, Linux, windows-mingw).
+- Upstream no longer builds libzip for the desktop: `steamframe/deps/libzip.sh` built it for the web server (macOS, Linux, windows-mingw), until
+  upstream's `ZipUtils` moved to miniz (4492fc616, sync of 2026-11-13) and the script was dropped.
 - bgfx 1.166 renamed the attachment flags (`BGFX_RESOLVE_*` to `BGFX_ATTACHMENT_*`) and took the bits the patches used: the fragment density
   map and shading rate flags moved to free bits (`BGFX_TEXTURE_FRAGMENT_DENSITY_MAP` 0x0080000000000000, `..._SHADING_RATE` 0x0100000000000000,
   `BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP` 0x10, `..._SHADING_RATE` 0x20, `BGFX_CAPS_FRAGMENT_DENSITY_MAP` 0x0000000002000000).

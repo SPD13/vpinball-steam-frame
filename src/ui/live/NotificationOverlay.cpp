@@ -24,6 +24,14 @@ unsigned int NotificationOverlay::PushNotification(const string &message, const 
    }
 }
 
+#if defined(VPX_STEAM_FRAME)
+unsigned int NotificationOverlay::GetNewestId()
+{
+   const std::lock_guard<std::mutex> lock(m_mutex);
+   return m_notifications.empty() ? 0 : m_notifications.back().id;
+}
+#endif
+
 void NotificationOverlay::Update(bool showNotification, ImFont * font, float aboveY)
 {
    const std::lock_guard<std::mutex> lock(m_mutex);

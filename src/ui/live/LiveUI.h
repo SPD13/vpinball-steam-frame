@@ -53,7 +53,7 @@ public:
 
    // Loading screen shown while switching tables (see Player::RenderLoadingFrame): a message with a spinner, drawn instead of the rest of the UI
    // while the text is not empty
-   void SetLoadingText(const string& text) { m_loadingText = text; }
+   void SetLoadingText(const string& text, const string& warning = {}) { m_loadingText = text; m_loadingWarning = warning; }
    bool IsLoadingScreenShown() const { return !m_loadingText.empty(); }
 
    unsigned int PushNotification(const string &message, const int lengthMs, const unsigned int reuseId = 0) { return m_notificationOverlay.PushNotification(message, lengthMs, reuseId); }
@@ -98,6 +98,7 @@ public:
 
 private:
    string m_loadingText;
+   string m_loadingWarning; // Shown in yellow below the message
    ImDrawList* RenderLoadingScreen(); // The draw list of the message when it goes into the loading layer of the VR device, to be left out of the UI
 
    std::mutex m_messageMutex;
@@ -175,6 +176,7 @@ private:
    bool m_vrPointerClickSwallowed = false; // The trigger press switched from button to pointer navigation: it does not click
    bool m_vrPointerScrollBlocked = false; // The thumbstick was used for button navigation and is not back to its center yet
    bool m_vrInGameUIWasOpened = false; // To place the VR UI panel in front of the player each time the in-game UI opens
+   unsigned int m_vrNotificationPlaced = 0; // Newest notification the VR UI panel was placed for
    ImFont *m_baseFont = nullptr;
    ImFont *m_overlayBoldFont = nullptr;
    ImFont *m_overlayFont = nullptr;

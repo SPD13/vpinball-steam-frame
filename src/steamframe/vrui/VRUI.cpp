@@ -103,10 +103,8 @@ void UpdateNotifications(Player* player, NotificationOverlay& overlay, ImFont* f
    style.maxWidth = Theme::Px(Theme::kNotificationWidth);
    style.padding = Theme::Px(Theme::kPadding);
    style.rounding = Theme::Px(Theme::kRounding);
-   #if defined(ENABLE_XR)
-   if (float x, y; player->m_vrDevice && player->m_vrDevice->GetUIPanelGazePoint(x, y, 0.1f))
-      style.center = ImVec2(x * ImGui::GetIO().DisplaySize.x, y * ImGui::GetIO().DisplaySize.y);
-   #endif
+   // The middle of the panel: where the head looked when the panel was placed for the newest notification (see LiveUI::RenderUI)
+   style.center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
    overlay.SetStyle(style);
    const float density = ImGui::GetPixelDensity();
    Theme::ApplyPixelDensity(); // Glyphs rasterized for the density of the eye views, like the menu's

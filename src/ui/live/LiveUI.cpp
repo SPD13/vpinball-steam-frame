@@ -587,7 +587,11 @@ void LiveUI::RenderUI()
             auto texture = static_cast<std::shared_ptr<BaseTexture> *>(tex->BackendUserData);
             BaseTexture::Update(*texture, tex->Width, tex->Height, BaseTexture::RGBA, static_cast<const uint8_t *>(tex->GetPixels()));
             (*texture)->SetName(std::format("ImGui.Tex{}", tex->UniqueID));
+            #if defined(VPX_STEAM_FRAME)
+            tex->SetTexID(m_renderer->m_renderDevice->m_texMan.LoadPinnedTexture(texture->get()));
+            #else
             tex->SetTexID(m_renderer->m_renderDevice->m_texMan.LoadTexture(texture->get(), false));
+            #endif
             tex->SetStatus(ImTextureStatus_OK);
          }
          else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames > 0)
@@ -622,7 +626,11 @@ void LiveUI::RenderUI()
       if (m_inGameUI.IsOpened() && !m_vrInGameUIWasOpened)
          m_player->m_vrDevice->RecenterUIPanel();
       m_vrInGameUIWasOpened = m_inGameUI.IsOpened();
-      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened());
+      // With the in-game UI closed, the panel stays in front of the head, so that a new notification appears in the middle of the view; it then
+      // stays there in the room until it disappears, the panel following the head again for the next one
+      const unsigned int notification = m_notificationOverlay.GetNewestId();
+      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && (notification == 0 || notification != m_vrNotificationPlaced));
+      m_vrNotificationPlaced = notification;
       onVRPanel = m_player->m_vrDevice->GetUIPanelTransforms(right, bottom, matView);
    }
    #endif
@@ -794,7 +802,10 @@ ImDrawList* LiveUI::RenderLoadingScreen()
    // The size is given, as an auto resized window only gets its size on its second frame, which may be the only one displayed before closing a table
    const float radius = ImGui::GetFontSize() * 0.75f;
    const ImVec2 padding(ImGui::GetFontSize() * 1.2f, ImGui::GetFontSize() * 0.9f);
-   const ImVec2 textSize = ImGui::CalcTextSize(m_loadingText.c_str());
+   const ImVec2 messageSize = ImGui::CalcTextSize(m_loadingText.c_str());
+   const ImVec2 warningSize = m_loadingWarning.empty() ? ImVec2(0.f, 0.f) : ImGui::CalcTextSize(m_loadingWarning.c_str());
+   const float warningOffset = m_loadingWarning.empty() ? 0.f : messageSize.y + ImGui::GetFontSize() * 0.4f;
+   const ImVec2 textSize(max(messageSize.x, warningSize.x), max(messageSize.y, warningOffset + warningSize.y));
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    const bool onLayer = m_player->m_vrDevice && m_player->m_vrDevice->GetLoadingLayerRenderTarget() != nullptr;
    const ImVec2 size(min(padding.x * 2.f + radius * 3.f + textSize.x, static_cast<float>(VRDevice::kLoadingLayerWidth)),
@@ -828,9 +839,16 @@ ImDrawList* LiveUI::RenderLoadingScreen()
    drawList->PathArcTo(center, radius - thickness * 0.5f, start, start + static_cast<float>(M_PI * 1.5), 32);
    drawList->PathStroke(IM_COL32(255, 255, 255, 255), ImDrawFlags_None, thickness);
 
-   // Message, vertically centered on the spinner
+   // Message and its warning, vertically centered on the spinner
    ImGui::SetCursorScreenPos(ImVec2(pos.x + radius * 3.f, center.y - textSize.y * 0.5f));
    ImGui::TextUnformatted(m_loadingText.c_str());
+   if (!m_loadingWarning.empty())
+   {
+      ImGui::SetCursorScreenPos(ImVec2(pos.x + radius * 3.f, center.y - textSize.y * 0.5f + warningOffset));
+      ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(250, 204, 21, 255));
+      ImGui::TextUnformatted(m_loadingWarning.c_str());
+      ImGui::PopStyleColor();
+   }
 
    ImGui::End();
    ImGui::PopStyleVar(2);
