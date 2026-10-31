@@ -317,6 +317,7 @@ private:
    void UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex);
    void UpdateBloom(RenderTarget* renderedRT);
    void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
+   bool IsFXAALumaInAlpha(const RenderTarget* tonemapRT) const; // The tonemap writes the luma of its output in the alpha channel for the FXAA pass
    RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);
    RenderTarget* ApplyAdditiveScreenSpaceReflection(RenderTarget* renderedRT);
    RenderTarget* ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT);

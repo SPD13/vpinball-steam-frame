@@ -2905,7 +2905,7 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
       IsBloomEnabled() ? 1.f : 0.f, // Bloom
       (!isHdr2020 && (outputRT->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
       (pin != nullptr) ? 1.f : 0.f, /* LUT colorgrade */
-      0.f);
+      IsFXAALumaInAlpha(outputRT) ? 1.f : 0.f); // Luma in alpha
    if (IsBloomEnabled())
       m_renderDevice->AddRenderTargetDependency(GetBloomBufferTexture());
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height,
@@ -2946,6 +2946,14 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
    m_renderDevice->m_FBShader->SetTechnique(tonemapTechnique);
 }
 
+// FXAA reads the luma of its source from the alpha channel when the tonemap wrote it there (fs_pp_fxaa.sc): the tonemap writes the 8-bit
+// post-processing target that an FXAA pass reads next (and nothing else reads its alpha). Not in the AO view, drawn by another shader
+bool Renderer::IsFXAALumaInAlpha(const RenderTarget* tonemapRT) const
+{
+   return (m_FXAA == Fast_FXAA || m_FXAA == Standard_FXAA || m_FXAA == Quality_FXAA) && tonemapRT == m_pPostProcessRenderTarget1
+      && tonemapRT->GetColorFormat() == colorFormat::RGBA8 && g_pplayer->GetInfoMode() != IF_AO_ONLY;
+}
+
 RenderTarget* Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT)
 {
    SetupTonemapping(renderedRT, tonemapRT, true);
@@ -2974,7 +2982,7 @@ RenderTarget* Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarget*
          IsBloomEnabled() ? 1.f : 0.f, // Bloom
          (!isHdr2020 && (outputWnd->GetBackBuffer()->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
          0.f, // No LUT colorgrade
-         0.f);
+         IsFXAALumaInAlpha(tonemapRT) ? 1.f : 0.f); // Luma in alpha
       for (const vec4& region : m_embeddedRegions)
       {
          const Vertex3D_TexelOnly regionVerts[4] = {
@@ -3182,8 +3190,9 @@ RenderTarget* Renderer::ApplyPostProcessedAntialiasing(RenderTarget* renderedRT,
       m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_unfiltered, renderedRT->GetColorSampler());
       m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true); // Depth is always taken from the MSAA resolved render buffer
       // Depth cannot be used as an early-out for VR since the hidden area mesh writes depth 0 in the render buffer
+      // w: 1 when depth is available, plus 2 when the tonemap wrote the luma in the alpha channel (FXAA only)
       m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), (float)renderedRT->GetWidth(),
-         m_stereo3D == STEREO_VR ? 0.f : 1.f);
+         (m_stereo3D == STEREO_VR ? 0.f : 1.f) + ((FXAA1 || FXAA2 || FXAA3) && IsFXAALumaInAlpha(renderedRT) ? 2.f : 0.f));
       m_renderDevice->m_FBShader->SetTechnique(NFAA ? ShaderTechnique::NFAA : FXAA3 ? ShaderTechnique::FXAA3 : FXAA2 ? ShaderTechnique::FXAA2 : FXAA1 ? ShaderTechnique::FXAA1 : ShaderTechnique::FAAA);
       m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
       return outputRT;
