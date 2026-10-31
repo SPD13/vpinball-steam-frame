@@ -3,7 +3,8 @@
 *2026-10-19, fork `master` at 53c794380 (upstream sync of 2026-10-18). Measurements on the Steam Frame (Adreno, Turnip, SteamVR 2.17) at
 72 Hz (13.9 ms per frame), Standard FXAA, specular AA, foveated rendering, two tables: the Ghostbusters VR room (light, no ROM) and the
 Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
-(section 7), and 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15, not measured yet).*
+(section 7), 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15) and the simplified meshes
+(section 8.2), and 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3).*
 
 ## 1. Summary
 
@@ -31,6 +32,11 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
   presented every frame into gamescope's 60 Hz Xwayland: the Frame build no longer draws into it, which ends the stall (0 of 7 runs
   instead of most table starts) and gives the render thread 2 ms per frame back (section 7.6). Dynamic resolution also holds its scale
   on such readings, as a safety net (section 7.5).
+- **Two post-processing changes save a quarter of the frame (2026-10-30).** Shading the tonemap and FXAA passes at the foveated rate
+  saves 1.35 ms on Addams and 1.53 ms on Ghostbusters at 2160²; a scene buffer in RG11B10F instead of RGBA16F saves 0.66 and 1.28 ms;
+  both together 2.12 and 2.69 ms (10.56 → 8.44 ms, 9.94 → 7.25 ms), and 12 °C less on the GPU. A lighter playfield reflection only pays
+  when it leaves out the dynamic parts: coarser meshes, a lower resolution or fewer parts in the probe save 0.1–0.5 ms of its
+  1.05–1.23 ms. With the simplified meshes, both tables now hold 2160² with dynamic resolution (section 8.3).
 
 ## 2. Method
 
@@ -334,20 +340,20 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | # | Opportunity | Gain | Effort | Status |
 |---|---|---|---|---|
 | 1 | Desktop mirror off on the Frame | 4.5–6.6 ms on Addams, 4.4–6.9 ms on Ghostbusters | Forced off in the Frame build | **Done** (sections 6, 7.1) |
-| 2 | Lighter playfield reflection on heavy tables | 1.1–1.3 ms on Addams, 1.0–1.2 ms on Ghostbusters | Per-table setting today (`PFReflection = 3`, "Static & Balls"); engine options below | To evaluate |
-| 3 | Fuse FXAA into the tonemap pass | Part of 1.1–3.2 ms (one full-resolution write and read less) | Shader and pass change | Idea (*Image Quality*, section 4) |
+| 2 | Lighter playfield reflection on heavy tables | 1.1 ms on Addams, 1.3 ms on Ghostbusters with "Balls Only" (the whole probe); 0.1–0.5 ms for the steps that keep the dynamic parts | Per-table setting (`PFReflection = 1`, "Balls Only"; in VR "Static & Balls" still draws the static parts every frame) | **Measured** 2026-10-30 (8.3): a lower resolution, coarser meshes and fewer parts in the probe save little |
+| 3 | Fuse FXAA into the tonemap pass | Bound: FXAA off saves 1.52 ms on Addams, 1.56 ms on Ghostbusters (the tonemap then writes the swapchain); about 0.9 ms once item 10 is done | Shader and pass change | Bound measured 2026-10-30 (8.3) |
 | 4 | Reduce the scene pass's fixed geometry cost | Up to 3.8 ms on Addams | Investigation, engine work | Measured 2026-10-25: 2.2 ms per million triangles; simplification without visible loss 1.2–1.6 ms on Addams, culling 0.6 ms on LOTR (`Table Geometry on the Steam Frame.md`); culling done (`Culling Parts Outside the View.md`) |
 | 5 | Overlap frame preparation with submission | 1.1–1.6 ms of render thread time (mirror off); frame rate at 90 Hz | Threading change | Idea |
 | 6 | Reduce the render thread's submission cost | 4–6 ms of CPU per frame on Ghostbusters | Investigation | Counted (section 7.3) |
 | 7 | Dynamic resolution floor and target per table | Steadier frame rate on heavier tables | Settings | Available now |
 | 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
-| 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | Estimated 0.8–1.5 ms on Addams at 2160² | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers | To measure (8.1) |
-| 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Estimated 0.3–1 ms | Small (first step), medium (fusion); upstream shaders | To measure (8.1); first step of item 3 |
-| 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | Estimated 0.3–1 ms | One format in the Frame build, after checking that nothing reads the alpha | To measure (8.1) |
-| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** on branch `mesh-simplify` (8.2, measured on the Frame 2026-10-29) |
-| 14 | Hardware multiview: one vertex shader run for both eyes | Unknown, bounded by the per-eye share of the geometry cost | Large: bgfx has no multiview, and VPX's varyings are in view space | Measure the bound first (8.1) |
-| 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | To measure: missed frames and the compositor's share |
+| 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Measured** 2026-10-30 (8.3); next to implement, with a check worn |
+| 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | Bound measured 2026-10-30 (8.3); after item 10 |
+| 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Measured** 2026-10-30 (8.3); next after item 10 |
+| 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29) |
+| 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
+| 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | Not measurable on Addams and Ghostbusters (8.3): both hold 2160² at any target; to try on a table below the ceiling (LOTR) |
 
 Details:
 
@@ -355,6 +361,10 @@ Details:
 2. **Playfield reflection**: the probe renders the reflected scene every frame (1.0–1.3 ms with the mirror off). Today,
    "Static & Balls" for a heavy table removes most of it at the cost of the dynamic reflections. Engine options: render the probe at a
    lower resolution, update it every other frame, or leave the VR room out of the reflection. Each needs a visual check in the headset.
+   Measured on 2026-10-30 (section 8.3): in VR the static parts are not prerendered (the view moves), so "Static & Balls" still draws
+   them every frame; only "Balls Only" removes the probe's cost. A lower resolution (−0.2 to −0.5 ms at 50 %), coarser simplified
+   meshes (−0.2 ms at 8 times the error) and leaving small parts out (nothing on Addams, −0.14 ms on Ghostbusters under 64 px) save
+   little. Updating every other frame was not tried: the reflection would lag behind a moving head.
 3. **Tonemap + FXAA**: the tonemap writes a full-resolution intermediate that FXAA reads; doing FXAA in the same pass, or tonemapping
    straight into the swapchain when FXAA is off, removes one full-screen write and read per eye. The code is upstream's, shared by
    desktop and VR, so the change belongs upstream. FXAA reads the neighbours of each pixel after tonemapping, so a fused pass would
@@ -432,7 +442,8 @@ format, quantized vertices.
 
 Proposed measurement series, before any implementation: Addams, fixed 2160², headless, temporary hooks, the base run repeated in the
 series. Variants: the current master as the base; post-processing foveated (item 10); RG11B10F (item 12); FXAA off, as the bound of
-item 11; one eye drawn, as the bound of item 14; dynamic resolution at 88 % and 90 % (item 15).
+item 11; one eye drawn, as the bound of item 14; dynamic resolution at 88 % and 90 % (item 15). Run on 2026-10-30, with Ghostbusters
+and the steps of a lighter playfield reflection (item 2): section 8.3.
 
 ### 8.2 Render-only simplification: approach under discussion (2026-10-29)
 
@@ -559,6 +570,60 @@ has no shading rate image, no multiview path of Turnip, no SteamVR compositor. W
 
 `xr-sim` is behind master: for this work, a local copy of it is rebased onto the work branch (no push).
 
+### 8.3 GPU series of 2026-10-30: post-processing, scene buffer format, reflection probe
+
+*Fork `master` at 80ea732db (the simplified meshes in, upstream sync of 2026-10-30). Addams Family and Ghostbusters VR rooms, headless
+(`VPX_PERF_FORCE_RENDER`, section 2.1), 2 minutes per run, the window from 40 s, bgfx's GPU profiler on; each variant switched by an
+environment variable of temporary hooks (`Doc/test-hooks/gpu-series-hooks.py`, never committed). The base run was repeated at the start,
+middle and end of each table: Addams 10.55–10.58 ms, Ghostbusters 9.90–10.01 ms, so the heat of the series does not weigh on the
+differences, which are runtime GPU time per frame at fixed 2160².*
+
+At the base, the passes are, on Addams: scene 5.47 ms, tonemap 1.57, FXAA 1.57, playfield reflection probe 1.05, bloom 0.19; on
+Ghostbusters: scene 3.89, tonemap 1.66, FXAA 1.53, probe 1.23, bloom 0.88.
+
+| Variant | Addams | Ghostbusters | What changed |
+|---|---|---|---|
+| Base | 10.56 ms | 9.94 ms | |
+| **Foveated tonemap and FXAA** (item 10) | **−1.35** | **−1.53** | Addams: tonemap 1.57 → 0.89 ms, FXAA 1.57 → 0.90 ms; Ghostbusters: 1.66 → 0.89, 1.53 → 0.85 |
+| **Scene buffer in RG11B10F** (item 12) | **−0.66** | **−1.28** | Scene −0.58 / −0.81 ms; on Ghostbusters the bloom −0.34 ms |
+| **Both** | **−2.12** (8.44 ms) | **−2.69** (7.25 ms) | The gains add up |
+| FXAA off (bound of items 3 and 11) | −1.52 | −1.56 | The tonemap writes the swapchain: the FXAA pass is gone |
+| Fast FXAA | +0.19 | +0.13 | Slower than Standard FXAA |
+| One eye drawn (bound of item 14) | −4.16 | −3.06 | Scene and probe halve: per-eye vertex and pixel work |
+| Probe: simplified meshes at 4 / 8 times the error (default 2) | −0.09 / −0.20 | ≈ 0 / – | 41 000 / 94 000 triangles less on Addams |
+| Probe: parts under 16 / 64 px left out | 0 / 0 | – / −0.14 | Addams has no part that small in the probe |
+| Probe at 75 % / 50 % of its size | −0.17 / −0.19 | −0.15 / −0.48 | Probe pass, bgfx: Addams 1.05 → 0.90 / 0.78 ms, Ghostbusters 1.23 → 1.08 / 0.96 ms |
+| Reflection Quality "Balls Only" / "Disable Reflections" | −1.13 / −1.11 | −1.29 / −1.34 | The probe pass is gone; 300 000 / 100 000 triangles less |
+| Dynamic resolution, target 85 / 88 / 90 % | 2160², 0 missed | 2160², 0 missed | Both tables at the ceiling at any target |
+
+- **Foveated post-processing is the largest gain for the effort**, and it applies to every table, light or heavy. With the shading rate
+  image on `PostProcess1` (tonemap) and on the frame buffers of the headset swapchain (FXAA), each pass runs in 0.9 ms instead of 1.6.
+  In the hooks the rate image is the scene's, which fits only because the three targets have the same size at fixed 2160² and 100 %
+  render resolution: the implementation must size a rate image for each target (the swapchain does not follow the scene's size when the
+  render resolution is not 100 %), and follow dynamic resolution as the scene's does. Visual cost to check worn: in the periphery, the
+  edges become as blocky as the shading already is there, and FXAA works on coarse blocks.
+- **RG11B10F is the second**: about 0.6 ms on the scene pass, and on Ghostbusters a third of the bloom. Before using it: no pass may read
+  the back buffer's alpha (screen-space transparency, refraction), no value may be negative, and dark gradients must not band (6 bits of
+  mantissa against 10). The bloom buffer, also asked as RGB16F, changed format with it.
+- **With both, the GPU ran 12 °C cooler** (Addams 92 → 80 °C, Ghostbusters 86–88 → 76 °C, maximum of each run) and 15–20 points less
+  busy. Both tables already hold 2160² with dynamic resolution, so on them the time would go to a render resolution above 100 % (sharper)
+  or to the heat; on heavier tables (LOTR, 17 ms at 2160²) to the resolution.
+- **A cheaper FXAA comes after**: with the passes foveated, the FXAA pass is 0.9 ms, the most a fusion with the tonemap could save. Fast
+  FXAA is not an option: it is slower than Standard on the Frame.
+- **The steps of a lighter reflection that keep it dynamic save little.** On Addams the probe costs 1.05 ms and the best of them, the probe
+  at half size, saves 0.19 ms; coarser meshes 0.20 ms at 8 times the error. Leaving small parts out does nothing on Addams, whose parts
+  are large meshes. Only leaving the dynamic parts out ("Balls Only") removes the whole cost, and "Static & Balls" does not (the static
+  parts are not prerendered in VR). A ladder that lowers the reflection when the table needs the time is therefore not worth its
+  complexity as designed; "Balls Only" stays a per-table choice for the heaviest tables.
+- **Multiview remains unknown**: drawing one eye halves the scene and the probe, but that takes away the second eye's pixels as well as
+  its vertices, and multiview keeps the pixels. A bound of the vertex share alone needs another measure (both eyes drawn with a trivial
+  fragment shader, for example).
+- **Dynamic resolution above 85 %** cannot be measured on these two tables: since the simplified meshes and the 2026-10-30 sync, both run
+  at 2160² with 1.2–1.9 ms below the 11.8 ms target, and no frame was missed at 85, 88 or 90 %.
+
+Next: implement item 10 in the Frame build (on with foveation, the rate image per target), then item 12 after its checks; both need
+the owner's check worn.
+
 ## 9. Reproduction
 
 From `vpinball/`, with the Frame on the network:
@@ -574,10 +639,14 @@ VPX_PERF_FORCE_RENDER=1 VARIANTS="default fixed2160 fixed1728 fixed1296" sh perf
 python3 ../Doc/test-hooks/perf-report.py <results folder> 40
 ```
 
+The series of section 8.3: `python3 ../Doc/test-hooks/gpu-series-hooks.py apply` on top of `perf-hooks.py`, the executable in
+`~/perf-test/vpx-gpu`, then on the Frame `sh gpu-series.sh results-gpu ad:base ad:fovpost ... ad:base+2` (the runs are listed in the
+script, `Doc/test-hooks/gpu-series.sh`; it waits while another VPX runs).
+
 Without `VPX_PERF_FORCE_RENDER`, someone has to wear the headset. Other variants: `native` (2160² without the bgfx profiler), and a
 table option changed by a `<table>.vbs` next to a hard link of the table (section 7.2). Keep the idle gaps between runs at a minute or
 less: the Frame goes to sleep when no VPX has run for a few minutes, which ends the series (`systemd-inhibit` needs an interactive login).
 
 The results are on the Frame: `~/perf-test/results` (mirror off: Ghostbusters by resolution, VR room and stall runs, Addams by
 resolution and the 15-minute run `-default-hot15`), `~/perf-test/results-prev` (the Ghostbusters default and fixed2160 runs of section 7.1),
-`~/perf-test/results-guard` and `~/perf-test/results-break` (section 7.5), `~/perf-test/results-nodesk` and `~/perf-test/results-fix` (section 7.6), and `~/perf-test/results-before` (mirror on).
+`~/perf-test/results-gpu` (section 8.3), `~/perf-test/results-guard` and `~/perf-test/results-break` (section 7.5), `~/perf-test/results-nodesk` and `~/perf-test/results-fix` (section 7.6), and `~/perf-test/results-before` (mirror on).
