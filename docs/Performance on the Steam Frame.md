@@ -1,5 +1,8 @@
 # Performance on the Steam Frame: where the frame time goes, and what to do about it
 
+*A summary of everything implemented, with the settings of the menu: [Performance of the Steam Frame Edition](steam-frame/Performance%20of%20the%20Steam%20Frame%20Edition.md).
+This document is the engineering log behind it.*
+
 *2026-10-19, fork `master` at 53c794380 (upstream sync of 2026-10-18). Measurements on the Steam Frame (Adreno, Turnip, SteamVR 2.17) at
 72 Hz (13.9 ms per frame), Standard FXAA, specular AA, foveated rendering, two tables: the Ghostbusters VR room (light, no ROM) and the
 Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
