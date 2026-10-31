@@ -48,34 +48,6 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
 
-## Performance upgrades
-
-The Frame renders the tables natively, on the headset's own GPU, at 2160 × 2160 pixels per eye and 72 frames per second. The heavy
-Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 ms (72 fps),
-and every reference table holds the panel's full resolution.
-
-[![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/WXHtyRk26lo)
-
-**▶ [Watch the tech deep-dive](https://youtu.be/WXHtyRk26lo)**: foveation, simpler meshes, culling: how heavy tables keep 72 Hz.
-
-**▶ [Read the full article](/docs/steam-frame/Performance%20of%20the%20Steam%20Frame%20Edition.md)**: how each upgrade works, its measurements on the Frame, and every performance setting of the menu, with screenshots.
-
-- **No hidden desktop render**: the desktop mirror nobody sees on the Frame is no longer rendered: 4.5–6.6 ms per frame on Addams.
-- **No frame pacing stall**: the desktop window is no longer presented, which tied the headset to a 60 Hz window: 2 ms of render thread per frame back.
-- **Direct rendering**: the GPU driver measures and picks the faster of its two rendering paths for each pass: 14.0 → 9.1 ms on Ghostbusters.
-- **Visibility mask first**: the parts the lenses never show are masked before the table is drawn, which keeps the GPU's early depth rejection on.
-- **Dynamic resolution** (Steam Frame screen): the resolution follows the GPU time of the frames; Addams stays at full resolution 88–91 % of the time.
-- **Eye-tracked foveated rendering** (Steam Frame screen): full shading only where the eyes look: about 3 ms per frame on Addams.
-- **Foveated tone mapping** (Steam Frame screen): the same pattern on the tone mapping pass: about 0.8 ms.
-- **Foveated anti-aliasing, Automatic** (Steam Frame screen): the same pattern on the anti-aliasing pass, about 0.9 ms, turned on only for the tables that cannot hold their full resolution without it.
-- **Culling**: parts entirely outside the view are not drawn: 0.6 ms on Lord of the Rings.
-- **Simplified meshes** (Steam Frame screen): heavy 3D parts drawn with fewer triangles where the eye cannot see the difference: 1.29 ms on Addams.
-- **Welded meshes and reflection culling**: meshes exported as separate triangles can be simplified, and parts that cannot show in the playfield reflection are not drawn in it: Albator78 from 20 to 11–12 ms, 36 → 72 fps.
-- **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
-- **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
-- **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).
-- **Performance panel** (Display & Performance screen): a panel beside the cabinet that rates each table every 30 seconds, with graphs of the frame rate, resolution, GPU and CPU.
-
 ## How to install
 
 The game is not on the Steam store. It is installed on the Frame from a computer on the same network: the **installer app** finds the Frame, checks that it is ready, then downloads the latest version of the game and installs it, with its entry and artwork in the Steam library. The same app updates the game later. Nothing is installed on the computer itself.
@@ -294,6 +266,34 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 | `ssh.exe is missing` (Windows) | In Windows **Settings > Apps > Optional features**, add **OpenSSH Client**, then install again. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | The Frame was reset. Run `ssh-keygen -R frame.local` (or with the IP address) in a terminal (PowerShell on Windows), then install again. |
 | `Steam did not register the game` | Steam is not running on the Frame: put the headset on so that it is in its normal mode, then install again. |
+
+## Performance upgrades
+
+The Frame renders the tables natively, on the headset's own GPU, at 2160 × 2160 pixels per eye and 72 frames per second. The heavy
+Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 ms (72 fps),
+and every reference table holds the panel's full resolution.
+
+[![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/WXHtyRk26lo)
+
+**▶ [Watch the tech deep-dive](https://youtu.be/WXHtyRk26lo)**: foveation, simpler meshes, culling: how heavy tables keep 72 Hz.
+
+**▶ [Read the full article](/docs/steam-frame/Performance%20of%20the%20Steam%20Frame%20Edition.md)**: how each upgrade works, its measurements on the Frame, and every performance setting of the menu, with screenshots.
+
+- **No hidden desktop render**: the desktop mirror nobody sees on the Frame is no longer rendered: 4.5–6.6 ms per frame on Addams.
+- **No frame pacing stall**: the desktop window is no longer presented, which tied the headset to a 60 Hz window: 2 ms of render thread per frame back.
+- **Direct rendering**: the GPU driver measures and picks the faster of its two rendering paths for each pass: 14.0 → 9.1 ms on Ghostbusters.
+- **Visibility mask first**: the parts the lenses never show are masked before the table is drawn, which keeps the GPU's early depth rejection on.
+- **Dynamic resolution** (Steam Frame screen): the resolution follows the GPU time of the frames; Addams stays at full resolution 88–91 % of the time.
+- **Eye-tracked foveated rendering** (Steam Frame screen): full shading only where the eyes look: about 3 ms per frame on Addams.
+- **Foveated tone mapping** (Steam Frame screen): the same pattern on the tone mapping pass: about 0.8 ms.
+- **Foveated anti-aliasing, Automatic** (Steam Frame screen): the same pattern on the anti-aliasing pass, about 0.9 ms, turned on only for the tables that cannot hold their full resolution without it.
+- **Culling**: parts entirely outside the view are not drawn: 0.6 ms on Lord of the Rings.
+- **Simplified meshes** (Steam Frame screen): heavy 3D parts drawn with fewer triangles where the eye cannot see the difference: 1.29 ms on Addams.
+- **Welded meshes and reflection culling**: meshes exported as separate triangles can be simplified, and parts that cannot show in the playfield reflection are not drawn in it: Albator78 from 20 to 11–12 ms, 36 → 72 fps.
+- **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
+- **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
+- **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).
+- **Performance panel** (Display & Performance screen): a panel beside the cabinet that rates each table every 30 seconds, with graphs of the frame rate, resolution, GPU and CPU.
 
 ## Backup and restore
 
