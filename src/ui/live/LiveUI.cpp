@@ -518,7 +518,11 @@ void LiveUI::RenderUI()
             auto texture = static_cast<std::shared_ptr<BaseTexture> *>(tex->BackendUserData);
             BaseTexture::Update(*texture, tex->Width, tex->Height, BaseTexture::RGBA, static_cast<const uint8_t *>(tex->GetPixels()));
             (*texture)->SetName(std::format("ImGui.Tex{}", tex->UniqueID));
+            #if defined(VPX_STEAM_FRAME)
+            tex->SetTexID(m_renderer->m_renderDevice->m_texMan.LoadPinnedTexture(texture->get()));
+            #else
             tex->SetTexID(m_renderer->m_renderDevice->m_texMan.LoadTexture(texture->get(), false));
+            #endif
             tex->SetStatus(ImTextureStatus_OK);
          }
          else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames > 0)
@@ -553,7 +557,11 @@ void LiveUI::RenderUI()
       if (m_inGameUI.IsOpened() && !m_vrInGameUIWasOpened)
          m_player->m_vrDevice->RecenterUIPanel();
       m_vrInGameUIWasOpened = m_inGameUI.IsOpened();
-      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened());
+      // With the in-game UI closed, the panel stays in front of the head, so that a new notification appears in the middle of the view; it then
+      // stays there in the room until it disappears, the panel following the head again for the next one
+      const unsigned int notification = m_notificationOverlay.GetNewestId();
+      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && (notification == 0 || notification != m_vrNotificationPlaced));
+      m_vrNotificationPlaced = notification;
       onVRPanel = m_player->m_vrDevice->GetUIPanelTransforms(right, bottom, matView);
    }
    #endif

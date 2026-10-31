@@ -160,6 +160,8 @@ test: add each one found to the checklist.
 - Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
   (libpinmame patch, 2026-10-28). It can be checked on macOS too.
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
+- PuP tables (Albator, Blade Runner 2049): no magenta or scrambled areas, in the table or in the text of the panels, and no "GPU memory limit
+  reached" message in the table or back in the lobby. A notification stays where it appeared in the room when the head turns.
 - The loading message stays steady in the headset while a table loads, from the lobby and from another table: no doubled or moving
   image (frames without anything to present keep the swapchain image, in upstream's frame gate since 2026-10-30, `m_frameRequested`).
 

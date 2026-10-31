@@ -24,8 +24,8 @@ void LatchSwitch();
 // of the new view when it is active, and the classic pages otherwise
 void OnPlayerCreated(Player* player, bool isLobby);
 
-// In VR, draws the notifications with the size of the menu text: in the middle of the view (where the head looks at the UI panel) while the
-// in-game UI is closed, and stacked above the menu window ('aboveY', see LiveUI::Update) while it is open. Upstream's look, the small
+// In VR, draws the notifications with the size of the menu text: in the middle of the view when they appear, then staying there in the room,
+// while the in-game UI is closed, and stacked above the menu window ('aboveY', see LiveUI::Update) while it is open. Upstream's look, the small
 // desktop overlay font a quarter of the panel height from its top, put them above the eyes and too small to read in the headset.
 void UpdateNotifications(Player* player, NotificationOverlay& overlay, ImFont* font, float aboveY);
 

@@ -173,9 +173,6 @@ public:
    void SetUIPanelFollowsHead(bool follow) { m_uiPanelFollowsHead = follow; }
    // Transforms from UI pixel coordinates (0..width, 0..height from the top left of the panel) to each eye clip space. Returns false if the panel is not placed yet
    bool GetUIPanelTransforms(float width, float height, Matrix3D (&pixelToClip)[2]) const;
-   // Where the head looks at the UI panel (its forward ray), normalized to 0..1 from its top left and kept within 'margin' of its edges, so that
-   // something drawn there is in the middle of the view (notifications). Returns false if the panel is not placed yet
-   bool GetUIPanelGazePoint(float& x, float& y, float margin) const;
    // Position pointed by a controller on the UI panel, normalized to 0..1 from its top left, and vertical axis of the thumbstick of that
    // controller (-1..1, up is positive). Returns false if no controller points at it
    bool GetUIPointer(float& x, float& y, bool& pressed, float& scroll) const

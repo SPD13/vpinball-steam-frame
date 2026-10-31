@@ -9,6 +9,9 @@
 #if defined(ENABLE_BGFX)
 #include "TextureCompressor.h" // CompressedTexture
 #endif
+#if defined(VPX_STEAM_FRAME_HEADSET)
+#include <fstream>
+#endif
 
 std::shared_ptr<Sampler> TextureManager::LoadTexture(ITexManCacheable* const memtex, const bool force_linear_rgb)
 {
@@ -77,6 +80,24 @@ std::shared_ptr<Sampler> TextureManager::LoadTexture(ITexManCacheable* const mem
    }
    return sampler;
 }
+
+#if defined(VPX_STEAM_FRAME)
+std::shared_ptr<Sampler> TextureManager::LoadPinnedTexture(ITexManCacheable* const memtex)
+{
+   {
+      const std::lock_guard lock(m_mapMutex);
+      Iter it = m_map.find(memtex->GetLiveHash());
+      if (it == m_map.end())
+      {
+         MapEntry entry;
+         entry.tex = memtex;
+         it = m_map.emplace(memtex->GetLiveHash(), std::move(entry)).first;
+      }
+      it->second.pinned = true;
+   }
+   return LoadTexture(memtex, false);
+}
+#endif
 
 void TextureManager::AddPendingUpload(ITexManCacheable* memtex, std::shared_ptr<const BaseTexture> bitmap)
 {
@@ -194,6 +215,35 @@ void TextureManager::RefreshBudget()
    m_statsFrame = stats->gpuFrameNum;
    m_gpuMemBudget = stats->gpuMemoryMax;
    m_gpuMemUsed = stats->gpuMemoryUsed;
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   // The memory of the Frame is shared with the CPU, and the budget its driver gives VPX is far below what is free (2650 MB with 120 MB used and 7941 MB
+   // available; under 2 GB with a large table loaded, less than VPX uses; vulkaninfo, outside VPX, gets 90 % of what is free), so textures were evicted and
+   // replaced by the fallback for nothing. What VPX may use is what it holds plus most of what is still free.
+   if (m_gpuMemBudget > 0)
+   {
+      if (const uint32_t now = msec(); m_systemAvailable < 0 || now - m_systemAvailableTick >= 1000)
+      {
+         m_systemAvailableTick = now;
+         m_systemAvailable = -1;
+         std::ifstream meminfo("/proc/meminfo");
+         string key;
+         int64_t kb;
+         while (m_systemAvailable < 0 && meminfo >> key >> kb)
+         {
+            if (key == "MemAvailable:")
+               m_systemAvailable = kb << 10;
+            meminfo.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+         }
+         if (now - m_budgetLogTick >= 30 * 1000 || m_budgetLogTick == 0)
+         {
+            m_budgetLogTick = now;
+            PLOGI << "GPU memory: " << (m_gpuMemUsed >> 20) << " MB used, driver budget " << (m_gpuMemBudget >> 20) << " MB, system available " << (m_systemAvailable >> 20) << " MB";
+         }
+      }
+      if (m_systemAvailable >= 0)
+         m_gpuMemBudget = m_gpuMemUsed + (m_systemAvailable * 9) / 10;
+   }
+#endif
    // Destroyed samplers take a few frames before their memory is actually freed by the driver
    while (!m_pendingFree.empty() && m_statsFrame - m_pendingFree.front().first >= kFreeLatencyFrames)
       m_pendingFree.pop_front();
@@ -225,6 +275,10 @@ bool TextureManager::MakeRoom(const size_t needed)
    for (Iter it = m_map.begin(); it != m_map.end(); ++it)
    {
       const MapEntry& entry = it->second;
+#if defined(VPX_STEAM_FRAME)
+      if (entry.pinned)
+         continue;
+#endif
       if (!entry.isPlaceHolder && entry.lastUsedFrame + kEvictGraceFrames < m_statsFrame && (entry.samplers[VARIANT_SRGB] || entry.samplers[VARIANT_LINEAR]))
          victims.emplace_back(entry.lastUsedFrame, it);
    }
@@ -259,7 +313,11 @@ std::shared_ptr<Sampler> TextureManager::CreateSampler(MapEntry& entry, const Sa
    size_t est = EstimateGpuBytes(bitmap.get());
    entry.fullBytes[variant] = 0;
 
+#if defined(VPX_STEAM_FRAME)
+   if (!entry.pinned && !MakeRoom(est))
+#else
    if (!MakeRoom(est))
+#endif
    {
       // Out of budget even after evicting: try a downsized decode before degrading to the fallback texture.
       // Half of the loaded size, not of the declared size, which is larger when capped by the max texture dimension setting

@@ -28,6 +28,11 @@ public:
    void AddPlaceHolder(ITexManCacheable* memtex);
    void AddPendingUpload(ITexManCacheable* memtex, std::shared_ptr<const BaseTexture> bitmap = nullptr);
    std::shared_ptr<Sampler> LoadTexture(ITexManCacheable* const memtex, const bool force_linear_rgb);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: for the UI's font texture, never evicted nor degraded. ImGui asks for it only when it changes, so it looks unused to
+   // the LRU eviction, and it updates it in place, which the 8x8 fallback texture rejects: the text of every UI would stay scrambled
+   std::shared_ptr<Sampler> LoadPinnedTexture(ITexManCacheable* const memtex);
+#endif
    void SetDirty(ITexManCacheable* memtex);
    void UnloadTexture(ITexManCacheable* memtex);
    void UnloadAll();
@@ -56,6 +61,9 @@ private:
       size_t gpuBytes[VARIANT_COUNT] = { 0, 0 }; // Estimated resident bytes of each variant
       size_t fullBytes[VARIANT_COUNT] = { 0, 0 }; // Estimated bytes at full size of a variant uploaded downsized or as fallback, 0 if not degraded
       uint32_t upgradeRetryFrame = 0; // Frame index before which a degraded variant is not retried at full size
+#if defined(VPX_STEAM_FRAME)
+      bool pinned = false; // See LoadPinnedTexture
+#endif
    };
    RenderDevice& m_rd;
    // Guards m_map, as loader threads register and upload textures while the main thread renders the loading UI.
@@ -102,6 +110,11 @@ private:
    unsigned int m_pressureNotifId = 0;
    unsigned int m_downsizeNotifId = 0;
    uint32_t m_pressureNotifCooldown = 0;
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   int64_t m_systemAvailable = -1; // MemAvailable of /proc/meminfo, sampled once per second
+   uint32_t m_systemAvailableTick = 0;
+   uint32_t m_budgetLogTick = 0;
+#endif
 
 #pragma endregion
 #endif

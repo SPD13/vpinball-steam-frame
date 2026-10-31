@@ -180,19 +180,4 @@ bool VRDevice::GetUIPanelTransforms(float width, float height, Matrix3D (&pixelT
    return true;
 }
 
-bool VRDevice::GetUIPanelGazePoint(float& x, float& y, float margin) const
-{
-   if (!m_uiPanelPlaced)
-      return false;
-   // The forward ray of the head intersected with the panel plane. Looking away from it (along it or behind it), the point goes to the edge
-   // of the panel on the side the head is turned to
-   const vec3 normal = CrossProduct(m_uiPanelRight, m_uiPanelDown);
-   const float denom = m_uiHeadForward.Dot(normal);
-   const float t = fabsf(denom) > 1e-6f ? (m_uiPanelOrigin - m_uiHeadPos).Dot(normal) / denom : -1.f;
-   const vec3 onPanel = (t > 0.f ? m_uiHeadPos + m_uiHeadForward * t : m_uiHeadPos + m_uiHeadForward * 100.f) - m_uiPanelOrigin;
-   x = clamp(onPanel.Dot(m_uiPanelRight) / m_uiPanelRight.LengthSquared(), margin, 1.f - margin);
-   y = clamp(onPanel.Dot(m_uiPanelDown) / m_uiPanelDown.LengthSquared(), margin, 1.f - margin);
-   return true;
-}
-
 #endif

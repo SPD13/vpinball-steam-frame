@@ -28,6 +28,7 @@ public:
       ImVec2 center { -1.f, -1.f };
    };
    void SetStyle(const Style& style) { m_style = style; }
+   unsigned int GetNewestId(); // Of the newest notification shown, 0 if there are none
 #endif
 
 private:

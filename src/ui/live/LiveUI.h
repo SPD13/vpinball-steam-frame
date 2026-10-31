@@ -151,6 +151,7 @@ private:
    bool m_vrPointerClickSwallowed = false; // The trigger press switched from button to pointer navigation: it does not click
    bool m_vrPointerScrollBlocked = false; // The thumbstick was used for button navigation and is not back to its center yet
    bool m_vrInGameUIWasOpened = false; // To place the VR UI panel in front of the player each time the in-game UI opens
+   unsigned int m_vrNotificationPlaced = 0; // Newest notification the VR UI panel was placed for
    ImFont *m_baseFont = nullptr;
    ImFont *m_overlayBoldFont = nullptr;
    ImFont *m_overlayFont = nullptr;
