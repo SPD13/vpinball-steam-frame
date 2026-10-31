@@ -65,6 +65,7 @@ public:
       int foveationLevel = -1; // Foveated rendering setting in use: 0 off, 1 low, 2 medium, 3 high (-1 when the runtime does not support it)
       bool foveationEyeTracked = false; // Following the gaze (else fixed at the center of the view)
       bool foveationFixedLow = false; // Fixed through the shading rate image, which then uses the wide Low profile whatever the level
+      int foveatedAntialiasing = 0; // The anti-aliasing pass foveated too: 0 no, 1 always, 2 turned on by the automatic mode
    };
    void OnFrame(const FrameInfo& frame);
    // A table starts with the VR device (ApplyTableSettings): the history and the rating start again (and the sampling thread, the first time)

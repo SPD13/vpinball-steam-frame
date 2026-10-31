@@ -691,10 +691,12 @@ ImDrawList* PerfPanel::BuildWindow()
       ImGui::PopStyleColor();
       // The performance features of the fork (Steam Frame screen of the menu): foveated rendering (left), simplified meshes (right)
       static constexpr const char* kFoveationLevels[] = { "off", "Low", "Medium", "High" };
+      // " + AA": the anti-aliasing pass is foveated too, "(auto)" when the automatic mode turned it on for this table
       const string foveation = target.foveationLevel < 0 ? "Foveation: not supported"s
          : target.foveationLevel == 0                    ? "Foveation off"s
-                                                         : std::format("Foveation {}, {}", kFoveationLevels[min(target.foveationLevel, 3)],
-                                                              target.foveationEyeTracked ? "eye-tracked" : target.foveationFixedLow ? "fixed (Low profile)" : "fixed");
+                                                         : std::format("Foveation {}, {}{}", kFoveationLevels[min(target.foveationLevel, 3)],
+                                                              target.foveationEyeTracked ? "eye-tracked" : target.foveationFixedLow ? "fixed (Low profile)" : "fixed",
+                                                              target.foveatedAntialiasing == 2 ? " + AA (auto)" : target.foveatedAntialiasing == 1 ? " + AA" : "");
       ImGui::PushStyleColor(ImGuiCol_Text, target.foveationLevel > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
       ImGui::TextUnformatted(foveation.c_str());
       ImGui::PopStyleColor();
