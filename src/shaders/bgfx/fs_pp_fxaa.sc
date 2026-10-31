@@ -23,6 +23,16 @@ SAMPLER2DSTEREO(tex_depth,        4); // DepthBuffer
 // Some of the texFetch are unfiltered, but since they are aligned to exact texel coords, this does not need a dedicated sampler
 #define tex_fb_unfiltered tex_fb_filtered
 
+// w_h_height.w: 1 when the depth buffer is available, plus 2 when the tonemap wrote the luma of each pixel in the alpha channel
+#define depthAvailable (w_h_height.w == 1.0 || w_h_height.w == 3.0)
+#define lumaInAlpha (w_h_height.w >= 2.0)
+
+#ifdef STEREO
+	#define texStereoGatherAlpha(tex, pos) textureGather(tex, vec3((pos).x, (pos).y, v_eye), 3)
+#else
+	#define texStereoGatherAlpha(tex, pos) textureGather(tex, pos, 3)
+#endif
+
 
 float luma(const vec3 l)
 {
@@ -30,6 +40,49 @@ float luma(const vec3 l)
     //return 0.299*l.x + 0.587*l.y + 0.114*l.z;
     //return 0.2126*l.x + 0.7152*l.y + 0.0722*l.z; // photometric
     //return sqrt(0.299 * l.x*l.x + 0.587 * l.y*l.y + 0.114 * l.z*l.z); // hsp
+}
+
+// Luma of a sample, from its alpha channel when the tonemap wrote it there (it is linear in the color, so a filtered sample keeps it)
+float lumaOf(const vec4 c)
+{
+    return lumaInAlpha ? c.w : luma(c.xyz);
+}
+
+// Luma of the 3x3 neighbourhood of u, whose color is rgbM. From the alpha channel: two gathers centered on the corners of the middle texel
+// (each returns the (-,+), (+,+), (+,-), (-,-) texels of its 2x2 footprint) and two reads, instead of nine reads of the color
+#ifdef STEREO
+void lumaNeighbourhood(const vec2 u, const vec2 offs, const vec3 rgbM, const float v_eye,
+#else
+void lumaNeighbourhood(const vec2 u, const vec2 offs, const vec3 rgbM, const float unusedEye,
+#endif
+	out float NW, out float N, out float NE, out float W, out float M, out float E, out float SW, out float S, out float SE)
+{
+	BRANCH if(lumaInAlpha)
+	{
+		const vec4 gNW = texStereoGatherAlpha(tex_fb_unfiltered, u - 0.5 * offs); // W, M, N, NW
+		const vec4 gSE = texStereoGatherAlpha(tex_fb_unfiltered, u + 0.5 * offs); // S, SE, E, M
+		NW = gNW.w;
+		N = gNW.z;
+		W = gNW.x;
+		M = gNW.y;
+		E = gSE.z;
+		S = gSE.x;
+		SE = gSE.y;
+		NE = texStereoNoLod(tex_fb_unfiltered, u + vec2(offs.x,-offs.y)).w;
+		SW = texStereoNoLod(tex_fb_unfiltered, u + vec2(-offs.x,offs.y)).w;
+	}
+	else
+	{
+		NW = luma(texStereoNoLod(tex_fb_unfiltered, u - offs).xyz);
+		N = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(0.0,offs.y)).xyz);
+		NE = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(-offs.x,offs.y)).xyz);
+		W = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(offs.x,0.0)).xyz);
+		M = luma(rgbM);
+		E = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(offs.x,0.0)).xyz);
+		SW = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(-offs.x,offs.y)).xyz);
+		S = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(0.0,offs.y)).xyz);
+		SE = luma(texStereoNoLod(tex_fb_unfiltered, u + offs).xyz);
+	}
 }
 
 // Approximation of FXAA
@@ -40,7 +93,7 @@ vec4 fxaa1(const vec2 u)
 #endif
 {
 	const vec3 rMc = texStereoNoLod(tex_fb_unfiltered, u).xyz;
-	BRANCH if(w_h_height.w == 1.0) // depth buffer available?
+	BRANCH if(depthAvailable)
 	{
 		const float depth0 = texStereoNoLod(tex_depth, u).x;
 		BRANCH if((depth0 == 1.0) || (depth0 == 0.0)) // early out if depth too large (=BG) or too small (=DMD,etc)
@@ -48,15 +101,8 @@ vec4 fxaa1(const vec2 u)
 	}
 
 	const vec2 offs = w_h_height.xy;
-	const float rNW = luma(texStereoNoLod(tex_fb_unfiltered, u - offs).xyz);
-	const float rN = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(0.0,offs.y)).xyz);
-	const float rNE = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(-offs.x,offs.y)).xyz);
-	const float rW = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(offs.x,0.0)).xyz);
-	const float rM = luma(rMc);
-	const float rE = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(offs.x,0.0)).xyz);
-	const float rSW = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(-offs.x,offs.y)).xyz);
-	const float rS = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(0.0,offs.y)).xyz);
-	const float rSE = luma(texStereoNoLod(tex_fb_unfiltered, u + offs).xyz);
+	float rNW, rN, rNE, rW, rM, rE, rSW, rS, rSE;
+	lumaNeighbourhood(u, offs, rMc, v_eye, rNW, rN, rNE, rW, rM, rE, rSW, rS, rSE);
 	const float rMrN = rM+rN;
 	const float lumaNW = rMrN+rNW+rW;
 	const float lumaNE = rMrN+rNE+rE;
@@ -94,7 +140,7 @@ vec4 fxaa2(const vec2 u)
 #endif
 {
 	const vec3 rgbyM = texStereoNoLod(tex_fb_unfiltered, u).xyz;
-	BRANCH if(w_h_height.w == 1.0) // depth buffer available?
+	BRANCH if(depthAvailable)
 	{
 		const float depth0 = texStereoNoLod(tex_depth, u).x;
 		BRANCH if((depth0 == 1.0) || (depth0 == 0.0)) // early out if depth too large (=BG) or too small (=DMD,etc)
@@ -102,15 +148,8 @@ vec4 fxaa2(const vec2 u)
 	}
 
 	const vec2 offs = w_h_height.xy;
-	const float lumaNW = luma(texStereoNoLod(tex_fb_unfiltered, u - offs).xyz);
-	float lumaN = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(0.0,offs.y)).xyz);
-	const float lumaNE = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(-offs.x,offs.y)).xyz);
-	const float lumaW = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(offs.x,0.0)).xyz);
-	const float lumaM = luma(rgbyM);
-	const float lumaE = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(offs.x,0.0)).xyz);
-	const float lumaSW = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(-offs.x,offs.y)).xyz);
-	float lumaS = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(0.0,offs.y)).xyz);
-	const float lumaSE = luma(texStereoNoLod(tex_fb_unfiltered, u + offs).xyz);
+	float lumaNW, lumaN, lumaNE, lumaW, lumaM, lumaE, lumaSW, lumaS, lumaSE;
+	lumaNeighbourhood(u, offs, rgbyM, v_eye, lumaNW, lumaN, lumaNE, lumaW, lumaM, lumaE, lumaSW, lumaS, lumaSE);
 	const float maxSM = max(lumaS, lumaM);
 	const float minSM = min(lumaS, lumaM);
 	const float maxESM = max(lumaE, maxSM);
@@ -167,9 +206,9 @@ vec4 fxaa2(const vec2 u)
 	vec2 posN = vec2(posB.x - offNP.x * FXAA_QUALITY_P0, posB.y - offNP.y * FXAA_QUALITY_P0);
 	vec2 posP = vec2(posB.x + offNP.x * FXAA_QUALITY_P0, posB.y + offNP.y * FXAA_QUALITY_P0);
 	const float subpixD = -2.0 * subpixC + 3.0;
-	float lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
+	float lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
 	const float subpixE = subpixC * subpixC;
-	float lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+	float lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 	if(!pairN) lumaNN = lumaSS;
 	const float gradientScaled = gradient * (1.0/4.0);
 	const float lumaMM = lumaM - lumaNN * 0.5;
@@ -185,8 +224,8 @@ vec4 fxaa2(const vec2 u)
 	if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P1;
 	if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P1;
 	if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -243,7 +282,7 @@ vec4 fxaa3(const vec2 u)
 #endif
 {
 	const vec3 rgbyM = texStereoNoLod(tex_fb_unfiltered, u).xyz;
-	BRANCH if(w_h_height.w == 1.0) // depth buffer available?
+	BRANCH if(depthAvailable)
 	{
 		const float depth0 = texStereoNoLod(tex_depth, u).x;
 		BRANCH if((depth0 == 1.0) || (depth0 == 0.0)) // early out if depth too large (=BG) or too small (=DMD,etc)
@@ -251,15 +290,8 @@ vec4 fxaa3(const vec2 u)
 	}
 
 	const vec2 offs = w_h_height.xy;
-	const float lumaNW = luma(texStereoNoLod(tex_fb_unfiltered, u - offs).xyz);
-	float lumaN = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(0.0,offs.y)).xyz);
-	const float lumaNE = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(-offs.x,offs.y)).xyz);
-	const float lumaW = luma(texStereoNoLod(tex_fb_unfiltered, u - vec2(offs.x,0.0)).xyz);
-	const float lumaM = luma(rgbyM);
-	const float lumaE = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(offs.x,0.0)).xyz);
-	const float lumaSW = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(-offs.x,offs.y)).xyz);
-	float lumaS = luma(texStereoNoLod(tex_fb_unfiltered, u + vec2(0.0,offs.y)).xyz);
-	const float lumaSE = luma(texStereoNoLod(tex_fb_unfiltered, u + offs).xyz);
+	float lumaNW, lumaN, lumaNE, lumaW, lumaM, lumaE, lumaSW, lumaS, lumaSE;
+	lumaNeighbourhood(u, offs, rgbyM, v_eye, lumaNW, lumaN, lumaNE, lumaW, lumaM, lumaE, lumaSW, lumaS, lumaSE);
 	const float maxSM = max(lumaS, lumaM);
 	const float minSM = min(lumaS, lumaM);
 	const float maxESM = max(lumaE, maxSM);
@@ -316,9 +348,9 @@ vec4 fxaa3(const vec2 u)
 	vec2 posN = vec2(posB.x - offNP.x * FXAA_QUALITY_P0, posB.y - offNP.y * FXAA_QUALITY_P0);
 	vec2 posP = vec2(posB.x + offNP.x * FXAA_QUALITY_P0, posB.y + offNP.y * FXAA_QUALITY_P0);
 	const float subpixD = -2.0 * subpixC + 3.0;
-	float lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
+	float lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
 	const float subpixE = subpixC * subpixC;
-	float lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+	float lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 	if(!pairN) lumaNN = lumaSS;
 	const float gradientScaled = gradient * (1.0/4.0);
 	const float lumaMM = lumaM - lumaNN * 0.5;
@@ -334,8 +366,8 @@ vec4 fxaa3(const vec2 u)
 	if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P1;
 	if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P1;
 	BRANCH if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -349,8 +381,8 @@ vec4 fxaa3(const vec2 u)
 		//
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -362,8 +394,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P3;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -375,8 +407,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P4;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -388,8 +420,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P5;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -401,8 +433,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P6;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -414,8 +446,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P7;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -427,8 +459,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P8;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -440,8 +472,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P9;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
@@ -453,8 +485,8 @@ vec4 fxaa3(const vec2 u)
 		if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P10;
 
 		if(doneNP) {
-		if(!doneN) lumaEndN = luma(texStereoNoLod(tex_fb_filtered, posN).xyz);
-		if(!doneP) lumaEndP = luma(texStereoNoLod(tex_fb_filtered, posP).xyz);
+		if(!doneN) lumaEndN = lumaOf(texStereoNoLod(tex_fb_filtered, posN));
+		if(!doneP) lumaEndP = lumaOf(texStereoNoLod(tex_fb_filtered, posP));
 		if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;
 		if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;
 		doneN = abs(lumaEndN) >= gradientScaled;
