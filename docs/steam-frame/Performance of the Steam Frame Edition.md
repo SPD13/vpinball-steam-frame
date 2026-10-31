@@ -6,6 +6,9 @@ This article describes every performance improvement of the Steam Frame Edition 
 what it was measured to save on the Frame, and how to adjust it when it can be adjusted. The last part is a reference of the
 performance settings of the menu, with screenshots taken on the Frame.
 
+**▶ [Watch the tech deep-dive](https://youtu.be/WXHtyRk26lo)**: the video of the foveation, the simpler meshes and the culling, and how
+heavy tables keep 72 Hz.
+
 The Steam Frame renders the table natively, on its Adreno 750 GPU, at 2160 × 2160 pixels per eye and 72 frames per second: a frame
 has 13.9 ms. When the October 2026 work started, a heavy table such as Addams Family needed **18.0 ms per frame** at that resolution
 and ran at 36 fps. With everything described below, the same table renders in **about 7.2 ms** at the same resolution, and every table
