@@ -260,3 +260,43 @@ CRLF kept. In attract mode the DMD reads `CREDITS 0 BALL 0/3`; in the game it sh
 the Frame: the `DMDPUP` flasher of the cabinet in the headset.
 
 History: version 1, 2026-10-28.
+
+### <a id="sonic-star-wars-dip-switches"></a>Star Wars (Sonic 1987): DIP switches of the game
+
+Applies to: the ROM `sonstwar` (checked with *Star Wars (Sonic 1987) mfuegemann DT-FS-VR-MR Ext2k Conversion v1.2*). Other tables of this
+ROM with another script are reported as "not needed": the text to patch is `Controller.Run` as this script writes it.
+
+**Symptom.** Coins seem to be ignored: slot 1 needs 3 coins for a credit, and Start does not start a game, even with credits.
+
+**Cause.** The DIP switches of this game hold its coin settings and more, and it does not work with all of them off. Its factory values
+are `3C` and `25`; they read `0` and `0` in the game:
+
+1. At the start of a table, `core.vbs` builds the table options of the DIP switches (`vpmOptionEvent`, `cvpmDips`): it takes the value of
+   `Controller.Dip` as their default, then writes the options back to the DIP switches.
+2. At that moment the PinMAME plugin does not have the DIP switches of the machine yet: they come after `Controller.Run`
+   (`Controller::OnStateSrcChanged`). `Controller::GetDip` then gave 0, so 0 was written.
+3. PinMAME saves the DIP switches in the last bytes of the NVRAM (`core_nvram`), and restores them at the next start.
+
+This code came with the table options of the DIP switches (upstream 23e9fc112, 2026-10-04); the table played in the first score tests of
+October, with an earlier build (not bisected). The system scripts register their own DIP switches (`peyper.vbs`), so a table without a DIP form has the same problem. `GetDip` now gives the
+value of the machine until the plugin has it, which keeps new NVRAMs right, but an NVRAM that already holds zeros keeps them: this is what
+the recipe repairs.
+
+**Fix.** One line before `Controller.Run` sets the factory values. A value set before the start wins over the NVRAM, and `core.vbs` then
+takes it as the default of the options. It is written at every start; a choice made in the menu of the table still wins. The factory values
+were read with a new NVRAM (`PinmameGetDIP`). The NVRAM is not changed by the patch, and the DIP switches saved in it become right when the
+table is closed. Its other contents are kept.
+
+**Checked** on the Mac, 2026-10-31, with a copy of the Frame's NVRAM (DIP switches at 0), 6 coins in slot 1, then Start. Before: 2 credits, no
+game. With the recipe, on the build without the `GetDip` change and on the one with it: `3C`/`25`, 1 credit per coin, and the game starts
+(ball served, flippers on). With `DIP - Balls per game` set to 5 balls in the settings of the table: `1C`/`25`. Patch from the web page: the
+script of the table with that one line added, CRLF kept.
+
+**Checked** on the Frame, 2026-10-31, with the recipe in a `fixes.json` of the preferences folder and **Patch table**, on a build without the
+`GetDip` change: coins add credits and the game plays in the headset, the log read 93,000 points from the machine, and the NVRAM then held
+`3C`/`25`. No game was finished in that session, so no score was recorded yet.
+
+**Not fixed.** The digits of the backglass stay at zero: they are painted in the image `backglassimage` of the primitive
+`VR_Backglass_Marcador`, a 3D box that VPX does not convert to a backglass surface, and the table has no other display in VR.
+
+History: version 1, 2026-10-31.

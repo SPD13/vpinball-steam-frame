@@ -507,7 +507,7 @@ Final pass on macOS, one unattended game per table (section 12), except the two 
 | South Park (Sega 1999) | sprk_103 | pinmame | the game over flag of the machine | 8,821,040 |  |
 | Space Cadet (Original 2021) | - | script | a script variable | 163,250 |  |
 | Star Trek LE (Stern 2013) v1.09 | st_161h | pinmame | the game on solenoid of the machine | 1,712,390 | Game on solenoid rule (SAM, 2026-10-28) |
-| Star Wars (Sonic 1987) | sonstwar | pinmame | the game over flag of the machine | 2,277,000 | New platform and map (RAM probe), scale 10. 2026-10-28: the machine no longer takes coins or Start on the Mac (displays dark), with the October NVRAM, a new one, and PinMAME 652249e2 too. Open |
+| Star Wars (Sonic 1987) | sonstwar | pinmame | the game over flag of the machine | 2,277,000 | New platform and map (RAM probe), scale 10. 2026-10-28: the machine no longer took coins or Start. 2026-10-31: its DIP switches were zeroed, fixed by the recipe `sonic-star-wars-dip-switches` ([Table and ROM Fixes](Table%20and%20ROM%20Fixes.md#sonic-star-wars-dip-switches)), plays on the Frame; no game finished there yet, and the digits of its VR backglass are painted |
 | Star Wars Trilogy | swtril43 | pinmame | the game over flag of the machine | 1,410,290 |  |
 | Stargate Minimal (Gottlieb 1995) | stargat5 | pinmame | the game over flag of the machine | 10,269,180 |  |
 | Starship Troopers (Sega 1997) | startrp2 | pinmame | the game over flag of the machine | 4,171,910 |  |

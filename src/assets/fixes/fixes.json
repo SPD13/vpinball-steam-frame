@@ -64,6 +64,22 @@
           "replace": "Const UltraDMDUpdateTime\t= 1000\t' 5000 before the Steam Frame Edition (fix city-hunter-ultradmd): the plugin's UltraDMD does not stutter, and the score followed 5 s late\t"
         }
       ]
+    },
+    {
+      "id": "sonic-star-wars-dip-switches",
+      "version": 1,
+      "title": "Star Wars (Sonic 1987): DIP switches of the game",
+      "symptom": "Coins seem to be ignored: slot 1 needs 3 coins for a credit, and Start does not start a game, even with credits.",
+      "cause": "The DIP switches of the game hold its coin settings and more. The application used to save them as zeros in the NVRAM of the game, and the game does not start a game with them.",
+      "change": "The table sets the factory DIP switches of the game before starting it, whatever the NVRAM holds. The DIP options of the table's menu still apply.",
+      "doc": "sonic-star-wars-dip-switches",
+      "match": { "roms": ["sonstwar"] },
+      "script": [
+        {
+          "find": "    Controller.Run \n",
+          "replace": "    Controller.Dip(0) = &H3C : Controller.Dip(1) = &H25 ' Added by the Steam Frame Edition (fix sonic-star-wars-dip-switches): factory DIP switches, an NVRAM may hold zeros\n    Controller.Run \n"
+        }
+      ]
     }
   ]
 }
