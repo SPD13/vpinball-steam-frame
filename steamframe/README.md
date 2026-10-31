@@ -10,11 +10,11 @@ upstream's files only get small, guarded hooks into it.
 |---|---|
 | Code of the fork (table library, lobby and launcher mode, scores, web routes, table images) | `src/steamframe/` |
 | Build of the fork: sources, compile definitions, libraries | `steamframe/steamframe.cmake`, included by one line of the root `CMakeLists.txt` |
-| Dependencies the fork adds (libzip for the web server, libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
+| Dependencies the fork adds (libarchive) | `steamframe/deps/*.sh`, run by one line of each `platforms/*/external.sh` |
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
 | Patches of libspatialaudio (soundfield rotation fade, see `docs/Spatial Audio Crackle When Turning the Head.md`) | `steamframe/patches/libspatialaudio/`, applied by the `external.sh` of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 |
-| Patches of libpinmame (memory maps of 4-bit memory: nibble before mask, see `docs/PinMAME Memory Maps on 4-bit Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
-| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator | `steamframe/tools/` |
+| Patches of libpinmame (memory maps of banked memory, see `docs/PinMAME Memory Maps on Banked Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
+| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator; `top-tables.py`, which builds `docs/steam-frame/Top Tables.md` | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
 | Fixes of the tables and ROMs that do not work as they are: the recipes, and their record | `src/assets/fixes/fixes.json`, `docs/Table and ROM Fixes.md` |
@@ -93,6 +93,8 @@ The workspace folder holds, side by side:
 3. **Review.** The report, VR and XR first, and `git range-diff`. When upstream built something the fork has too, decide as below.
 4. **Build for macOS** (Homebrew's bison first in the `PATH`: `export PATH="$(brew --prefix bison)/bin:/opt/homebrew/bin:$PATH"`):
    `platforms/macos-arm64/external.sh` (rebuilds only the dependencies whose version changed), then `cmake --build build -j10`.
+   Then `steamframe/tools/check-pinmame-catalog.sh`: a game libpinmame runs and the catalog leaves out would be reported as unknown,
+   so add it to the list in `src/steamframe/RomAliases.cpp`.
 5. **Check on macOS**, with a settings folder of its own (`-PrefPath <folder>`, holding a `VPinballX.ini` with `TablesPath` set to a
    folder of tables with their ROMs, `WebServerAlwaysOn = 1`, `WebServerPairing = 0`):
    - `build/VPinballX_BGFX.app/Contents/MacOS/VPinballX_BGFX -PrefPath <folder> -Launcher`: the lobby reaches `Startup done` in
@@ -116,7 +118,7 @@ The workspace folder holds, side by side:
 
 The fork patches three dependencies that upstream downloads and builds in `platforms/*/external.sh`: bgfx, libspatialaudio and
 libpinmame (table above). Each block applies the `*.patch` of its folder in `steamframe/patches/` after the download, and its cache key
-carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency builds rebuild. At each sync:
+carries a tag (`-turnip4`, `-rotfix1`, `-memmap2`) so that existing dependency builds rebuild. At each sync:
 
 - **Upstream changed the block** (a conflict on the `Steam Frame Edition` lines): keep upstream's new lines and put our two lines back
   (the patch loop after the `cd` into the source, the tag at the end of the `*_EXPECTED_SHA`).
@@ -129,12 +131,11 @@ carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency b
     source folder with `a/` and `b/` prefixes), and keep the tag.
 - **A patch of the fork changes**: increase its tag (`-memmap2`), or the dependency builds already made keep the old library.
 
-libpinmame (`01-memmap-nibble-then-mask.patch`, 2026-10-28): `SetMemMapImpl` of `src/libpinmame/libpinmame.cpp` applied the mask of a
-memory map field to the raw byte, before the nibble of the platform, so the game over and tilt of the Bally AS-2518-17/-35 and Stern
-MPU-100 maps (43 maps, 169 ROMs) read constant "in game" and their scores were never recorded. The patch takes the nibbles first, as
-the format and its reference parser do. It is proposed upstream; once merged, the bundled maps need no change (they are upstream's,
-`system-rom-20.map.json` included). After a sync that changes `PINMAME_SHA`, check that `SetMemMapImpl` still has the code the patch
-replaces, and play Evel Knievel (checklist).
+libpinmame (`02-memmap-follow-banks.patch`, 2026-11-01): the memory maps and the main CPU reads follow the banks, for the Williams
+System 7 games (`docs/PinMAME Memory Maps on Banked Memory.md`); dropped once upstream merges vpinball/pinmame#833. Its first patch, the
+nibble of 4-bit memory before the mask (Bally AS-2518, Stern MPU-100), was merged upstream (vpinball/pinmame#838) and dropped at the sync
+of 2026-11-20: the script stops on a patch that is already applied (`patch --forward` returns an error), which is how it showed. After
+a sync that changes `PINMAME_SHA`, play Evel Knievel and TENACIOUSD (checklist).
 
 ### When upstream builds what the fork has
 
@@ -154,12 +155,20 @@ test: add each one found to the checklist.
 
 - A ROM table using `core.vbs` starts and plays (Attack from Mars: libwinevbs `TypeName` regression, 2026-10-18).
 - Back to the lobby after a table, then another table (race in the OpenXR render loop, 2026-10-18).
+- Each lobby room stands around the player, level with the floor: upstream renumbered the spaces of the part groups (cca3bd8c8,
+  2026-11-15) and resets the room of the lobby files (3, written by vpxtool) to the playfield; `BuildLobby` puts it back (2026-11-20).
+- A table without a VR room gets the default cabinet around its playfield, legs on the floor, lockbar at the set height, displays in its
+  windows: upstream merged the cabinet space into the playfield space (2026-11-20, `DefaultCabinet::m_cabinetToPlayfield`).
 - Image sharpness as before: render resolution (`ResFactor` semantics, 2026-10-18), foveated rendering and dynamic resolution.
 - VR menu, in a table and in the lobby; the table picker (imgui updates).
 - Scores recorded after a game; sound.
 - Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
   (libpinmame patch, 2026-10-28). It can be checked on macOS too.
+- Scores of a Williams System 7 table (TENACIOUSD Flex Mod, `fpwr2_l2`): shown during the game and recorded at its end (libpinmame patch
+  of banks, 2026-11-01).
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
+- PuP tables (Albator, Blade Runner 2049): no magenta or scrambled areas, in the table or in the text of the panels, and no "GPU memory limit
+  reached" message in the table or back in the lobby. A notification stays where it appeared in the room when the head turns.
 - The loading message stays steady in the headset while a table loads, from the lobby and from another table: no doubled or moving
   image (frames without anything to present keep the swapchain image, in upstream's frame gate since 2026-10-30, `m_frameRequested`).
 
@@ -169,7 +178,8 @@ The history of the fork was squashed into one commit per area (tag `pre-squash-2
 upstream (528 commits). What changed in the fork with it:
 
 - OpenXR on Linux is upstream's (`ENABLE_XR` and the loader of `platforms/linux-*/external.sh`): `steamframe/deps/openxr-loader.sh` was dropped.
-- Upstream no longer builds libzip for the desktop: `steamframe/deps/libzip.sh` builds it for the web server (macOS, Linux, windows-mingw).
+- Upstream no longer builds libzip for the desktop: `steamframe/deps/libzip.sh` built it for the web server (macOS, Linux, windows-mingw), until
+  upstream's `ZipUtils` moved to miniz (4492fc616, sync of 2026-11-13) and the script was dropped.
 - bgfx 1.166 renamed the attachment flags (`BGFX_RESOLVE_*` to `BGFX_ATTACHMENT_*`) and took the bits the patches used: the fragment density
   map and shading rate flags moved to free bits (`BGFX_TEXTURE_FRAGMENT_DENSITY_MAP` 0x0080000000000000, `..._SHADING_RATE` 0x0100000000000000,
   `BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP` 0x10, `..._SHADING_RATE` 0x20, `BGFX_CAPS_FRAGMENT_DENSITY_MAP` 0x0000000002000000).
@@ -184,6 +194,9 @@ upstream (528 commits). What changed in the fork with it:
 
 ### Notes for the next sync
 
+- Upstream moved to 10.9.0 (2026-11-19), whose settings folder is `VPinballX/10.9`, filled at the first start with a copy of the older one.
+  The fork keeps `10.8` (`FileLocator::SetupPrefPath`, `VPX_STEAM_FRAME`): the installer, the backup page, the docs and the test hooks
+  name it, and the copy would double the texture caches. Moving would be a decision of its own, with a migration that moves instead of copying.
 - Upstream's `Player::SetTable` / `TakeTableSwitch` switch tables without leaving the player: the launcher (`Launcher::PlaySelectedTables`)
   could use them instead of its own loop, which would remove most of the hooks of `PlayTableCommand`.
 - Propose the memory maps added by the fork to tomlogic/pinball-memory-maps, then drop the bundled copy.
