@@ -11,6 +11,10 @@
 #include "renderer/Shader.h"
 #endif
 
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/SceneBufferFormat.h"
+#endif
+
 #if !defined(DISABLE_FORCE_NVIDIA_OPTIMUS) && defined(ENABLE_DX9)
 #include "nvapi/nvapi.h"
 #endif
@@ -143,7 +147,11 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    {
    case colorFormat::RED16F: m_colorFormat = bgfx::TextureFormat::R16F; break;
    case colorFormat::RG16F: m_colorFormat = bgfx::TextureFormat::RG16F; break;
+   #if defined(VPX_STEAM_FRAME)
+   case colorFormat::RGB16F: m_colorFormat = VPX::SceneBufferFormat::GetRGB16FFormat(nMSAASamples); break; // RGBA16F or RG11B10F (src/steamframe/SceneBufferFormat.h)
+   #else
    case colorFormat::RGB16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
+   #endif
    case colorFormat::RGBA16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
    case colorFormat::RGB32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;
    case colorFormat::RGBA32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;

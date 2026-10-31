@@ -31,6 +31,10 @@
 #include "lib/src/VPinballLib.h"
 #endif
 
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/SceneBufferFormat.h"
+#endif
+
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
 //#define MSVC_CONCURRENCY_VIEWER
@@ -144,6 +148,9 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
    #endif
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
+   #if defined(VPX_STEAM_FRAME)
+   VPX::SceneBufferFormat::Load(m_table->GetSettings()); // RGBA16F or RG11B10F for the targets asked as RGB16F
+   #endif
 
    #ifdef ENABLE_BGFX
    // BGFX handles MSAA internally and provides the resolved texture directly, so just create one render target for the back buffer
@@ -3546,6 +3553,9 @@ void Renderer::Render3DScene()
    }
 
    ResizeRenderTargets();
+   #if defined(VPX_STEAM_FRAME)
+   ApplySceneBufferFormat();
+   #endif
 
    // Keep previous render as a reflection probe for ball reflection and for hires motion blur
    SwapBackBufferRenderTargets();
