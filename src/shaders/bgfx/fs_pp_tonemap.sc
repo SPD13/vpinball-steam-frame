@@ -24,6 +24,7 @@ uniform vec4 bloom_dither_colorgrade;
 #define do_bloom       (bloom_dither_colorgrade.x == 1.)
 #define do_dither      (bloom_dither_colorgrade.y == 1.)
 #define do_color_grade (bloom_dither_colorgrade.z == 1.)
+#define luma_in_alpha  (bloom_dither_colorgrade.w == 1.)
 
 uniform vec4 exposure_wcg;
 #define exposure                    (exposure_wcg.x)
@@ -435,6 +436,13 @@ vec3 FBColorGrade(vec3 color)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main fragment shader
 
+// Alpha of the output: 1, or its luma for the FXAA pass that reads it next (same weights as luma() in fs_pp_fxaa.sc), which then gathers it
+// from the alpha channel instead of reading the color of nine pixels
+float OutputAlpha(const vec3 color)
+{
+   return luma_in_alpha ? dot(color, vec3(0.25,0.5,0.25)) : 1.0;
+}
+
 void main()
 {
    // v_texcoord0 is pixel perfect sampling which here means between the pixels resulting from supersampling (for 2x, it's in the middle of the 2 texels)
@@ -560,7 +568,7 @@ void main()
              BRANCH if (do_color_grade)
                 result = InvGamma(FBColorGrade(FBGamma(result)));
           #endif
-          gl_FragColor = vec4(result, 1.0);
+          gl_FragColor = vec4(result, OutputAlpha(result));
       }
       else
       {
@@ -571,7 +579,8 @@ void main()
           #else
              result = FBGamma(  saturate(FBDither(result, v_texcoord0)));
           #endif
-          gl_FragColor = vec4(FBColorGrade(result), 1.0);
+          result = FBColorGrade(result);
+          gl_FragColor = vec4(result, OutputAlpha(result));
       }
    }
 
@@ -628,6 +637,6 @@ void main()
       const vec3 cp = pow(col, vec3_splat(m1));
       col = pow((c1 + c2 * cp) / (1.0 + c3 * cp), vec3_splat(m2));
 
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(col, OutputAlpha(col));
    }
 }

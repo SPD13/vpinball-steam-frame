@@ -356,7 +356,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 8 | Remove the frame pacing stall | Avoids a fall to the floor resolution; 2 ms of render thread per frame | Desktop window not drawn in the Frame build; guard in `VRDevice` | **Done** (sections 7.5, 7.6) |
 | 9 | Cheaper VR room on pixel-bound tables | 2.1–2.3 ms on Ghostbusters with the room off (1.95 ms, 2026-10-23) | Engine work | Investigated: 3 options dropped, 3 open (`VR Rooms on the Steam Frame.md`) |
 | 10 | Foveate the tonemap and FXAA passes (shading rate image on their targets) | **−1.35 ms on Addams, −1.53 ms on Ghostbusters at 2160²** (each pass 1.6 → 0.9 ms) | Small to medium: the rate attachment of `03-fragment-shading-rate.patch` on two more framebuffers, sized for each target | **Done** (2026-10-30, in master 2026-10-31; `PlayerVR/FoveateTonemapping` and `PlayerVR/FoveateAntialiasing`, on by default): −1.67 ms on Addams, −1.79 ms on Ghostbusters as implemented |
-| 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | Bound measured 2026-10-30 (8.3); after item 10 |
+| 11 | Cheaper FXAA: luma written in alpha by the tonemap and read by gathers, then tonemap and FXAA in one pass | Bound as item 3; Fast FXAA is slower than Standard on the Frame (+0.13 to +0.19 ms) | Small (first step), medium (fusion); upstream shaders | **First step done** 2026-10-31 (8.5): FXAA pass 0.67 → 0.51 ms, frame −0.12 ms on Addams; the fusion is bounded by the 0.5 ms left |
 | 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Done** 2026-10-31, a live switch on by default in the Frame build (`Player.CompactSceneBuffer`, Steam Frame > Scene buffer): −0.88 ms on Addams, −1.52 ms on Ghostbusters with item 10 on (8.4); checked worn by the owner |
 | 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
@@ -409,7 +409,7 @@ Details:
 11. **Cheaper FXAA**: the Standard FXAA of `fs_pp_fxaa.sc` computes the luma of 9 RGB reads per pixel (lines 51–58). First step: the
    tonemap writes the luma into the alpha of `PostProcess1`, and FXAA reads the neighbours' luma with `textureGather` (as in FXAA 3.11),
    which removes most of the reads. Second step: tonemap and FXAA in one pass (item 3), which removes a full-resolution write and read
-   (2 × 37 MB per frame at 2160²). Both are upstream shaders.
+   (2 × 37 MB per frame at 2160²). Both are upstream shaders. The first step is done (section 8.5).
 12. **RG11B10F scene buffer**: VPX asks bgfx for `RGB16F`, which bgfx renders as RGBA16F (`RenderTarget.cpp:143`), 8 bytes per pixel.
    The scene pass runs direct (not tiled), so every scene fragment written or blended goes through memory, and the tonemap, bloom and
    probe read it again. RG11B10F is 4 bytes, renderable on Adreno, and already used by the texture compressor. To check first: that no
@@ -715,6 +715,38 @@ Measured on the Frame, headless at fixed 2160² with the foveated post-processin
 More than the hook of 2026-10-30 (−0.66, −1.28): the tonemap reads half the bytes too. Switched live during a run (Addams, at frames
 3000 and 6000): the targets are made again with their foveation image, one frame of 11.9 ms, no error; the same on the Mac (Metal) on
 2001 and Star Trek LE, from a start in either format.
+
+### 8.5 FXAA with the luma in the alpha channel (2026-10-31)
+
+Item 11, first step. FXAA works on the luma of the pixels (`luma()` of `fs_pp_fxaa.sc`, 0.25/0.5/0.25 weights): the Standard and
+Quality variants computed it from 9 color reads around each pixel, the Fast one too, and again for each read of the edge search. Now:
+
+- **The tonemap writes the luma of its output in the alpha channel** (`OutputAlpha` in `fs_pp_tonemap.sc`, the 4th component of
+  `bloom_dither_colorgrade`), in every output branch, when an FXAA pass reads its output next (`Renderer::IsFXAALumaInAlpha`: FXAA
+  Fast, Standard or Quality, output `PostProcess1` in RGBA8, not the AO view). The alpha of `PostProcess1` was not used, and the
+  headset image (whose alpha the compositor uses) is written by the FXAA pass with an alpha of 1. The embedded backglass regions,
+  tonemapped again, and the partial tonemap of the ball motion blur write it too.
+- **FXAA gathers it** when told so (`w_h_height.w`, which says whether depth is available, gets +2): two `textureGather` of the alpha
+  channel centered on the corners of the middle texel give 7 of the 9 values, two reads the other corners (4 fetches instead of 9), and
+  the edge search reads the luma from the alpha of its samples (`lumaNeighbourhood`, `lumaOf`). Without the flag the shader runs as
+  before.
+
+Checked on the Mac (Metal) with a temporary debug of the FXAA shader that compared, for each pixel, the 9 values from the alpha
+channel with the 9 from the color and painted the pixel when they differed: no pixel apart by more than 0.003 with Fast, Standard and
+Quality FXAA, against 225,682 painted pixels with N and W swapped on purpose, so the gather order is the one used (the order of the
+four texels is the same in Vulkan, Direct3D, Metal and OpenGL). The luma of the alpha channel is the luma of the color before its 8-bit
+rounding, which makes no visible difference.
+
+Measured on the Frame, headless at fixed 2160² with the foveated post-processing and the compact scene buffer on, the build before
+and after alternating (`gpu-series.sh`, run `sbon`; results in `~/perf-test/results-luma-base` and `results-luma-new`):
+
+| Table | FXAA pass | Tonemap | Frame (runtime GPU) |
+|---|---|---|---|
+| Addams (two runs each) | 0.67 / 0.66 → 0.51 / 0.52 ms | 0.57 → 0.59 / 0.60 ms | 7.34 / 7.34 → 7.20 / 7.23 ms (**−0.12 ms**) |
+| Ghostbusters | 0.64 → 0.49 ms | 0.56 → 0.59 ms | 6.41 → 6.32 ms (−0.09 ms) |
+
+The FXAA pass is now about 0.5 ms: the most a fusion of the tonemap and FXAA (second step) could save, less the luma it would then
+compute for the neighbours itself.
 
 ## 9. Reproduction
 
