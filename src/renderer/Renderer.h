@@ -289,6 +289,11 @@ public:
    void SetFragmentDensityMap(bgfx::TextureHandle map, bool shadingRate = false);
    // Offsets of the map's high density area for this frame, in pixels of the scene buffer, one (x, y) pair per eye
    void SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayers);
+   // The shading rate image of the post-processing targets for this frame, given their size, on those of the tonemap and on those of the
+   // anti-aliasing and the passes after it as asked (the others are shaded at full rate)
+   void SetPostProcessShadingRate(const std::function<bgfx::TextureHandle(int width, int height)>& imageForSize, bool tonemap, bool antialiasing);
+   // The tonemap writes the output back buffer (the headset swapchain image in VR): no pass after it
+   bool IsTonemapLastPostProcess() const;
    #endif
 
    unsigned int GetPlayerModeVisibilityMask() const { return m_visibilityMask; }
