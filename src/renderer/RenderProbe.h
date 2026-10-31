@@ -2,8 +2,10 @@
 
 #pragma once
 
+#include "math/matrix.h"
 #include "utils/fileio.h"
 
+class ModelViewProj;
 class RenderTarget;
 class RenderPass;
 class RenderDevice;
@@ -66,6 +68,9 @@ public:
    void SwapDesktopTargets();
    void ReleaseRenderTargets(); // Release the render targets sized after the main render (on resize), recreated on next use
    RenderTarget* Render(const unsigned int renderMask); // Lazily update render probe and returns it
+   void ExtendReflector(const Vertex3Ds& boxMin, const Vertex3Ds& boxMax, const Matrix3D& model); // Adds a part that shows this probe: what can show in it depends on where they are
+   static RenderProbe* GetRenderingReflection() { return s_renderingReflection; } // The reflection probe being rendered, if any
+   bool IsBoxReflected(const Vertex3Ds& boxMin, const Vertex3Ds& boxMax, const Matrix3D& model, const ModelViewProj& mvp) const; // Tells if a box may show on the parts showing this probe
    void RenderRelease();
 
    static const string PLAYFIELD_REFLECTION_RENDERPROBE_NAME;
@@ -87,6 +92,8 @@ private:
    vec4 m_reflection_plane = vec4(0.f, 0.f, 1.f, 0.f); // Plane equation: xyz is the normal, w is the projected distance
    vec4 m_reflection_clip_bounds;
    ReflectionMode m_reflection_mode = REFL_DYNAMIC;
+   Vertex3Ds m_reflector_min { FLT_MAX, FLT_MAX, FLT_MAX }, m_reflector_max { -FLT_MAX, -FLT_MAX, -FLT_MAX }; // Box of the parts that showed this probe so far (not saved)
+   static RenderProbe* s_renderingReflection;
    bool m_disableLightReflection = false; // Disable rendering of lightmaps in reflection render probes, needed to avoid having reflections of playfield lightmaps onto the playfield itself
 
    // Properties used for rendering (not saved)

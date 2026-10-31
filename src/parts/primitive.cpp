@@ -976,6 +976,12 @@ void Primitive::Render(const unsigned int renderMask)
          m_renderer->UpdateBasicShaderMatrix();
          return;
       }
+      // Nor those of a reflection that cannot land on the parts showing it (like VR room parts away from the table)
+      if (const RenderProbe* const probe = isReflectionPass ? RenderProbe::GetRenderingReflection() : nullptr; probe && !probe->IsBoxReflected(m_mesh.m_minAABound, m_mesh.m_maxAABound, m_fullMatrix, m_renderer->GetMVP()))
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         return;
+      }
    }
 
 #if defined(VPX_STEAM_FRAME)
@@ -1115,6 +1121,7 @@ void Primitive::Render(const unsigned int renderMask)
          if (reflections)
          {
             reflection_probe->ExtendAreaOfInterest(xMin, xMax, yMin, yMax);
+            reflection_probe->ExtendReflector(m_mesh.m_minAABound, m_mesh.m_maxAABound, m_fullMatrix);
             m_renderer->m_renderDevice->AddRenderTargetDependency(reflections);
             Vertex3Ds plane_normal = reflection_probe->GetReflectionPlaneNormal();
             // In stereo, using a single view (from left eye) is ok enough as this is just to weight the probe

@@ -175,6 +175,64 @@ void RenderProbe::ExtendAreaOfInterest(const float xMin, const float xMax, const
    }
 }
 
+RenderProbe* RenderProbe::s_renderingReflection = nullptr;
+
+void RenderProbe::ExtendReflector(const Vertex3Ds& boxMin, const Vertex3Ds& boxMax, const Matrix3D& model)
+{
+   for (int i = 0; i < 8; i++)
+   {
+      Vertex3Ds p((i & 1) ? boxMax.x : boxMin.x, (i & 2) ? boxMax.y : boxMin.y, (i & 4) ? boxMax.z : boxMin.z);
+      model.MultiplyVector(p);
+      m_reflector_min.x = min(m_reflector_min.x, p.x);
+      m_reflector_min.y = min(m_reflector_min.y, p.y);
+      m_reflector_max.x = max(m_reflector_max.x, p.x);
+      m_reflector_max.y = max(m_reflector_max.y, p.y);
+   }
+}
+
+// A part shows in a horizontal mirror where the line from it to the mirrored eye crosses the plane. The screen bounds of the mirror are not enough to
+// tell: seen from a player at the lockbar, the near edge of the playfield covers about the width of the view, while few of the parts of a VR room can
+// reach the playfield. The box is reported hidden only when, for every eye, these crossings of its 8 corners are all beyond the same side of the box of
+// the parts showing the probe, or when it is entirely under the plane. Its parts are known from the first frame that shows the probe.
+bool RenderProbe::IsBoxReflected(const Vertex3Ds& boxMin, const Vertex3Ds& boxMax, const Matrix3D& model, const ModelViewProj& mvp) const
+{
+   if (m_reflector_min.x == FLT_MAX || m_reflection_plane.z <= 0.f || m_reflection_plane.x != 0.f || m_reflection_plane.y != 0.f)
+      return true;
+   // The reflection is blurred in the screen space by the roughness of the probe: keep what lands next to the parts
+   static constexpr float margin = 100.f;
+   const float plane = m_reflection_plane.w;
+   Vertex3Ds corners[8];
+   float highest = -FLT_MAX;
+   for (int i = 0; i < 8; i++)
+   {
+      corners[i] = Vertex3Ds((i & 1) ? boxMax.x : boxMin.x, (i & 2) ? boxMax.y : boxMin.y, (i & 4) ? boxMax.z : boxMin.z);
+      model.MultiplyVector(corners[i]);
+      highest = max(highest, corners[i].z);
+      corners[i].z = max(corners[i].z, plane); // What is under the plane is clipped
+   }
+   if (highest <= plane)
+      return false;
+   for (unsigned int eye = 0; eye < mvp.m_nEyes; eye++)
+   {
+      const vec4& camera = mvp.GetCameraPos(eye); // The mirrored eye
+      if (camera.z >= plane)
+         return true;
+      int left = 0, right = 0, bottom = 0, top = 0;
+      for (const Vertex3Ds& c : corners)
+      {
+         const float t = (plane - camera.z) / (c.z - camera.z);
+         const float x = camera.x + (c.x - camera.x) * t, y = camera.y + (c.y - camera.y) * t;
+         left += x < m_reflector_min.x - margin;
+         right += x > m_reflector_max.x + margin;
+         bottom += y < m_reflector_min.y - margin;
+         top += y > m_reflector_max.y + margin;
+      }
+      if (left < 8 && right < 8 && bottom < 8 && top < 8)
+         return true;
+   }
+   return false;
+}
+
 void RenderProbe::ApplyAreaOfInterest()
 {
    // Only apply to the passes recorded by this probe's renders. Dependencies must not be followed as they
@@ -365,6 +423,7 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
 
    const unsigned int prevRenderMask = m_renderer->m_render_mask;
    m_renderer->m_render_mask = prevRenderMask | Renderer::REFLECTION_PASS;
+   s_renderingReflection = this;
    if (m_disableLightReflection)
       m_renderer->m_render_mask |= Renderer::DISABLE_LIGHTMAPS;
 
@@ -504,6 +563,7 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
    // Restore initial render states and camera
    m_renderer->SetReflection(Matrix3D::MatrixIdentity());
    m_renderer->m_render_mask = prevRenderMask;
+   s_renderingReflection = nullptr;
    m_renderer->m_renderDevice->CopyRenderAndShaderStates(false, *m_rdState);
    m_renderer->m_renderDevice->SetDefaultRenderState();
 
