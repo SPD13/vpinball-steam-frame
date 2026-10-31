@@ -273,9 +273,11 @@ public:
    void SetFoveationMode(int mode);
    bool IsFoveationEyeTracked() const { return m_foveationEyeTracked; }
    void SetFoveationEyeTracked(bool eyeTracked);
-   // The tonemap and anti-aliasing passes shaded at the foveated rate as well (with the shading rate image only, see m_foveatePostProcessing)
-   bool IsFoveatePostProcessing() const { return m_foveatePostProcessing; }
-   void SetFoveatePostProcessing(bool foveate) { m_foveatePostProcessing = foveate; }
+   // The tonemap and anti-aliasing passes shaded at the foveated rate as well (with the shading rate image only, see m_foveateTonemapping)
+   bool IsFoveateTonemapping() const { return m_foveateTonemapping; }
+   void SetFoveateTonemapping(bool foveate) { m_foveateTonemapping = foveate; }
+   bool IsFoveateAntialiasing() const { return m_foveateAntialiasing; }
+   void SetFoveateAntialiasing(bool foveate) { m_foveateAntialiasing = foveate; }
    // One line for the settings page: "not supported", "fixed", "eye-tracked", ...
    string GetFoveationStatus() const;
    // Dynamic resolution (see the private members below): the render scale follows the GPU time of the frames reported by the runtime
@@ -553,7 +555,10 @@ private:
    vector<ShadingRateImage> m_shadingRateImages;
    bool m_shadingRateGazeValid = false; // Gaze of the frame being prepared, for the images made after the scene's
    bool m_foveationShadingRate = false; // The scene is foveated through the shading rate image (else the density map)
-   std::atomic<bool> m_foveatePostProcessing = true; // The post-processing passes too (only with the shading rate image); set by the settings page while the render thread reads it
+   // The post-processing passes too (only with the shading rate image): the tonemap, and the anti-aliasing with the passes after it; set
+   // by the settings page while the render thread reads them
+   std::atomic<bool> m_foveateTonemapping = true;
+   std::atomic<bool> m_foveateAntialiasing = true;
    bool ReadGaze(); // Updates m_foveationCenter from the runtime, true when the gaze is valid
    // Gaze as a ray (XR_EXT_eye_gaze_interaction), preferred over the runtime's foveation center since it can be taken with the head pose of its
    // sample and projected with the views of the frame: the point looked at stays put while the head moves. See LocateGaze.

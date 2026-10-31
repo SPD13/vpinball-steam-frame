@@ -340,11 +340,14 @@ In the order they came, with the dead ends, since each one cost a build-and-run 
 
 Until then the image was attached to the scene buffers only: the periphery was shaded coarsely in the scene, then tonemapped and
 anti-aliased at full rate, 3.2 ms of the Addams frame at 2160². The rate attachment works on any frame buffer in the driver's direct
-path, so with `PlayerVR/FoveatePostProcessing` (on by default, "Foveated post-processing" in the Steam Frame screen and the VR settings
-page, live) the tonemap and anti-aliasing passes get the same pattern: `Renderer::SetPostProcessShadingRate` attaches an image to each
-post-processing target made so far (`PostProcess1/2/3`), and the VR device attaches one to the headset swapchain image it wraps for the
-frame, which the last pass writes (FXAA, or the tonemap when anti-aliasing is off). The wrapped swapchain targets know their plain frame
-buffer for that (`RenderTarget` constructor taking a frame buffer).
+path, so the tonemap and anti-aliasing passes get the same pattern, each with its own switch to judge them apart:
+`PlayerVR/FoveateTonemapping` and `PlayerVR/FoveateAntialiasing` (both on by default, "Foveated tone mapping" and "Foveated anti-aliasing"
+in the Steam Frame screen and the VR settings page, live). `Renderer::SetPostProcessShadingRate` attaches an image to the post-processing
+targets made so far, `PostProcess1` (the tonemap's output) with the first switch, `PostProcess2/3` (the anti-aliasing passes and those
+after it) with the second, and the VR device attaches one to the headset swapchain image it wraps for the frame with the switch of the
+pass that writes it last (`Renderer::IsTonemapLastPostProcess`: FXAA, or the tonemap when no pass follows it). The anti-aliasing switch
+covers the sharpening and upscaling passes too, except a sharpening after FXAA, which writes `PostProcess1` again. The wrapped swapchain
+targets know their plain frame buffer for that (`RenderTarget` constructor taking a frame buffer).
 
 The image is sized on its target and the pattern placed in the target's rendered part (all of them render their top left part at the
 dynamic resolution scale), so `UpdateShadingRateImage` keeps one image per target size: a single one in the usual case where the scene,

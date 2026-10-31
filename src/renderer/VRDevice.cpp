@@ -172,7 +172,8 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_displayRefreshRateMode = settings.GetPlayerVR_DisplayRefreshRate();
       m_foveationMode = settings.GetPlayerVR_Foveation();
       m_foveationEyeTracked = settings.GetPlayerVR_FoveationEyeTracked();
-      m_foveatePostProcessing = settings.GetPlayerVR_FoveatePostProcessing();
+      m_foveateTonemapping = settings.GetPlayerVR_FoveateTonemapping();
+      m_foveateAntialiasing = settings.GetPlayerVR_FoveateAntialiasing();
       m_foveationFlipX = settings.GetPlayerVR_FoveationFlipX();
       m_foveationFlipY = settings.GetPlayerVR_FoveationFlipY();
       m_dynamicResolution = settings.GetPlayerVR_DynamicResolution();
@@ -2927,9 +2928,8 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             g_pplayer->m_renderer->SetFragmentDensityMap(map, shadingRate);
             // The tonemap and anti-aliasing passes with the same pattern, at the size of their targets (the headset swapchain, written by the
             // last of them, gets its image once acquired, below)
-            const bool foveatePost = shadingRate && m_foveatePostProcessing;
-            g_pplayer->m_renderer->SetPostProcessShadingRate(
-               [this, foveatePost, gazeValid](int w, int h) { return foveatePost ? UpdateShadingRateImage(w, h, gazeValid) : bgfx::TextureHandle BGFX_INVALID_HANDLE; });
+            g_pplayer->m_renderer->SetPostProcessShadingRate([this, gazeValid](int w, int h) { return UpdateShadingRateImage(w, h, gazeValid); },
+               shadingRate && m_foveateTonemapping, shadingRate && m_foveateAntialiasing);
             if (!shadingRate)
             {
                // The density map has its high density area in the middle: the gaze moves it through offsets, in pixels of the scene buffer
@@ -3004,9 +3004,10 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          }
          #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
          // Foveated post-processing: the last pass of the frame (anti-aliasing, or the tonemap without it) writes the swapchain image
-         vrRenderTarget->SetFragmentDensityMap(g_pplayer->m_renderer && m_foveationShadingRate && m_foveatePostProcessing
-               ? UpdateShadingRateImage(vrRenderTarget->GetWidth(), vrRenderTarget->GetHeight(), m_shadingRateGazeValid)
-               : bgfx::TextureHandle BGFX_INVALID_HANDLE,
+         const bool foveateSwapchain = g_pplayer->m_renderer && m_foveationShadingRate
+            && (g_pplayer->m_renderer->IsTonemapLastPostProcess() ? m_foveateTonemapping : m_foveateAntialiasing);
+         vrRenderTarget->SetFragmentDensityMap(foveateSwapchain ? UpdateShadingRateImage(vrRenderTarget->GetWidth(), vrRenderTarget->GetHeight(), m_shadingRateGazeValid)
+                                                                : bgfx::TextureHandle BGFX_INVALID_HANDLE,
             true);
          #endif
 
