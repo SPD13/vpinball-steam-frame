@@ -526,6 +526,8 @@ Changes of the fork that are not specific to the Steam Frame and could be propos
 
 What the fork changes, file by file, which builds contain what, and how far each part has been tested: [Steam Frame Edition, the technical documentation](/docs/Steam%20Frame%20Branch.md).
 
+Every performance improvement of the Steam Frame Edition, with its measurements on the Frame and the performance settings of the menu, with screenshots: [Performance of the Steam Frame Edition](/docs/steam-frame/Performance%20of%20the%20Steam%20Frame%20Edition.md).
+
 ## Credits
 
 - **Visual Pinball X**, by the Visual Pinball team and its contributors: [vpinball/vpinball](https://github.com/vpinball/vpinball), the upstream project this fork is built on and keeps merging.
