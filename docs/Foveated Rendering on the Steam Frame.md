@@ -352,8 +352,12 @@ the post-processing targets and the swapchain have the same size, a second one w
 differ. Each is rewritten when its own key (level, scale, disc centers in its texels) changes, and all are kept until the session ends,
 since the frame buffers of the targets refer to them. Only with the shading rate image: the density map is never put on these targets.
 
-Measured with a temporary hook on 2026-10-30 (`docs/Performance on the Steam Frame.md`, section 8.3): each pass 1.6 → 0.9 ms, **−1.35 ms
-per frame on Addams, −1.53 ms on Ghostbusters** at 2160². Visual cost: in the periphery, the edges become as blocky as the shading
+Measured on the Frame on 2026-10-30, headless with fixed foveation (the Low profile), the setting off then on (`Doc/test-hooks/gpu-series.sh`,
+results in `~/perf-test/results-fovpost`): at fixed 2160², **Addams 10.06–10.09 → 8.34–8.48 ms (−1.67 ms), Ghostbusters 9.45 → 7.66 ms
+(−1.79 ms)**, tonemap 1.56 → 0.78 ms and FXAA 1.57 → 0.69 ms, the GPU 9–11 °C cooler; with the scene at 75 % (`AAFactor`, two images:
+203² for the 1620² scene and post-processing targets, 270² for the 2160² swapchain) −0.99 ms; with dynamic resolution Addams stays at
+2160² and goes 9.98 → 8.37 ms. A temporary hook had measured −1.35 and −1.53 ms the same day (`docs/Performance on the Steam Frame.md`,
+section 8.3). Visual cost: in the periphery, the edges become as blocky as the shading
 already is there (the tonemap writes each coarse block with one color, and FXAA works on blocks).
 
 ## 12. How to reproduce the measurements
