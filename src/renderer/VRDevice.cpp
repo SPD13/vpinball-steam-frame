@@ -1208,6 +1208,13 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    // The budget is the display's frame period: the shortest period the runtime predicted in this session. SteamVR doubles the predicted
    // period when it throttles an application to half rate after missed frames; taking that as the budget would raise the resolution
    // again and keep the application throttled (seen on the Frame: 27.8 ms reported at 72 Hz, the scale climbed back to 100 %)
+   #if defined(VPX_STEAM_FRAME)
+   // The refresh rate when the runtime reports it: the first frame of a table in a kept session predicts 11.1 ms on the Frame with its display at 72 Hz, and that
+   // one frame took the budget from 11.8 to 9.4 ms for the whole table (the refresh rate and the steps of the predicted display time stay right)
+   if (float rate = 0.f; m_displayRefreshRateExtensionSupported && XR_SUCCEEDED(m_xrGetDisplayRefreshRateFB(m_session, &rate)) && rate > 0.f)
+      m_frameBudgetMs = 1000.f / rate;
+   else
+   #endif
    if (predictedDisplayPeriod > 0)
    {
       const float periodMs = static_cast<float>(predictedDisplayPeriod) / 1000000.f;

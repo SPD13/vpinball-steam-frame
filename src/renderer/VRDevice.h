@@ -581,7 +581,7 @@ private:
    std::atomic<float> m_dynamicResolutionMinScale = 0.7f; // Lowest scale, as a fraction of the swapchain size
    std::atomic<float> m_dynamicRenderScale = 1.f; // Scale given to the renderer for the next frame
    std::atomic<float> m_lastGpuFrameTimeMs = 0.f; // Last reading of the counter, for the status
-   std::atomic<float> m_frameBudgetMs = 0.f; // Frame period of the display: the shortest predicted display period of the session (see UpdateDynamicResolution)
+   std::atomic<float> m_frameBudgetMs = 0.f; // Frame period of the display: from its refresh rate, or the shortest predicted display period of the session (see UpdateDynamicResolution)
    std::atomic<bool> m_dynamicResolutionHeld = false; // The last reading was taken for a frame pacing stall, not GPU work: the scale was kept
    XrTime m_lastPredictedDisplayTime = 0; // Of the previous frame: a step of more than one frame period means a frame missed its display
    unsigned int m_framesSinceMissed = 0;

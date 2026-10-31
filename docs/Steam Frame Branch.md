@@ -235,6 +235,9 @@ Used in the headset in the `windows-mingw` build with `ENABLE_XR`. Not compiled 
   of what is free): textures were evicted, then replaced by the magenta fallback, and the "GPU memory limit reached" message came up for nothing. On the
   headset, the budget is what VPX holds plus 90 % of `MemAvailable` (`TextureManager::RefreshBudget`, which logs both numbers every 30 s). ImGui's font
   texture is never evicted nor degraded (`LoadPinnedTexture`): it looks unused to the eviction, and its updates are rejected by the 8x8 fallback.
+- **Frame budget of the dynamic resolution** (2026-10-30): the budget was the shortest display period predicted by the runtime. With one session for all the tables, the first frame
+  of a table in a kept session predicts 11.1 ms on the Frame, with the display at 72 Hz (13.89 ms): that one frame set the budget to 9.4 ms instead of 11.8 ms for the whole table, on every table
+  opened from the lobby (Addams: 91 % resolution instead of native). The budget now comes from the refresh rate of `XR_FB_display_refresh_rate` (`VRDevice::UpdateDynamicResolution`).
 - **Web server on Windows** (network address through `GetAdaptersAddresses`, `std::filesystem` listing on all platforms, UTF-8 paths), and an upload progress banner on the web page.
 
 ## 9. Eye-tracked foveated rendering (branch `foveated-rendering`, 2026-10-01)
