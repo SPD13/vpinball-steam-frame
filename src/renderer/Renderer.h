@@ -471,6 +471,9 @@ private:
    std::vector<RenderView*> m_renderViews;
    std::vector<std::unique_ptr<RenderView>> m_deadViews; // Released views kept alive until the next frame's record starts
    RenderView* m_activeView = nullptr;
+   #if defined(VPX_STEAM_FRAME)
+   void ApplySceneBufferFormat(); // Scene buffers of the views made again when their format is switched (src/steamframe/SceneBufferFormat.cpp)
+   #endif
 
    PinTable* m_table;
 

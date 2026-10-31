@@ -32,6 +32,10 @@
 #include "lib/src/VPinballLib.h"
 #endif
 
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/SceneBufferFormat.h"
+#endif
+
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
 //#define MSVC_CONCURRENCY_VIEWER
@@ -153,6 +157,9 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
 #endif
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
+   #if defined(VPX_STEAM_FRAME)
+   VPX::SceneBufferFormat::Load(m_table->GetSettings()); // RGBA16F or RG11B10F for the targets asked as RGB16F
+   #endif
 
    view->SetupTargets(renderWidthAA, renderHeightAA, rtType, renderFormat, nMSAASamples);
    #if defined(ENABLE_BGFX) && defined(BGFX_ATTACHMENT_FRAGMENT_DENSITY_MAP)
@@ -536,23 +543,25 @@ void Renderer::SetFragmentDensityMapOffsets(const int32_t* offsetsXY, int nLayer
 void Renderer::SetPostProcessShadingRate(const std::function<bgfx::TextureHandle(int width, int height)>& imageForSize, bool tonemap, bool antialiasing)
 {
    // The targets made so far (they are made on first use: one made later in the frame is foveated from the next frame on). The tonemap
-   // writes PostProcess1, the anti-aliasing passes PostProcess2 and 3 (and a sharpening after FXAA PostProcess1 again, see PrepareVideoBuffers)
+   // writes PostProcess1, the anti-aliasing passes PostProcess2 and 3 (and a sharpening after FXAA PostProcess1 again, see RenderView::Render)
    const auto apply = [&imageForSize](RenderTarget* const rt, bool foveate)
    {
       if (rt)
          rt->SetFragmentDensityMap(foveate ? imageForSize(rt->GetWidth(), rt->GetHeight()) : bgfx::TextureHandle BGFX_INVALID_HANDLE, true);
    };
-   apply(m_pPostProcessRenderTarget1, tonemap);
-   apply(m_pPostProcessRenderTarget2, antialiasing);
-   apply(m_pPostProcessRenderTarget3, antialiasing);
+   const RenderView* const view = m_primaryView.get(); // The headset view
+   apply(view->m_pPostProcessRenderTarget1, tonemap);
+   apply(view->m_pPostProcessRenderTarget2, antialiasing);
+   apply(view->m_pPostProcessRenderTarget3, antialiasing);
 }
 
 bool Renderer::IsTonemapLastPostProcess() const
 {
-   // The passes PrepareVideoBuffers runs after the tonemap
+   // The passes RenderView::Render runs after the tonemap, for the headset view
+   const RenderView* const view = m_primaryView.get();
    const bool hasAntialiasPass = m_FXAA != Disabled;
    const bool hasSharpenPass = m_sharpen != 0;
-   const bool hasUpscalerPass = GetBackBufferTexture()->GetWidth() < m_renderWidth;
+   const bool hasUpscalerPass = view->GetBackBufferTexture()->GetWidth() < view->m_renderWidth;
    #ifdef ENABLE_XR
    const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && m_vrApplyColorKey);
    #else
@@ -1639,6 +1648,10 @@ void Renderer::Render3DScene()
    // Views released during the previous frame's record (the editor UI registers/unregisters its panes
    // while it is being recorded) are destroyed now, outside of the record loop
    m_deadViews.clear();
+
+#if defined(VPX_STEAM_FRAME)
+   ApplySceneBufferFormat();
+#endif
 
    // Record every view into the frame: the primary view (playfield window or VR headset), then the
    // optional VR desktop mirror and any additional views (editor viewport panes)

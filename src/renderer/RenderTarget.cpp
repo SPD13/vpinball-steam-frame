@@ -11,6 +11,10 @@
 #include "renderer/Shader.h"
 #endif
 
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/SceneBufferFormat.h"
+#endif
+
 #if !defined(DISABLE_FORCE_NVIDIA_OPTIMUS) && defined(ENABLE_DX9)
 #include "nvapi/nvapi.h"
 #endif
@@ -143,7 +147,11 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    {
    case colorFormat::RED16F: m_colorFormat = bgfx::TextureFormat::R16F; break;
    case colorFormat::RG16F: m_colorFormat = bgfx::TextureFormat::RG16F; break;
+   #if defined(VPX_STEAM_FRAME)
+   case colorFormat::RGB16F: m_colorFormat = VPX::SceneBufferFormat::GetRGB16FFormat(nMSAASamples); break; // RGBA16F or RG11B10F (src/steamframe/SceneBufferFormat.h)
+   #else
    case colorFormat::RGB16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
+   #endif
    case colorFormat::RGBA16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
    case colorFormat::RGB32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;
    case colorFormat::RGBA32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;
@@ -549,7 +557,7 @@ void RenderTarget::SetFragmentDensityMap(bgfx::TextureHandle map, bool shadingRa
    uint8_t n = 0;
    attachments[n++].init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
    if (m_has_depth)
-      attachments[n++].init(IsMSAA() ? m_msaaResolveDepthTex : m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[n++].init(m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE); // MSAA depth is resolved by bgfx when unbound (upstream d0755b9b7)
    #ifdef BGFX_ATTACHMENT_FRAGMENT_SHADING_RATE
    if (shadingRate)
       attachments[n++].init(map, bgfx::Access::Read, 0, 1, 0, BGFX_ATTACHMENT_FRAGMENT_SHADING_RATE); // One layer, shared by the eyes
