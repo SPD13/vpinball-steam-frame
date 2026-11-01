@@ -39,6 +39,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Performance panel** (a tool to tune the tables, Display & Performance > Performance panel, off by default, saved at once): a panel standing left of the cabinet, facing the player, with the target (2160×2160 per eye at 72 Hz on the Frame), a rating of the table every 30 seconds (green: native resolution 95 % of the time and frames on time; yellow: on time at a lower resolution; red: frames missed, GPU or CPU bound) and the frame rate, resolution, GPU time and use, CPU per thread (logic, render, PinMAME, audio), clocks and temperatures of the last 3 minutes (section 18). The table page of the menu shows the last rating of the table, with its badge, whether the panel was on or not.
 - **Simplified meshes** (Steam Frame > Simplified meshes, on by default in the Frame build, per table or for all): the large 3D parts of heavy tables are drawn with fewer triangles where the difference cannot be seen from the player's eyes, and in full when the player leans in (section 19).
 - **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
+- **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic. Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
 - **No passthrough between tables**: from choosing a table to its first frame, and back to the lobby, the "Loading <table>..." message stands in front of the player, in the table's forward direction (not where the head looks), on a black background, instead of the headset falling back to SteamVR's own scene (the passthrough on the Frame) while the previous table closes and the next one loads.
 
@@ -438,6 +439,19 @@ Ghostbusters 8.23 → 6.71 ms (−1.52 ms); details and checks in `docs/Performa
   build. The switch could first not be turned on with the pointer: the menu gave it the ID of the simplified meshes switch (fixed by
   giving each section of a composed screen its own ID scope, `ComposedPage::Render`).
 
+## 22. Reflections (2026-11-01)
+
+Files: `src/steamframe/Reflections.h/.cpp` (new), `src/renderer/RenderProbe.cpp`, `src/parts/primitive.cpp`, `src/renderer/Renderer.cpp`, `src/renderer/VRDevice.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`.
+
+A reflection draws the scene again every frame, and what it costs is the parts it draws, on the GPU and on the render thread: a lower resolution saves little, leaving parts out saves a lot on the tables where they are heavy. `Player.ExtraMirrors` and
+`Player.RoomReflection` hold On, Off or Automatic, Off by default in the Frame build and On in the others, and apply at once (the page is `ReflectionsPage`, in the Steam Frame screen).
+
+- **Extra mirrors.** `Reflections::IsProbeShown`, from `RenderProbe::Render`: a planar probe other than the playfield's, unless horizontal, returns no render target, as a probe in `REFL_NONE` does, and its parts show no reflection. A horizontal one is the reflection of another playfield (Game of Thrones).
+- **Room reflection.** `Reflections::IsPartLeftOut`, from `Primitive::Render` in a reflection pass, after the culling: a part whose transformed box reaches beyond the cabinet (300 VPU beside the playfield, 600 behind, 700 in front; height is not looked at) is not drawn. Merged groups and animated meshes keep being drawn, as for the culling.
+- **Automatic.** `Reflections::OnPlayedFrame`, from `VRDevice::UpdateAutoFoveatedAntialiasing`: the rule of the foveated anti-aliasing, which waits for it. Only what the table was seen to have counts, so that a table with neither loses no time.
+
+Results and measurements: `docs/Performance on the Steam Frame.md`, sections 8.6, 8.8 and 8.9.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -445,6 +459,7 @@ Ghostbusters 8.23 → 6.71 ms (−1.52 ms); details and checks in `docs/Performa
 - Standalone builds on Linux (glibc) fix the mmap threshold of malloc at 1 MB (section 20): less memory, no growth from table to table, tables load 3 to 5 % slower.
 - Standalone desktop builds have the simplified meshes (section 19) off by default (`Player.SimplifyMeshes`); on, they work in desktop views too.
 - Standalone desktop builds have the compact scene buffer (section 21) too, off by default (`Player.CompactSceneBuffer`); on, it applies to desktop views as well.
+- Standalone desktop builds have the Reflections settings (section 22), On by default: nothing left out unless they are changed. Automatic only decides in VR.
 - The dynamic resolution plumbing (render scale on passes and targets) is inert outside VR: the scale stays 1 and every view rect and texture coordinate is what it was.
 - Every build with the bgfx renderer gets the specular anti-aliasing of the material shader (section 12), except through Direct3D 11/12 until the shader headers are regenerated on Windows.
 - Standalone desktop builds record the scores of the library tables they play (`profiles.json`, `scores.json` in the preferences folder) and their PinMAME plugin falls back to the bundled memory maps (section 14); the table picker gets a Scores tab and a player item.
@@ -511,6 +526,8 @@ src/steamframe/MeshSimplifier.h
 src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19)
 src/steamframe/SceneBufferFormat.h
 src/steamframe/SceneBufferFormat.cpp    scene buffers in RG11B10F, switched live (section 21)
+src/steamframe/Reflections.h
+src/steamframe/Reflections.cpp          what the reflections leave out, switched live (section 22)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md

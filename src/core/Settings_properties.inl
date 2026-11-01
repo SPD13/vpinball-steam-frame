@@ -168,6 +168,14 @@ PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendere
 #else
 PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, false);
 #endif
+// What the reflections leave out, see src/steamframe/Reflections.h; off in the build of the Steam Frame
+#ifdef VPX_STEAM_FRAME_HEADSET
+PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
+PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
+#else
+PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
+PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
+#endif
 #endif
 PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to manage Depth Buffer on a DirectX 9 build. May solve some rendering issues"s, false);
 PropBool(Player, SoftwareVertexProcessing, "Software Vertex Processing"s, "Activate this on a DirectX 9 build, if you have issues using an old Intel graphics chip"s, false);

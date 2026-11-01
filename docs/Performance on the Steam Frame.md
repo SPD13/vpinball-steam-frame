@@ -8,7 +8,8 @@ This document is the engineering log behind it.*
 Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurements made after the desktop mirror was turned off
 (section 7), 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15) and the simplified meshes
 (section 8.2), 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3), and the same day with
-the welding of meshes exported as separate triangles and the culling of the reflection, from Albator78 (section 8.2).*
+the welding of meshes exported as separate triangles and the culling of the reflection, from Albator78 (section 8.2), and 2026-11-01 with the
+tables still below the native size (section 8.6), generic rules for the reflections (section 8.8) and the Reflections settings built from them (section 8.9).*
 
 ## 1. Summary
 
@@ -47,6 +48,11 @@ the welding of meshes exported as separate triangles and the culling of the refl
   9 % in its simplified meshes and ran at 36 fps (19.8 ms at 2160²): 8 flat-shaded meshes hold 1.30 M triangles the simplifier could not
   touch. Welding them first and leaving out of the reflection what cannot land on the playfield gives 11.1–12.1 ms and 72 fps, for
   4.5 s more loading (section 8.2).
+- **The tables still below native have different causes (2026-11-01).** Robot Invasion: three wall mirrors, 11–12 ms of its 21 ms. WildWest:
+  its large VR room, 5.7 ms, of which 2.7 ms in the playfield reflection. Darkest Dungeon: 0.3 ms over the target, kept 350 pixels under
+  what that allows by frames over the period that do not depend on the size. Missed frames and an over-reading GPU counter come with
+  a render thread busy more than about 10 ms per frame, which makes it a limit for the first time (section 8.6). Two settings now leave the
+  extra mirrors and the room out of the reflections, off by default on the Frame: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, WildWest 13.9 → 10.9 ms, Maverick 16.4 → 11.1 ms (section 8.9).
 
 ## 2. Method
 
@@ -364,6 +370,10 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
 | 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | Not measurable on Addams and Ghostbusters (8.3): both hold 2160² at any target; to try on a table below the ceiling (LOTR) |
+| 16 | Dynamic resolution ignores what the size does not cause: frames over the period independent of the size, and a counter reading over the GPU's busy time | Darkest Dungeon sits about 2 ms under the target at 1805²; 12 ms at 2160² | Small | **Proposed** 2026-11-01 (8.6): gain not measured |
+| 17 | VR room left out of the playfield reflection | **WildWest −2.7 to −3.3 ms, 2031² → 2160²; Maverick −5 ms, 36 → 72 fps**; little on other tables, nothing on Darkest Dungeon | Small per table (recipe), medium as a rule | **Done** 2026-11-01, setting *Room reflection* (8.9); the same result worn with a recipe, since dropped: green, 98.5 % at full size |
+| 18 | Mirrors other than the playfield | **Robot Invasion −11 to −12 ms, 1559² → 2155²; 2001 −5.2 ms**; Last Action Hero nothing; 4 tables of 94 have such mirrors | Small per table (recipe) or a step of the same rule | **Done** 2026-11-01, setting *Extra mirrors* (8.9); the same result worn with a recipe, since dropped: green, 100 % at full size |
+| 19 | Simplify the parts of "group elements" collections that are not really merged | WildWest −0.6 ms, no change with dynamic resolution; Addams and LOTR nothing | One condition | Measured 2026-11-01 (8.6): low value |
 
 Details:
 
@@ -751,6 +761,184 @@ and after alternating (`gpu-series.sh`, run `sbon`; results in `~/perf-test/resu
 The FXAA pass is now about 0.5 ms: the most a fusion of the tonemap and FXAA (second step) could save, less the luma it would then
 compute for the neighbours itself.
 
+### 8.6 The tables below native (2026-11-01)
+
+*Fork `master` at 294aa8410 for the code read; executable `~/perf-test/vpx-autoaa` (2026-10-31, all the work above, before the later fixes that
+do not touch rendering). Headless (section 2.1), fixed foveation, 100 s per run, the window from 40 s, one run per variant, bgfx's GPU profiler at fixed
+sizes, compact scene buffer and foveated tonemap and anti-aliasing on. Variants by script sidecars on hard links of the tables. Repeated base
+runs vary by 0.5–1.2 ms on these tables (Darkest Dungeon 11.86–12.43, WildWest 13.47–13.97, Robot Invasion 20.58–21.81, Lord of the
+Rings 11.94–12.84). Results on the Frame: `~/perf-test/results-heavy`, `results-heavy2`, `results-ri`, `results-rooms`, `results-group`.*
+
+The ratings saved on the Frame from the owner's plays of 2026-10-31 give 12 yellow tables of 27 rated. The worst, with the cost of each pass (ms per frame):
+
+| Table | Native % worn | Runtime GPU at 2160² | Scene | Reflections | Bloom | Tonemap + FXAA | Size with dynamic resolution | Triangles / draws |
+|---|---|---|---|---|---|---|---|---|
+| WildWest | 0 | 13.5 | 6.5 | 3.6 | 0.7 | 1.8 | 2031² | 1.65 M / 815 |
+| Robot Invasion | 1 | 21 (36 fps) | 4.7 | 6.2 (4 mirrors) | 0.7 | 1.4 | 1559² | 0.70 M / 2 330 |
+| World Joker Tour | 6 | 10.6 | 5.8 | 1.7 | 0.2 | 1.4 | 2133² | 0.85 M / 1 835 |
+| Darkest Dungeon | 30 (15 s played) | 12.1 | 6.8 | 1.8 | 0.9 | 0.9 | 1805² | 1.67 M / 1 330 |
+| Lord of the Rings | 41 | 12.4 | 7.4 | 0.7 | 0.7 | 1.4 | 2029² | 1.19 M / 734 |
+| Blade Runner 2049 | 51 | 8.9 | 3.5 | 2.0 | 0.8 | 1.2 | not run | 0.37 M / 1 134 |
+| CyberRace | 72 | 11.2 | 6.5 | 0.6 | 0.6 | 1.4 | not run | 1.28 M / 420 |
+
+**Robot Invasion: the wall mirrors.** It has 300 000 visible triangles, but four planar probes that each draw the scene again, for the playfield and
+three 2-triangle wall quads: `left` (strength 0.5, and 0.05 on the blades), `right` (0.05), `back` (1.0). All have static and dynamic parts in them,
+and the culling of the reflection (`IsBoxReflected`) only works on horizontal mirrors. A probe is not drawn when no part shows it, so a sidecar
+that clears the `ReflectionProbe` of the wall parts tests each:
+
+| Robot Invasion | Runtime GPU | fps | Draws | Render thread: wait + submit | With dynamic resolution |
+|---|---|---|---|---|---|
+| As it is | 20.6–21.8 ms | 36 | 2 330 | 15 ms | 1559², 70.6 fps |
+| Parts at 5 % without mirror (`right` gone) | 13.9 ms | 70 | 1 850 | 11.5 ms | 1702² |
+| Back wall mirror only | 10.7 ms | 72 | 1 430 | 9.6 ms | |
+| No wall mirror | 9.6 ms | 72 | 990 | 7.2 ms | **2155²** |
+| No reflection at all | 7.8 ms | 72 | 703 | 5.5 ms | |
+
+Four tables of 94 have such mirrors (also 2001, Last Action Hero, Game of Thrones), so this is a fix for few tables.
+
+**WildWest: the room.** 723 000 of its triangles are in its VR room collections; the MEGA room, its default, costs 5.7 ms against Minimal (13.5 → 7.8 ms)
+and 6.8 ms against the cabinet alone (6.7 ms). Its playfield reflection, the largest measured here (3.6 ms against 1.0 on Addams), is mostly that room:
+`ReflectionEnabled` off on the parts of `VR_Mega` gives 10.8 ms (−2.7 ms) and 1.65 → 1.08 M triangles, and dynamic resolution then holds 2160²
+(2031² before). The parts are large meshes spanning the room, whose boxes the culling of the reflection cannot leave out.
+
+**Darkest Dungeon: the table itself, and dynamic resolution.** Its room costs 2.1 ms (Castle Ruins, the default, 12.1 ms; Cabinet 10.1; Sphere 11.0; Cathedral 12.4),
+all in the scene pass: the reflection stays 1.8 ms in every room, and leaving the room out of it changes nothing, as its parts already do not reach it. That
+reflection is the statues of the table (reflection off −2.7 ms, and 1.7 ms less submission on the render thread); bloom off −1.05 ms. The simplified meshes save only 0.8 ms: its 1.31 M
+candidate triangles only fall to 1.12 M at 1 VPU. Scene pass about 3.6 ms fixed + 0.65 ms per million pixels per eye. At 2160² it is only 0.3 ms
+over the target, yet dynamic resolution saws between 1666² and 2026² at 9–10 ms, about 2 ms under the target (WildWest, at the same target, stays at it). Darkest Dungeon misses
+about as many frames at 1296² (0.8 per 5 s) as at 2160² (1.2–2.6 per 5 s), and a frame over the period lowers the scale at once: the size pays for what it does not cause. What these
+frames are is not established.
+
+**World Joker Tour** gains 1.8 ms without reflection (872 of its 1 835 draws are in it). **Lord of the Rings** gains only 0.5 ms that way: it is its scene pass, 7.4 ms,
+not split further here; it is also the hottest, GPU 93 °C and CPU 97 °C in 100 s.
+
+**The render thread now counts.** The render thread's wait for the logic thread plus its submission: Addams 2.6 ms, WildWest 5.5, Darkest Dungeon 9.7, Robot Invasion 12–15. Over about 10 ms,
+frames are missed whatever the size, and the runtime's counter reads more than the GPU's busy time (DRM `fdinfo`):
+
+| Run | Wait + submit | Runtime GPU | GPU busy | Over | Missed per 5 s |
+|---|---|---|---|---|---|
+| Addams 2160² | 2.6 ms | 8.1 ms | 8.2 ms | 0 | 0 |
+| WildWest 2160² | 5.5 | 13.5 | 13.5 | 0 | 2 |
+| Robot Invasion, no wall mirror, dynamic | 7.5 | 9.4 | 9.4 | 0 | 0 |
+| Darkest Dungeon 2160² | 9.8 | 12.1 | 12.0 | 0.1–0.6 | 1–3 |
+| Robot Invasion 5 % parts out, dynamic | 10.8 | 9.6 | 7.5 | 2.1 | 2 |
+| Robot Invasion 1296² | 12.5 | 13.1 | 8.6 | **4.5** | 10 |
+| Robot Invasion, dynamic | 11.9 | 9.1 | 6.0 | 3.1 | 7 |
+
+Dynamic resolution steers by that counter: Robot Invasion is lowered with the GPU 43 % busy. The cause is not established (bgfx has one queue submission per frame, so the GPU
+should not idle inside the frame: possibly the work starting late, the counter then including the wait for the compositor's work). The wait is the frame preparation of the logic thread, 3–6 ms on these tables (item 5).
+
+**Group elements: not the blind spot it looked like.** Grouped parts are left out of the simplified meshes and, when really merged, of the culling. 47 tables of 95 have parts in such collections, so the flag was cleared
+in copies of three tables (`ungroup-table.py`; the hash mismatch logged is harmless): WildWest 13.5 → 12.9 ms, 2019² against 2031² with dynamic resolution; Addams 8.14 → 8.13 ms; Lord of the Rings within noise.
+`Primitive::RenderSetup` only merges dynamic parts sharing the material and the texture of the first, so most parts of these collections were drawn alone and culled already (the draw count does not move);
+only `MeshSimplifier`'s `IsGrouped` is too wide (WildWest 194 000 → 477 000 candidates, 6 s more CPU at load): item 19.
+
+**What is not settled.**
+
+- **Worn against headless.** World Joker Tour holds 2133² headless and 1984² worn (11.39 ms), Blade Runner fits at fixed 2160² and rates 51 %, Lord of the Rings 2029² and 41 %. Part of this may be a heavier
+  state seen in 18 of 275 runs since October, including the first four of this series: compositor at 12–24 % of the GPU instead of 5–6 %, some passes up to 25 % slower (Darkest Dungeon 14.9 against 12.1 ms and 1591²
+  against 1810²), for a reason not known. No worn run has the sampler that would tell.
+- The ratings are of one play, some of them short (Darkest Dungeon 15 s).
+- PuP: with the plugin off, Darkest Dungeon's script stalls (1.7 fps, 599 ms of script per frame); not measured on this table.
+- The look of items 17 and 18.
+
+### 8.7 Recommendations (2026-11-01)
+
+| Order | Work | Why | Expected | Decides it |
+|---|---|---|---|---|
+| 1 | Extra mirrors and the room out of the reflections (items 18, 17) | The largest gains measured, and tables to come can have them too | With the recipes that came first, worn: Robot Invasion 1 % → 100 % of the time at full size (47 s played), WildWest 0 % → 98.5 % (53 s) | **Done** as settings (8.9), first recipes per table (dropped); the owner checked the build in the headset, 2026-11-01 |
+| 2 | A run worn with `perf-sampler.py`, on World Joker Tour or Darkest Dungeon | Several tables rate well under what headless runs give; tells whether worn play is the heavier state | Tells how far the headless figures hold | |
+| 3 | Dynamic resolution: count the frames that lower the scale, then ignore those the size does not cause (item 16) | Darkest Dungeon sits 2 ms under the target; also steers by a counter that reads high | Darkest Dungeon from 1805² towards 2100², not measured | A headless series, counting missed frames |
+| 4 | Overlap of frame preparation and submission (item 5) | The render thread is now a limit: 3–6 ms of wait per frame on these tables | Fewer missed frames over 10 ms of render thread; large work | After 1 and 3, which remove part of it |
+| 5 | Scene pass of Lord of the Rings and CyberRace | The reflection does not explain them; not split yet | Unknown | A series by part, as for WildWest's room |
+
+Dropped: clearing the group flag or merging less (no gain, section 8.6), and lowering bloom on Darkest Dungeon (−1.05 ms for a visible change).
+
+**Which fixes can be generic:** measured in section 8.8.
+
+### 8.8 Generic rules for the reflections (2026-11-01)
+
+*Can rules applied to any table replace the recipes, and what else can the reflection give? Same method as section 8.6, parts chosen from the table files by `Doc/test-hooks/refl-rules.py`, not by hand, tried as script sidecars, one
+run per variant. In this series the compositor took 6.5–7 % of the GPU, so compare inside the table only. Lower quality was measured with the hooks of the executable of 2026-10-30 (`vpx-gpu`), which predates the culling of the reflection: Darkest Dungeon draws 1.96 M triangles there, 1.67 M today, so its savings are upper bounds.*
+
+**Step A, mirrors other than the playfield's**: no part shows them, so they are not drawn.
+
+| Table | Runtime GPU, before → after | Frame rate | Render thread, wait + submit |
+|---|---|---|---|
+| Robot Invasion (section 8.6, the same parts) | 21 → 9.6 ms | 36 → 72 fps | 15 → 7.2 ms |
+| **2001** | **13.5 → 8.3 ms** | 67 → 72 fps | 12.1 → 6.4 ms |
+| Last Action Hero | 8.4 → 9.1 ms (no gain; its mirrors draw few parts) | 72 fps | 2.7 → 2.8 ms |
+
+Game of Thrones, the fourth of these tables, was not run; its extra mirror is a horizontal one on an upper playfield.
+
+**Step B, parts beyond the cabinet out of the reflection** (box over 3000 VPU, or entirely beyond the cabinet):
+
+| Table | Runtime GPU, before → after | Reflection pass | Triangles per frame |
+|---|---|---|---|
+| **WildWest** | **14.2 → 10.8 ms**, the same as its recipe (10.8 ms) | 3.90 → 1.43 ms | 1.65 → 1.07 M |
+| **Maverick** | **16.8 ms, 36 fps → 11.8 ms, 72 fps** | 5.33 → 1.94 ms | 2.40 → 1.70 M |
+| Masters of the Universe | 10.6 → 10.4 ms | 1.66 → 1.36 ms | 1.46 → 1.36 M |
+| Ace of Speed | 11.3 → 11.3 ms | 2.11 → 1.83 ms | 0.82 → 0.78 M |
+
+The rule read from the files also catches parts of the cabinet (`PinCab_Shooter001` on WildWest, `PinCab_Housing` on World Joker Tour), with rotations ignored; in the engine the real transforms are available, but the test still has to be better than this.
+
+**Other parts out, on the tables where the room is not the cost** (reflection pass, bgfx; runtime readings on Darkest Dungeon vary too much to separate these):
+
+| Parts out of the reflection | Darkest Dungeon (1.78 ms) | World Joker Tour (1.68 ms) |
+|---|---|---|
+| Small, box under 60 VPU | 1.82 ms (51 parts) | 1.65 ms (75 parts) |
+| High, over 100 VPU above the playfield | 1.65 ms (30 parts) | 1.66 ms (66 parts) |
+| Heavy, over 10 000 triangles | 1.30 ms (26 parts, the statues gone) | 1.67 ms (2 parts) |
+
+None of these is worth a step: only the statues move the pass, by 0.5 ms, at a visible cost.
+
+**Lower quality** (2026-10-30 executable, with today's post-processing and format through its hooks):
+
+| | Darkest Dungeon, reflection pass / GPU busy per frame | World Joker Tour, reflection pass / GPU busy per frame |
+|---|---|---|
+| Base | 2.75 / 13.44 ms | 1.72 / 11.16 ms |
+| Simplified meshes in the reflection at 8 times the error of the view | 1.91 / 12.34 ms | 1.62 / 11.04 ms |
+| Reflection at half size | 2.04 / 12.90 ms | 1.24 / 10.37 ms |
+
+The half size gives about 0.5–0.8 ms on both, against 0.19 and 0.48 ms on Addams and Ghostbusters (section 8.3), softer reflections, and nothing on the render thread (submission unchanged). The coarser meshes depend on the table.
+
+**Reading.**
+
+- Steps A and B replace the recipes in the measured cost: the same parts for Robot Invasion, and the same 10.8 ms for WildWest. They also find 2001 and Maverick, which have no recipe, and leave Last Action Hero, Masters of the Universe and Ace of Speed at about what they were: where these parts are cheap, removing them gains little, so they should only go on a table that needs it.
+- A step can therefore be applied by need: Always Off / Always On / Automatic, as for the foveated anti-aliasing. Automatic has a cost the recipes do not have: a table runs below native until the decision, a minute with the warm-up of the anti-aliasing. Remembering the decision per table (with the rating, `table-stats.json`) would make the next starts right from the first frame.
+- Darkest Dungeon and World Joker Tour gain from neither step. Their way is item 16, and the half-size reflection as a possible third step (not measured on today's executable). "Balls Only" stays the last resort, by the player's choice.
+
+Not seen worn: Maverick and 2001 with these parts out, and any table with the rule itself. If the rule is built, the recipes are not needed.
+
+### 8.9 The Reflections settings (2026-11-01)
+
+The owner's decision: settings rather than recipes, for the tables to come, both **Off by default**, not Automatic: a table with such parts loses them whether it needs the time or not. `Player.ExtraMirrors` and `Player.RoomReflection`
+(Steam Frame > Reflections, On / Off / Automatic, live, per table or for all; Off in the Frame build, On in the others; `src/steamframe/Reflections.h`). The recipes `robot-invasion-wall-mirrors` and `wildwest-room-reflection` were tried on the Frame and never shipped.
+
+- **Extra mirrors**: a planar reflection probe other than the playfield's, unless horizontal, is not rendered (`RenderProbe::Render`), and its parts show no reflection. Horizontal ones stay: on Game of Thrones it is the reflection of an upper playfield.
+- **Room reflection**: a primitive whose box reaches more than 300 VPU beside the playfield, 600 behind it or 700 in front of it, once transformed, is not drawn in a reflection. Height is not looked at, so a topper or a backbox stays. Parts merged by a group (drawn from one buffer) and animated meshes are not concerned, as for the culling.
+- **Automatic**: as for the foveated anti-aliasing, 10 seconds below full resolution in the last 60, the first minute of the table not counted. The extra mirrors first, then the room after 10 more such seconds; for the rest of the table, not remembered from one play to the next. The anti-aliasing waits for them, and starts its own minute after.
+
+Measured headless, build of the branch with the test hooks, fixed 2160² with the GPU profiler, and dynamic resolution without it (`Doc/test-hooks/reflections-build.sh`, `~/perf-test/results-refl`):
+
+| Table | On | Off (default) | Saved | With dynamic resolution, Off | Left out |
+|---|---|---|---|---|---|
+| Robot Invasion | 22.7 ms, 36 fps | **9.4 ms, 72 fps** | 13.4 ms | 2155² (1559² before) | 3 mirrors |
+| 2001 | 14.5 ms, 67 fps | **8.3 ms, 72 fps** | 6.2 ms | 2160² | 2 mirrors |
+| Maverick | 16.4 ms, 36 fps | **11.1 ms, 72 fps** | 5.2 ms | 2141² | 80 room parts |
+| WildWest | 13.9 ms | **10.9 ms** | 3.0 ms | 2146² (2031² before) | 18 room parts |
+| Game of Thrones | 10.1 ms | 9.6 ms (no pass moved: noise) | 0 | | Nothing: `UpperPF` drawn in both |
+| Last Action Hero | | 8.3 ms | | | Its 2 back mirrors, and `BM_underPF` |
+| Addams | | 8.2 ms | | | Nothing |
+| Darkest Dungeon | | 12.7 ms | | | Nothing |
+| World Joker Tour | | 11.0 ms | | | Nothing |
+
+The engine's test, with the real transforms, is more exact than the one read from the files in section 8.8: on WildWest it no longer takes the cabinet's `PinCab_Shooter001`. On Last Action Hero it takes `BM_underPF`, under the playfield, which is clipped from the reflection anyway.
+
+Automatic, with dynamic resolution, 170 s: Robot Invasion stays at the 1512² floor until the extra mirrors go, then 2160² (9.5 ms); WildWest at about 2000² until the room goes, then 2160² (10.8 ms). Each lost its parts in the second half of the run, as designed.
+
+The menu section was checked in a capture on the Frame (`docshot-hooks.py`): Off and Off, "3 extra mirrors left out" and "no part of it reaches the reflections" on Robot Invasion. The owner checked this build in the headset on 2026-11-01: it works.
+
 ## 9. Reproduction
 
 From `vpinball/`, with the Frame on the network:
@@ -768,7 +956,9 @@ python3 ../Doc/test-hooks/perf-report.py <results folder> 40
 
 The series of section 8.3: `python3 ../Doc/test-hooks/gpu-series-hooks.py apply` on top of `perf-hooks.py`, the executable in
 `~/perf-test/vpx-gpu`, then on the Frame `sh gpu-series.sh results-gpu ad:base ad:fovpost ... ad:base+2` (the runs are listed in the
-script, `Doc/test-hooks/gpu-series.sh`; it waits while another VPX runs).
+script, `Doc/test-hooks/gpu-series.sh`; it waits while another VPX runs). Section 8.6: runs `hbase`, `h1728`, `h1296`, `hnoprobe`, `hnobloom`, `hnosimp` of the same script, `variant-series.sh` for
+hard links with a sidecar in `~/perf-test/tables`, `gpu-vs-busy.py` for the comparison with the GPU's busy time, `library-gpu-survey.py` for the mirrors and triangles of the library. These runs play the real tables: they
+change saved credits and scores (`user/VPReg.ini`, PinMAME `nvram`), so back those up first.
 
 Without `VPX_PERF_FORCE_RENDER`, someone has to wear the headset. Other variants: `native` (2160² without the bgfx profiler), and a
 table option changed by a `<table>.vbs` next to a hard link of the table (section 7.2). Keep the idle gaps between runs at a minute or

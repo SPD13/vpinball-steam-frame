@@ -9,6 +9,9 @@
 #include "renderer/RenderCommand.h"
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/Reflections.h"
+#endif
 
 const string RenderProbe::PLAYFIELD_REFLECTION_RENDERPROBE_NAME = "Playfield Reflections"s;
 
@@ -402,6 +405,10 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    assert((renderMask & Renderer::REFLECTION_PASS) == 0);
+   #if defined(VPX_STEAM_FRAME)
+   if (!VPX::Reflections::IsProbeShown(*this)) // Extra mirrors left out (Settings Player/ExtraMirrors)
+      return nullptr;
+   #endif
    const ReflectionMode mode = min(m_reflection_mode, m_renderer->GetMaxReflectionMode());
 
    if (mode == REFL_NONE || (isStaticOnly && (mode == REFL_BALLS || mode == REFL_DYNAMIC)) || (isDynamicOnly && (mode == REFL_STATIC)))
