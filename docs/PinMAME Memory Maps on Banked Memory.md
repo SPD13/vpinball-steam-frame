@@ -61,9 +61,10 @@ Regression in VPX, a game played by the autoplay of the test tools and recorded 
 Knievel (Bally 4-bit), Star Trek LE (Stern SAM), Terminator 3 (Stern Whitestar), The Lost World (Sega), Rocky (Gottlieb System 80), Super
 Mario Mushroom World (Gottlieb System 3), Verne's World (Spinball): all 8 recorded a score.
 
-Not run so far: a full game of a System 7 table through VPX, so the record at the end of the game and game over going back to 1 have not
-been seen (the program above could not drain the balls, and the table is on the Frame, asleep at the time); Data East and Peyper.
-On the first boot with no NVRAM, `0xC9` stayed 0 and `0xCB` 1, and the program's coins and Start got no reaction in that run; the
+On the Frame, played by hand with this patch: TENACIOUSD Flex Mod (System 7), one player, game over went back to 1 at the end of the game
+and 59,010 was recorded through the map; Last Action Hero (Data East), two players, 29,766,490 and 21,620,050 recorded through the map.
+
+Not run so far: a System 7 game with two players; Peyper. On the first boot with no NVRAM, `0xC9` stayed 0 and `0xCB` 1, and the program's coins and Start got no reaction in that run; the
 boots after it behave as in the table.
 
 ## What the fork does meanwhile
@@ -87,5 +88,5 @@ The fork carries the patch: `steamframe/patches/pinmame/02-memmap-follow-banks.p
 > `memory_find_base` as the fallback for read handlers (`se.c`). `PinmameReadMainCPUMemory` gets the bank the CPU sees as a result.
 >
 > Checked: `fpwr2_l2` driven through libpinmame (page `0x00` identical to `0x1000`, game over and player count follow the game, score
-> climbing), and a game recorded through the map on WPC, Bally AS-2518-17, Stern SAM and Whitestar, Sega, Gottlieb System 3 and System 80, and
-> Spinball machines.
+> climbing), and a game recorded through the map on Williams System 7, WPC, Bally AS-2518-17, Stern SAM and Whitestar, Sega, Data East,
+> Gottlieb System 3 and System 80, and Spinball machines.
