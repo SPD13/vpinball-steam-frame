@@ -21,6 +21,8 @@ constexpr size_t MAX_LINE_LENGTH = 126; // libpinmame reads the file with fgets(
 constexpr uintmax_t MAX_TEXT_SIZE = 1024 * 1024; // Readme files: larger text files are logs or data, not instructions
 constexpr int MAX_DEPTH = 4;
 constexpr int MAX_ENTRIES = 20000; // Table folders may hold thousands of media files
+// The unofficial mods libpinmame runs and its catalog leaves out. steamframe/tools/check-pinmame-catalog.sh compares this line with the library at each sync
+constexpr const char* GAMES_NOT_IN_CATALOG[] = { "acd_170_ac", "beachbms", "beav_butt", "bubba", "che_cho", "rambo", "tomjerry" };
 
 string ToLower(string value)
 {
@@ -143,6 +145,7 @@ void GameCatalog::Load()
       for (const auto& driver : json.at("drivers"))
          if (const string id = driver.value("id", string()); !id.empty())
             m_games.insert(ToLower(id));
+      m_games.insert(std::begin(GAMES_NOT_IN_CATALOG), std::end(GAMES_NOT_IN_CATALOG));
    }
    catch (const std::exception&) {
       m_games.clear();

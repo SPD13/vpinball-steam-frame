@@ -1018,6 +1018,7 @@ TEST_CASE("RomAliases: the alias file is read and checked as libpinmame reads it
    CHECK(catalog.IsAvailable());
    CHECK(catalog.IsGame("SimpPrty"));
    CHECK_FALSE(catalog.IsGame("simpprtyh"));
+   CHECK(catalog.IsGame("TomJerry")); // A mod libpinmame runs, left out of its catalog
    CHECK(catalog.GetGamePrefix("simpprtyh") == "simpprty");
    CHECK(catalog.GetGamePrefix("tz_94hmod") == "tz_94h");
    CHECK(catalog.GetGamePrefix("simpprtyhorrorhalloween") == ""); // A prefix shorter than half of the name is no clue

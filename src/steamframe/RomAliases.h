@@ -18,7 +18,7 @@
 // table does not start. These helpers find the game a name stands for and read and write that file.
 namespace VPinballLib::RomAliases {
 
-// The game names PinMAME knows, from the driver catalog shipped with its plugin (gamedefs/catalog/pinmame.json), loaded on first use
+// The game names PinMAME knows, from the driver catalog shipped with its plugin (gamedefs/catalog/pinmame.json) and the mods it leaves out, loaded on first use
 class GameCatalog final
 {
 public:
