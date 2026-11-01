@@ -93,6 +93,8 @@ The workspace folder holds, side by side:
 3. **Review.** The report, VR and XR first, and `git range-diff`. When upstream built something the fork has too, decide as below.
 4. **Build for macOS** (Homebrew's bison first in the `PATH`: `export PATH="$(brew --prefix bison)/bin:/opt/homebrew/bin:$PATH"`):
    `platforms/macos-arm64/external.sh` (rebuilds only the dependencies whose version changed), then `cmake --build build -j10`.
+   Then `steamframe/tools/check-pinmame-catalog.sh`: a game libpinmame runs and the catalog leaves out would be reported as unknown,
+   so add it to the list in `src/steamframe/RomAliases.cpp`.
 5. **Check on macOS**, with a settings folder of its own (`-PrefPath <folder>`, holding a `VPinballX.ini` with `TablesPath` set to a
    folder of tables with their ROMs, `WebServerAlwaysOn = 1`, `WebServerPairing = 0`):
    - `build/VPinballX_BGFX.app/Contents/MacOS/VPinballX_BGFX -PrefPath <folder> -Launcher`: the lobby reaches `Startup done` in
