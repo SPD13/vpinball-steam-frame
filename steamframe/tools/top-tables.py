@@ -38,6 +38,8 @@ Pinside Top 100 of {ranking_date}, table data from the [Virtual Pinball Spreadsh
 
 {machine} machines have a VR table of the machine itself and {fan} more only have a fan table on the same theme. The other {none} have no VR table that can be downloaded, mostly recent Stern, Jersey Jack and Spooky machines. {frame} of the 100 are on the Frame.
 
+**VR version.** "Yes" means a VR table of the machine can be downloaded, "Fan table" that only a fan table on the same theme can, "No" that neither can. These come from the VR tag on VPS: a table without the tag can still have a VR room, and "Not accessible" means the only VR table refuses access (see the end).
+
 **Which table is listed.** Among the VPX tables tagged VR, the one tagged nFozzy, otherwise one with JPSalas in its comment or authors, otherwise the latest; with several candidates at one step, the latest of them. The rule that decided is shown in parentheses after the link ("only VR" when there was one candidate). "Latest" uses the date VPS shows as "Updated at". Patches that need another table (VPU Patch), files marked unavailable and dead links are left out, as are two files whose page refuses access (see the end).
 
 **Fan tables.** A fan table, named in the Download column, shares the theme but is not the machine Pinside rates: it is usually a remix or a reskin of another playfield. It is listed only when VPS has no VR table of the machine. A machine of the same name by another maker is not used, nor counted as installed (see the end).
@@ -202,6 +204,7 @@ def main():
             table, rule = pick_table([t for g in fan for t in vr_tables(g, exclude)])
             kind = "fan" if table else "none"
         counts[kind] += 1
+        vr = {"machine": "Yes", "fan": "Fan table"}.get(kind, "Not accessible" if exclude else "No")
 
         vps = machine or fan
         if table:
@@ -245,7 +248,7 @@ def main():
                 print(f"#{row['rank']}: {row['frame']!r} is no longer on the Frame", file=sys.stderr)
 
         name = f"{link(row['name'], PINSIDE + row['pinside'])} ({row['maker']})"
-        lines.append(f"| {row['rank']} | {name} | {download} | {pup} | {wheel} | {on_frame} |")
+        lines.append(f"| {row['rank']} | {name} | {vr} | {download} | {pup} | {wheel} | {on_frame} |")
 
         if args.review:
             print(f"{row['rank']:>3} {row['name']} [{kind}/{rule}]",
@@ -257,7 +260,7 @@ def main():
                     print(f"     pup{mark} {p['id']} {p.get('version')} {p.get('comment')!r} {(p.get('authors') or [])[:2]} {first_url(p)}")
 
     text = INTRO.format(ranking_date=data["rankingDate"], today=datetime.date.today().isoformat(), **counts)
-    header = "| Pinside rank | Game | Download (VR table) | PuP pack | Wheel art | On the Frame |\n| --- | --- | --- | --- | --- | --- |\n"
+    header = "| Pinside rank | Game | VR version | Download (VR table) | PuP pack | Wheel art | On the Frame |\n| --- | --- | --- | --- | --- | --- | --- |\n"
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(text + "\n" + header + "\n".join(lines) + "\n\n" + OUTRO.replace("{refused_date}", "2026-11-01"))
     print(f"Wrote {OUT}: {counts}")
