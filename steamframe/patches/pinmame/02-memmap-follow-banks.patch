@@ -1,0 +1,57 @@
+--- a/src/memory.c
++++ b/src/memory.c
+@@ -790,15 +790,15 @@
+ 	if (entry >= SUBTABLE_BASE)
+ 		entry = memport->read.table[LEVEL2_INDEX(entry, offset, memport->abits, minbits)];
+ 
+-	/* 8-bit case: RAM/ROM/RAMROM */
+-	if (entry > STATIC_RAM || (minbits == 0 && entry != STATIC_RAM))
++	/* RAM/ROM/RAMROM and banks, on every bus width, as the read handlers of this file (a NULL is a handler) */
++	if (entry > STATIC_RAM || entry == STATIC_INVALID)
+ 		return NULL;
+ 	offset -= handlist[entry].offset;
+ 	/* cpu_bankbase[STATIC_RAM] is rewritten to the active CPU's base on every
+ 	context switch, so resolve against the requested CPU's own base instead. */
+ 	if (entry == STATIC_RAM)
+ 		return (UINT8 *)cpudata[cpunum].rambase + offset;
+-	return &cpu_bankbase[entry][offset];
++	return cpu_bankbase[entry] != NULL ? &cpu_bankbase[entry][offset] : NULL;
+ }
+ 
+ 
+--- a/src/libpinmame/libpinmame.cpp
++++ b/src/libpinmame/libpinmame.cpp
+@@ -3282,6 +3282,15 @@
+    msgLocals.endpointId = endpointId;
+ }
+ 
++// The memory of the main CPU at an address, as the game reads it. A bank must be followed: Williams System 7 runs its first page
++// (0x0000 to 0x00FF) on a bank of its RAM at 0x1000, and memory_find_base gives the page under the bank, which nothing ever writes.
++// No pointer means a read handler (se.c routes all Whitestar/Sega main RAM through ram_r): the memory behind it is at the base.
++static const uint8_t* MemMapFindBase(const unsigned int offset)
++{
++   const void* const ptr = memory_get_read_ptr(0, offset);
++   return static_cast<const uint8_t*>(ptr != nullptr ? ptr : memory_find_base(0, offset));
++}
++
+ static void SetMemMapImpl(uint8_t* platform, size_t platformSize, uint8_t* game, size_t gameSize)
+ {
+    const auto parseAddress = [](const json& node, unsigned int& value) -> bool
+@@ -3575,7 +3584,7 @@
+                   // FIXME We take for granted that we will read in a continuous block of RAM (dangerous)
+                   // FIXME we consider that the map always apply to CPU #0 which should be true, but there may be exceptions to this
+                   const unsigned int baseOffset = isLittleEndian ? offsets.back() : offsets.front();
+-                  const uint8_t* const ptr = static_cast<const uint8_t*>(memory_find_base(0, baseOffset));
++                  const uint8_t* const ptr = MemMapFindBase(baseOffset);
+                   if (ptr == nullptr)
+                      return;
+                   // As the format's reference parser (py-pinmame-nvmaps nvram_parser.py, get_bytes) does: the bytes of the field
+@@ -3681,7 +3690,7 @@
+             getter = [offsets, byteMask, nullMode, charMap](unsigned int index, void* pResult)
+                {
+                   const unsigned int baseOffset = offsets[0];
+-                  const uint8_t* const ptr = static_cast<const uint8_t*>(memory_find_base(0, baseOffset));
++                  const uint8_t* const ptr = MemMapFindBase(baseOffset);
+                   if (ptr == nullptr)
+                      return;
+ 
