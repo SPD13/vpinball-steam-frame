@@ -463,7 +463,7 @@ steamframe/steamframe.cmake             build of the fork (sources, VPX_STEAM_FR
 steamframe/deps/libarchive.sh           xz + libarchive, run by platforms/*/external.sh
 steamframe/deps/libzip.sh               libzip (web server), run by platforms/*/external.sh (upstream builds it for Android only)
 steamframe/patches/bgfx/                bgfx patches (see below)
-steamframe/patches/pinmame/             libpinmame patch: memory maps of 4-bit memory, nibble before mask (docs/PinMAME Memory Maps on 4-bit Memory.md)
+steamframe/patches/pinmame/             libpinmame patches: memory maps of 4-bit memory, nibble before mask (docs/PinMAME Memory Maps on 4-bit Memory.md); banks followed (docs/PinMAME Memory Maps on Banked Memory.md)
 steamframe/tools/                       sync-upstream.sh, fold-fixups.py, upstream-report.sh
 src/steamframe/Launcher.h
 src/steamframe/Launcher.cpp             table library, scores, web server, lobby and launcher mode (g_launcher, owned by VPApp)

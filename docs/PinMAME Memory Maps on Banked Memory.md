@@ -3,7 +3,7 @@
 *2026-11-01. For `vpinball/pinmame` (`src/memory.c`, `memory_get_read_ptr`, and `src/libpinmame/libpinmame.cpp`, `SetMemMapImpl`).*
 
 The fields of a memory map are read at the address the game uses, with `memory_find_base`, which ignores banks. When the main CPU reads
-an address through a bank, the map reads the page under the bank, which nothing ever writes. All the Williams System 7 games are concerned:
+an address through a bank, the map reads the page under the bank, which nothing ever writes. All the Williams System 7 games are concerned (3 maps, 18 ROMs):
 their map loads, every field reads 0, no score ever shows and no game ends. The change below follows the bank.
 
 ## Symptom
