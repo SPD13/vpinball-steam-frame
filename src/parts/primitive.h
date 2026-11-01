@@ -303,6 +303,9 @@ public:
    void setInPlayState(const bool newVal);
 
    Mesh m_mesh;
+#if defined(VPX_STEAM_FRAME)
+   bool HasMeshLoadFailed() const { return m_meshLoadFailed; } // Its mesh could not be loaded from the table, and was dropped
+#endif
 
    PrimitiveData m_d;
 
@@ -331,6 +334,11 @@ private:
    float m_speed = 0.f;
    bool m_doAnimation = false;
    bool m_endless = false;
+
+#if defined(VPX_STEAM_FRAME)
+   void DropInvalidMesh();
+   bool m_meshLoadFailed = false;
+#endif
 
    int m_numIndices = 0;         // only used during loading
    int m_numVertices = 0;        // only used during loading
