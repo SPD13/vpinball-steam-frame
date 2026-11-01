@@ -17,6 +17,7 @@
 #include "utils/color.h"
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/Reflections.h"
 #endif
 
 #include "forsyth.h"
@@ -989,16 +990,26 @@ void Primitive::Render(const unsigned int renderMask)
          m_renderer->UpdateBasicShaderMatrix();
          return;
       }
+      #if defined(VPX_STEAM_FRAME)
+      // Nor the parts of the VR room left out of the reflections (Settings Player/RoomReflection)
+      if (isReflectionPass && VPX::Reflections::IsPartLeftOut(m_mesh.m_minAABound, m_mesh.m_maxAABound, m_fullMatrix, *m_ptable))
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         return;
+      }
+      #endif
    }
 
 #if defined(VPX_STEAM_FRAME)
    // The index range drawn: the full mesh, or the level of its simplified mesh that cannot be told from it at this distance
    uint32_t drawFirst = 0, drawCount = m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices();
-   if (!isUIPass && !m_groupdRendering && m_meshLevels)
+   // A layer simplified with the part under it draws the level that part draws (its full mesh if the part lost its levels)
+   if (Primitive* const leader = m_meshLevels && m_meshLevels->leader ? m_meshLevels->leader : this; !isUIPass && !m_groupdRendering && m_meshLevels && leader->m_meshLevels)
    {
       int renderWidth, renderHeight;
       m_renderer->GetRenderSize(renderWidth, renderHeight);
-      VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass, m_meshLevel, drawFirst, drawCount);
+      VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, leader->m_mesh, leader->m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass,
+         leader->m_meshLevel, drawFirst, drawCount);
    }
 #endif
 

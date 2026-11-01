@@ -11,6 +11,7 @@
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/Reflections.h"
 #include "steamframe/SceneBufferFormat.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
@@ -244,6 +245,41 @@ private:
    }
 };
 
+// What the reflections leave out (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
+class ReflectionsPage final : public InGameUIPage
+{
+public:
+   ReflectionsPage()
+      : InGameUIPage("Reflections"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_ExtraMirrors, //
+         []() { return Reflections::GetExtraMirrorsMode(); }, //
+         [](int, int v) { Reflections::SetExtraMirrorsMode(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Extra mirrors status"s, "The mirrors this table shows, other than the playfield's"s,
+         [](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(Reflections::GetExtraMirrorsStatus().c_str());
+         }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_RoomReflection, //
+         []() { return Reflections::GetRoomReflectionMode(); }, //
+         [](int, int v) { Reflections::SetRoomReflectionMode(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Room reflection status"s, "The parts of the VR room in the reflections of this table"s,
+         [](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(Reflections::GetRoomReflectionStatus().c_str());
+         }));
+   }
+};
+
 // The controls which have pages of their own (Controls screen)
 class MoreControlsPage final : public InGameUIPage
 {
@@ -305,6 +341,7 @@ constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
 constexpr const char* kSceneBuffer = "vrui/scene-buffer";
+constexpr const char* kReflections = "vrui/reflections";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
 // The items of a page which no section lists (an option added upstream) are shown by its 'rest' section.
@@ -350,6 +387,7 @@ static vector<Section> GetSections(Screen screen)
                Label("Foveated anti-aliasing status"s) }, false, false },
          Section { "Simplified meshes"s, kSimplifiedMeshes, {}, true },
          Section { "Scene buffer"s, kSceneBuffer, {}, true },
+         Section { "Reflections"s, kReflections, {}, true },
       };
 
    case Screen::Sound:
@@ -488,6 +526,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
       sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
+      sources.push_back(source(kReflections, std::make_unique<ReflectionsPage>()));
       return CreateComposed(screen, "Steam Frame"s, "What the Steam Frame Edition adds to keep heavy tables at the headset's full resolution"s, std::move(sources));
    case Screen::Sound:
       sources.push_back(source(kAudio, std::make_unique<AudioSettingsPage>()));

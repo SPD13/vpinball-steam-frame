@@ -49,6 +49,10 @@ target_sources(vpinball PRIVATE
    # Scene buffers in RG11B10F, switched live
    src/steamframe/SceneBufferFormat.h
    src/steamframe/SceneBufferFormat.cpp
+
+   # What the reflections leave out, switched live
+   src/steamframe/Reflections.h
+   src/steamframe/Reflections.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
