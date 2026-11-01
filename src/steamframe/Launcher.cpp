@@ -913,6 +913,25 @@ void Launcher::OnBeforeLoadTable()
    SetupSharedPupFolder();
 }
 
+bool Launcher::RefuseTable(const PinTable* const table, const std::filesystem::path& tableFilename)
+{
+   constexpr int maxNames = 3;
+   string names;
+   int count = 0;
+   for (const IEditable* const part : table->GetParts())
+      if (part->GetItemType() == eItemPrimitive && static_cast<const Primitive*>(part)->HasMeshLoadFailed() && ++count <= maxNames)
+         names += (count > 1 ? ", '" : "'") + static_cast<const Primitive*>(part)->GetName() + '\'';
+   if (count == 0)
+      return false;
+   if (count > maxNames)
+      names += ", ...";
+   PLOGE << "Table not started, " << count << " mesh(es) could not be loaded: " << names;
+   m_refusedTableMessage = "'" + PathToUTF8(tableFilename.stem()) + "' cannot be played on this device.\n"
+      + (count == 1 ? "The mesh of its part "s : "The meshes of its parts "s) + names + (count == 1 ? " is"s : " are"s) + " too large or damaged, so the table was not started.\n"
+      + "Look for a lighter version of this table.";
+   return true;
+}
+
 void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby)
 {
    if (isLobby)
@@ -961,6 +980,8 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
       return;
    }
    player->m_liveUI->OpenInGameUI("tables/picker"s);
+   if (!m_refusedTableMessage.empty())
+      player->m_liveUI->ShowMessage("Table cannot be played"s, std::exchange(m_refusedTableMessage, string()));
    // Back from a table: the scores of its games and their rank. Without any profile, nothing is asked: the scores stay unassigned, and can
    // be given to a profile later (from the browser, or the 'Who is playing?' page).
    if (m_lastSessionResult)

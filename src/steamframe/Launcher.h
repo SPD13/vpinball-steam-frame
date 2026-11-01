@@ -39,6 +39,7 @@ public:
       vector<string> scoreIds;
    };
    std::optional<SessionResult> m_lastSessionResult;
+   string m_refusedTableMessage;
    // The table closes: its rating in the headset is kept for its page in the menu (see PerfPanel)
    void OnTableClosed(const Player* player);
 
@@ -114,6 +115,7 @@ public:
    // Steps of PlayTableCommand::Play: before the table is loaded, once it is loaded (the lobby is built from it), once its player is created
    // (the lobby opens the table picker), and after the player is closed
    void OnBeforeLoadTable();
+   bool RefuseTable(const PinTable* table, const std::filesystem::path& tableFilename); // A table that cannot be played as it is: not started, the lobby tells why
    void OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby);
    void OnPlayerCreated(Player* player, bool isLobby);
    void OnTableClosed();
