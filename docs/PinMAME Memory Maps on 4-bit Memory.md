@@ -209,7 +209,7 @@ shifting each nibble by 4, and a BCD byte holds the two digits the old code took
 ## What the fork does meanwhile
 
 The fork carries the patch: `steamframe/patches/pinmame/01-memmap-nibble-then-mask.patch`, applied to libpinmame by the dependency
-scripts of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 (`platforms/*/external.sh`, cache tag `-memmap1`).
+scripts of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 (`platforms/*/external.sh`, cache tag `-memmap1`, `-memmap2` since [the patch of banks](PinMAME%20Memory%20Maps%20on%20Banked%20Memory.md)).
 All 169 ROMs are covered, with the maps as upstream has them. How the patch is kept at each sync, and dropped once upstream merges it:
 `steamframe/README.md`, "Patches of the dependencies".
 

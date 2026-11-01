@@ -527,7 +527,8 @@ make/CMakeLists_sources.txt             VRControllerModels, MessagePage
 make/vpx-core.vcxitems, .filters        VRControllerModels, MessagePage
 platforms/linux-aarch64/external.sh     bgfx patches of steamframe/patches/bgfx, steamframe/deps scripts
 platforms/macos-*/external.sh           steamframe/deps/libzip.sh
-platforms/{macos-*,linux-*,windows-mingw-x64}/external.sh   libpinmame patch of steamframe/patches/pinmame (cache tag -memmap1)
+platforms/{macos-*,linux-*,windows-mingw-x64}/external.sh   libpinmame patch of steamframe/patches/pinmame (cache tag -memmap2)
+steamframe/patches/pinmame/02-memmap-follow-banks.patch   memory maps and main CPU reads follow the banks (Williams System 7)
 steamframe/patches/bgfx/01-turnip-descriptor-pool.patch   descriptor pools without the free-set flag (section 7)
 steamframe/patches/bgfx/02-fragment-density-map.patch     fragment density map attachments and offsets (section 9)
 steamframe/patches/bgfx/03-fragment-shading-rate.patch   fragment shading rate attachments, the foveation path used on the Frame (section 9)

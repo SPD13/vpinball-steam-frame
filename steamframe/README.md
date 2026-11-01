@@ -118,7 +118,7 @@ The workspace folder holds, side by side:
 
 The fork patches three dependencies that upstream downloads and builds in `platforms/*/external.sh`: bgfx, libspatialaudio and
 libpinmame (table above). Each block applies the `*.patch` of its folder in `steamframe/patches/` after the download, and its cache key
-carries a tag (`-turnip4`, `-rotfix1`, `-memmap1`) so that existing dependency builds rebuild. At each sync:
+carries a tag (`-turnip4`, `-rotfix1`, `-memmap2`) so that existing dependency builds rebuild. At each sync:
 
 - **Upstream changed the block** (a conflict on the `Steam Frame Edition` lines): keep upstream's new lines and put our two lines back
   (the patch loop after the `cd` into the source, the tag at the end of the `*_EXPECTED_SHA`).
@@ -161,6 +161,8 @@ test: add each one found to the checklist.
 - Scores recorded after a game; sound.
 - Scores of a Bally table with a memory map on 4-bit memory (Evel Knievel, `evelknie`): the game ends and the score is recorded
   (libpinmame patch, 2026-10-28). It can be checked on macOS too.
+- Scores of a Williams System 7 table (TENACIOUSD Flex Mod, `fpwr2_l2`): shown during the game and recorded at its end (libpinmame patch
+  of banks, 2026-11-01).
 - Web upload of a table from a phone or a computer (table picker, "Add tables from a browser").
 - PuP tables (Albator, Blade Runner 2049): no magenta or scrambled areas, in the table or in the text of the panels, and no "GPU memory limit
   reached" message in the table or back in the lobby. A notification stays where it appeared in the room when the head turns.
