@@ -14,7 +14,7 @@ upstream's files only get small, guarded hooks into it.
 | Patches of bgfx (Steam Frame Vulkan driver, foveated rendering) | `steamframe/patches/bgfx/`, applied in order by `platforms/linux-aarch64/external.sh` |
 | Patches of libspatialaudio (soundfield rotation fade, see `docs/Spatial Audio Crackle When Turning the Head.md`) | `steamframe/patches/libspatialaudio/`, applied by the `external.sh` of macos-arm64, macos-x64, linux-aarch64, linux-x64 and windows-mingw-x64 |
 | Patches of libpinmame (memory maps of 4-bit memory: nibble before mask, see `docs/PinMAME Memory Maps on 4-bit Memory.md`) | `steamframe/patches/pinmame/`, applied by the same five `external.sh` |
-| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator | `steamframe/tools/` |
+| Tools to sync with upstream and regenerate the shaders; offline test of the spatial audio rotator; `top-tables.py`, which builds `docs/steam-frame/Top Tables.md` | `steamframe/tools/` |
 | Lobby rooms: Blender scenes, bake and export to VPX tables, credits of their CC0 assets (the tables are `src/assets/lobby*.vpx`) | `steamframe/lobby-room/` |
 | README of the fork (shown by GitHub before the root one, which stays upstream's) | `.github/README.md` |
 | Fixes of the tables and ROMs that do not work as they are: the recipes, and their record | `src/assets/fixes/fixes.json`, `docs/Table and ROM Fixes.md` |
