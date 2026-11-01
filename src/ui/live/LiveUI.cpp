@@ -715,7 +715,10 @@ ImDrawList* LiveUI::RenderLoadingScreen()
    // The size is given, as an auto resized window only gets its size on its second frame, which may be the only one displayed before closing a table
    const float radius = ImGui::GetFontSize() * 0.75f;
    const ImVec2 padding(ImGui::GetFontSize() * 1.2f, ImGui::GetFontSize() * 0.9f);
-   const ImVec2 textSize = ImGui::CalcTextSize(m_loadingText.c_str());
+   const ImVec2 messageSize = ImGui::CalcTextSize(m_loadingText.c_str());
+   const ImVec2 warningSize = m_loadingWarning.empty() ? ImVec2(0.f, 0.f) : ImGui::CalcTextSize(m_loadingWarning.c_str());
+   const float warningOffset = m_loadingWarning.empty() ? 0.f : messageSize.y + ImGui::GetFontSize() * 0.4f;
+   const ImVec2 textSize(max(messageSize.x, warningSize.x), max(messageSize.y, warningOffset + warningSize.y));
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    const bool onLayer = m_player->m_vrDevice && m_player->m_vrDevice->GetLoadingLayerRenderTarget() != nullptr;
    const ImVec2 size(min(padding.x * 2.f + radius * 3.f + textSize.x, static_cast<float>(VRDevice::kLoadingLayerWidth)),
@@ -749,9 +752,16 @@ ImDrawList* LiveUI::RenderLoadingScreen()
    drawList->PathArcTo(center, radius - thickness * 0.5f, start, start + static_cast<float>(M_PI * 1.5), 32);
    drawList->PathStroke(IM_COL32(255, 255, 255, 255), ImDrawFlags_None, thickness);
 
-   // Message, vertically centered on the spinner
+   // Message and its warning, vertically centered on the spinner
    ImGui::SetCursorScreenPos(ImVec2(pos.x + radius * 3.f, center.y - textSize.y * 0.5f));
    ImGui::TextUnformatted(m_loadingText.c_str());
+   if (!m_loadingWarning.empty())
+   {
+      ImGui::SetCursorScreenPos(ImVec2(pos.x + radius * 3.f, center.y - textSize.y * 0.5f + warningOffset));
+      ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(250, 204, 21, 255));
+      ImGui::TextUnformatted(m_loadingWarning.c_str());
+      ImGui::PopStyleColor();
+   }
 
    ImGui::End();
    ImGui::PopStyleVar(2);

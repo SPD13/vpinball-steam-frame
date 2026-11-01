@@ -677,6 +677,29 @@ string Launcher::GetLoadingText(const std::filesystem::path& tablePath, bool lob
    return "Loading " + name + "...";
 }
 
+// The first load of a table takes longer as it fills the table's cache on the disk, its compressed textures being what takes most of the time. That cache tells
+// a first load better than the play count: it also covers a table played before an update that made it recompress, or a restored library (backups leave it
+// out). It has to be found from the path alone (see FileLocator::GetTablePath for its two places), as the message shows before the table is loaded.
+string Launcher::GetLoadingWarning(const std::filesystem::path& tablePath, bool lobby) const
+{
+   if (lobby || !g_settingsService.GetAppSettings().GetPlayer_CompressTextures())
+      return {};
+   const std::filesystem::path title = tablePath.stem();
+   for (const std::filesystem::path& cacheFolder : { tablePath.parent_path() / "cache"sv / title, g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences) / "Cache"sv / title })
+   {
+      std::error_code ec;
+      for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(cacheFolder / "textures"sv, ec))
+         if (entry.path().extension() == ".vpxtex")
+            return {};
+   }
+   return "First load of this table: it takes more time. The next loads will be faster."s;
+}
+
+string Launcher::GetNextLoadingWarning() const
+{
+   return m_nextTableFilename.empty() ? string() : GetLoadingWarning(m_nextTableFilename, false);
+}
+
 string Launcher::GetNextLoadingText(bool playingLobby)
 {
    if (!m_nextTableFilename.empty())

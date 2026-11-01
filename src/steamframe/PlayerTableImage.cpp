@@ -69,7 +69,7 @@ void Player::CloseAfterLoadingScreen()
    {
       if (const string text = g_launcher->GetNextLoadingText(m_isLobby); !text.empty())
       {
-         m_liveUI->SetLoadingText(text);
+         m_liveUI->SetLoadingText(text, g_launcher->GetNextLoadingWarning());
          #ifdef ENABLE_XR
          if (m_vrDevice)
             m_vrDevice->RecenterUIPanel(); // In front of the player, who may have turned since the menu was opened

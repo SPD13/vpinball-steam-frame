@@ -380,7 +380,7 @@ Player::Player(PinTable *const table, const PlayMode playMode, LoadProgress &loa
    // When tables are played one after another, a loading screen is shown until the table is ready (see RenderLoadingFrame)
    if (g_app->m_keepDisplayBetweenTables)
    {
-      m_liveUI->SetLoadingText(g_launcher->GetLoadingText(m_ptable->m_filename, m_isLobby));
+      m_liveUI->SetLoadingText(g_launcher->GetLoadingText(m_ptable->m_filename, m_isLobby), g_launcher->GetLoadingWarning(m_ptable->m_filename, m_isLobby));
       #ifdef ENABLE_XR
       // In VR, the session may be kept from the previous table, its frames submitted meanwhile by the bridge (src/steamframe/XRBridge.cpp): the render thread
       // takes them back now, then asks for the first frame, which shows the loading message without a gap

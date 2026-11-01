@@ -110,6 +110,8 @@ public:
    // Message of the loading screen shown while switching tables (see LiveUI::SetLoadingText): for a table (its name in the library), or for what follows
    // the table being closed (the next table, or the lobby in launcher mode; empty when the application quits)
    string GetLoadingText(const std::filesystem::path& tablePath, bool lobby);
+   string GetLoadingWarning(const std::filesystem::path& tablePath, bool lobby) const; // Below the message, for the first load of a table
+   string GetNextLoadingWarning() const;
    string GetNextLoadingText(bool playingLobby);
 
    // Steps of PlayTableCommand::Play: before the table is loaded, once it is loaded (the lobby is built from it), once its player is created
