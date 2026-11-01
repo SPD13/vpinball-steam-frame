@@ -140,6 +140,7 @@ The bundled rules come from the coverage run over the library (section 12):
 |---|---|---|
 | `{"file": "masters of the universe", "source": "script", "scores": "nvScore", "scoreBase": 1, "players": "PlayersPlayingGame", "inGame": "VpGameInPlay"}` | Masters of the Universe (custom, UltraDMD) | Its scoreboard always says 2 players, and its game flag and scores have names of their own (`Score` is an unrelated scalar) |
 | `{"file": "ready player one", "source": "script", "scores": "playersArray", "scoresColumn": 1, "scoreBase": 0, "players": "PlayersPlayingGame", "gameOver": "gameOver"}` | Ready Player One (original, FlexDMD) | Its scores are a column of its players array, `playersArray(player, 1)` from player 0; no B2S or scoreboard event |
+| `{"file": "futurama", "source": "script", "scores": "anScore", "scoreBase": 0, "players": "nPlayersInGame", "inGame": "nPlayersInGame"}` | Futurama (original, FlexDMD and PuP) | Its scores have their own name, from index 0; no in game flag, its player count is 0 outside a game |
 | `{"rom": "twd_160h", "gameOnSolenoid": 33}` | The Walking Dead (Stern SAM) | No game over in the map; the player count is not reset at the end of a game |
 | `{"rom": "im_185ve", "gameOnSolenoid": 33}` | Iron Man Vault Edition (Stern SAM) | Same, with the map added locally (section 5) |
 | `{"rom": "potc_600as", "gameOnSolenoid": 33}` | Pirates of the Caribbean (Stern SAM) | Same |
