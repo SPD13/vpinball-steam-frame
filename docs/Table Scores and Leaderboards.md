@@ -145,6 +145,7 @@ The bundled rules come from the coverage run over the library (section 12):
 | `{"rom": "im_185ve", "gameOnSolenoid": 33}` | Iron Man Vault Edition (Stern SAM) | Same, with the map added locally (section 5) |
 | `{"rom": "potc_600as", "gameOnSolenoid": 33}` | Pirates of the Caribbean (Stern SAM) | Same |
 | `{"rom": "st_161h", "gameOnSolenoid": 33}` | Star Trek LE (Stern SAM) | Same (its map has no game over) |
+| `{"rom": "xmn_151h", "gameOnSolenoid": 33}` | X-Men LE (Stern SAM) | Same (the map shows the scores but never the end of the game) |
 
 Each rule carries a `_table` comment field (ignored by the tracker) saying which table it is for and why.
 

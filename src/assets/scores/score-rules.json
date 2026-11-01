@@ -45,6 +45,11 @@
       "rom": "st_161h",
       "gameOnSolenoid": 33
     },
+    {
+      "_table": "X-Men LE (Stern SAM)",
+      "rom": "xmn_151h",
+      "gameOnSolenoid": 33
+    },
     {"_table": "Futurama (original, FlexDMD and PuP): its scores have their own name, from index 0, and it has no in game flag: its player count is 0 outside a game", "file": "futurama", "source": "script", "scores": "anScore", "scoreBase": 0, "players": "nPlayersInGame", "inGame": "nPlayersInGame"}
   ]
 }
