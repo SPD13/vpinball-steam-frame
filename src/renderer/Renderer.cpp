@@ -33,6 +33,7 @@
 
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/SceneBufferFormat.h"
+#include "steamframe/Reflections.h"
 #endif
 
 // MSVC Concurrency Viewer support
@@ -150,6 +151,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
    #if defined(VPX_STEAM_FRAME)
    VPX::SceneBufferFormat::Load(m_table->GetSettings()); // RGBA16F or RG11B10F for the targets asked as RGB16F
+   VPX::Reflections::Load(m_table->GetSettings()); // What the reflections leave out
    #endif
 
    #ifdef ENABLE_BGFX
