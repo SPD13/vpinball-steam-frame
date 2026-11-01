@@ -1386,6 +1386,14 @@ void Primitive::Load(IObjectReader& reader)
    reader.AsObject(
       [this](int tag, IObjectReader& reader)
       {
+#if defined(VPX_STEAM_FRAME)
+         // All the errors reported below are about the mesh: it is dropped at the end of the load (see DropInvalidMesh), not used half read
+         const auto ShowError = [this](const string& message)
+         {
+            m_meshLoadFailed = true;
+            ::ShowError(message);
+         };
+#endif
          switch (tag)
          {
          case FID(PIID): reader.AsInt(); break; // Deprecated (unique part id, now the name is guaranteed to be unique)
@@ -1604,6 +1612,10 @@ void Primitive::Load(IObjectReader& reader)
          return true;
       });
 
+#if defined(VPX_STEAM_FRAME)
+   DropInvalidMesh();
+#endif
+
    if (reader.GetVersion() < 1011) // so that old tables do the reorderForsyth on each load, new tables only on mesh import, so a simple resave of a old table will also skip this step
    {
       unsigned int *const tmp = reorderForsyth(m_mesh.m_indices, (int)m_mesh.NumVertices());
@@ -1616,6 +1628,30 @@ void Primitive::Load(IObjectReader& reader)
    m_inPlayState = m_d.m_visible;
    CalculateBuiltinOriginal();
 }
+
+#if defined(VPX_STEAM_FRAME)
+// A mesh which is refused or partly read leaves vertices and indices that do not match, which crashes the physics and the renderer as soon as they use them.
+// Without its mesh the part is simply skipped by both, but a table missing a part may not play as it should: the launcher does not start it (see Launcher::RefuseTable)
+void Primitive::DropInvalidMesh()
+{
+   if (!m_d.m_use3DMesh)
+   {
+      m_meshLoadFailed = false;
+      return;
+   }
+   const size_t numVertices = m_mesh.NumVertices();
+   if (!m_meshLoadFailed && std::ranges::any_of(m_mesh.m_indices, [numVertices](const unsigned int index) { return index >= numVertices; }))
+   {
+      PLOGE << "Primitive '" << GetName() << "': mesh indices beyond its " << numVertices << " vertices";
+      m_meshLoadFailed = true;
+   }
+   if (m_meshLoadFailed)
+   {
+      PLOGE << "Primitive '" << GetName() << "': its mesh could not be loaded";
+      m_mesh.Clear();
+   }
+}
+#endif
 
 bool Primitive::LoadMesh(
    const std::filesystem::path &filename, const MeshUnits units, const bool importAbsolutePosition, const bool centerMesh, const bool importMaterial, const bool importAnimation, const bool doForsyth)

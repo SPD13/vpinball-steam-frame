@@ -210,6 +210,11 @@ void PlayTableCommand::Play(bool openTablePicker)
 #endif
    CComObject<PinTable>* table = LoadTable();
 #ifdef VPX_STEAM_FRAME
+   if (!openTablePicker && g_launcher->RefuseTable(table, m_tableFilename))
+   {
+      table->Release();
+      return;
+   }
    g_launcher->OnTableLoaded(table, m_tableFilename, openTablePicker);
    RunPlayerSessions(table, Player::PlayMode::Play, [openTablePicker](Player* player) { g_launcher->OnPlayerCreated(player, openTablePicker); });
    g_launcher->OnTableClosed();
