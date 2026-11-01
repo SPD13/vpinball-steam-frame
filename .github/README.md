@@ -272,8 +272,8 @@ The options can also follow `Install on Windows.bat` when it is started from a t
 ## Performance upgrades
 
 The Frame renders the tables natively, on the headset's own GPU, at 2160 × 2160 pixels per eye and 72 frames per second. The heavy
-Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 ms (72 fps),
-and every reference table holds the panel's full resolution.
+Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 to 8.2 ms (72 fps),
+and the reference tables run at 72 fps, at or close to the panel's full resolution.
 
 [![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/WXHtyRk26lo)
 
@@ -292,6 +292,7 @@ and every reference table holds the panel's full resolution.
 - **Culling**: parts entirely outside the view are not drawn: 0.6 ms on Lord of the Rings.
 - **Simplified meshes** (Steam Frame screen): heavy 3D parts drawn with fewer triangles where the eye cannot see the difference: 1.29 ms on Addams.
 - **Welded meshes and reflection culling**: meshes exported as separate triangles can be simplified, and parts that cannot show in the playfield reflection are not drawn in it: Albator78 from 20 to 11–12 ms, 36 → 72 fps.
+- **Reflections** (Steam Frame screen): extra mirrors and the VR room left out of the reflections, On, Off or Automatic, Off by default: Robot Invasion from 22.7 to 9.4 ms and 2001 from 14.5 to 8.3 ms; Maverick from 16.4 to 11.1 ms and WildWest from 13.9 to 10.9 ms.
 - **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
 - **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
 - **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).
