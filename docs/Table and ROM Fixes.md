@@ -300,3 +300,40 @@ script of the table with that one line added, CRLF kept.
 `VR_Backglass_Marcador`, a 3D box that VPX does not convert to a backglass surface, and the table has no other display in VR.
 
 History: version 1, 2026-10-31.
+
+### <a id="darkest-dungeon-coop-option"></a>Darkest Dungeon: error message when the table starts
+
+Applies to: tables whose file name contains `DarkestDungeon` or `Darkest Dungeon` (checked with *DarkestDungeon 3.06*, an original table without
+a ROM).
+
+**Symptom.** A runtime error message shows when the table starts (`Runtime error on line 179, col 1: Description unavailable` in the log). The
+option "Cooperative Mode" is missing from the menu of the table. The game itself plays, and records its scores.
+
+**Cause.** A bug of the script, in the routine of its options:
+
+```vb
+bCoOp = Table1.Option("Cooperative Mode", 1, 2, 1, 0, 0, Array("False (Default)","True"))
+
+EnableLUTSelector = Table1.Option("Cooperative Mode", 1, 2, 1, 1, 0, Array("False (Default)","True"))
+
+If eventId = 3 And dspTriggered Then dspTriggered = False : DisableStaticPreRendering = False : End If
+```
+
+The default value (0) is outside the range (1 to 2), which `PinTable::RegisterOption` refuses:
+`Table.Option("Cooperative Mode"): invalid arguments (minValue=1, maxValue=2, step=1, defaultValue=0)`. The error stops `Table1_OptionEvent`,
+so the lines above never run. Changing the default to 1 would not do: the script tests `If bCoOp AND ...`, so 1 and 2 both turn the mode on.
+The second line reads the same option, a copy and paste: the LUT selector was meant to have its own.
+
+**Fix.** The option goes from 0 to 1, keeping its labels and its default, False: 0 leaves the mode off and 1 turns it on. The line of the LUT
+selector is commented out: `EnableLUTSelector` stays empty and the selector off, as with the error. The last line of the routine now runs,
+so that static pre-rendering is turned on again when the options page closes.
+
+**Checked** on the Mac, 2026-10-31. The lines were first run in another table: the original one gives the error, and the fixed one gives 0 by
+default and 1 with `Cooperative_Mode = 1` in the settings of the table, with `bCoOp AND ...` false and true. Patch from the web page, on the
+table itself: the script with those two lines changed, line ends kept. The table cannot be played on the Mac without its PuP pack (other script
+errors, which the Frame does not have).
+
+**Checked** on the Frame, 2026-10-31, with the recipe in a `fixes.json` of the preferences folder and **Patch table**: the message no longer shows
+when the table starts.
+
+History: version 1, 2026-10-31.

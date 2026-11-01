@@ -80,6 +80,26 @@
           "replace": "    Controller.Dip(0) = &H3C : Controller.Dip(1) = &H25 ' Added by the Steam Frame Edition (fix sonic-star-wars-dip-switches): factory DIP switches, an NVRAM may hold zeros\n    Controller.Run \n"
         }
       ]
+    },
+    {
+      "id": "darkest-dungeon-coop-option",
+      "version": 1,
+      "title": "Darkest Dungeon: error message when the table starts",
+      "symptom": "A runtime error message shows when the table starts, and the option 'Cooperative Mode' is missing from the menu of the table.",
+      "cause": "The script declares the option with a default value of 0 and a range of 1 to 2. VPX refuses it with an error, which stops the options routine of the script at that line.",
+      "change": "The option now goes from 0 (False, the default) to 1 (True). The next line, which reads that same option by mistake for the LUT selector, is commented out: the selector stays off, as it was with the error.",
+      "doc": "darkest-dungeon-coop-option",
+      "match": { "files": ["darkestdungeon", "darkest dungeon"] },
+      "script": [
+        {
+          "find": "\tbCoOp = Table1.Option(\"Cooperative Mode\", 1, 2, 1, 0, 0, Array(\"False (Default)\",\"True\"))\n",
+          "replace": "\tbCoOp = Table1.Option(\"Cooperative Mode\", 0, 1, 1, 0, 0, Array(\"False (Default)\",\"True\")) ' Range 1 to 2 before the Steam Frame Edition (fix darkest-dungeon-coop-option): VPX refuses a default of 0 there, and any value of bCoOp other than 0 turns the mode on\n"
+        },
+        {
+          "find": "\tEnableLUTSelector = Table1.Option(\"Cooperative Mode\", 1, 2, 1, 1, 0, Array(\"False (Default)\",\"True\"))\n",
+          "replace": "\t' EnableLUTSelector = Table1.Option(\"Cooperative Mode\", 1, 2, 1, 1, 0, Array(\"False (Default)\",\"True\")) ' Removed by the Steam Frame Edition (fix darkest-dungeon-coop-option): it read the option of the mode above, and never ran\n"
+        }
+      ]
     }
   ]
 }
