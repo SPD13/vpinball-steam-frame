@@ -17,6 +17,7 @@
 #include "utils/color.h"
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/Reflections.h"
 #endif
 
 #include "forsyth.h"
@@ -982,6 +983,14 @@ void Primitive::Render(const unsigned int renderMask)
          m_renderer->UpdateBasicShaderMatrix();
          return;
       }
+      #if defined(VPX_STEAM_FRAME)
+      // Nor the parts of the VR room left out of the reflections (Settings Player/RoomReflection)
+      if (isReflectionPass && VPX::Reflections::IsPartLeftOut(m_mesh.m_minAABound, m_mesh.m_maxAABound, m_fullMatrix, *m_ptable))
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         return;
+      }
+      #endif
    }
 
 #if defined(VPX_STEAM_FRAME)

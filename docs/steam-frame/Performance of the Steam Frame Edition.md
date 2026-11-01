@@ -36,7 +36,7 @@ Contents:
 4. [Dynamic resolution](#4-dynamic-resolution)
 5. [Foveated rendering](#5-foveated-rendering): the scene
 6. [Foveated post-processing](#6-foveated-post-processing): tone mapping, anti-aliasing (Automatic)
-7. [Fewer triangles](#7-fewer-triangles): culling, simplified meshes, welded meshes, reflection culling
+7. [Fewer triangles](#7-fewer-triangles): culling, simplified meshes, welded meshes, reflection culling, what the reflections leave out
 8. [Fewer bytes](#8-fewer-bytes): compact scene buffer, FXAA luma in alpha
 9. [Anti-aliasing and image quality](#9-anti-aliasing-and-image-quality)
 10. [Memory, loading and table switches](#10-memory-loading-and-table-switches)
@@ -308,6 +308,26 @@ live, but turning it on applies to the next table started if it was off when the
 4), and a status line with the number of parts simplified and the share of triangles left out. Culling and reflection culling have no
 setting.
 
+### 7.5 What the reflections leave out
+
+A reflection draws the scene again every frame. What it costs is the parts it draws, on the GPU and on the render thread, far more than its size. Two settings leave out of the reflections what few players would miss:
+
+- **Extra mirrors**: the mirrors other than the playfield's, usually on the walls of a cabinet. The surfaces that showed them no longer reflect anything. A reflection on an upper playfield is kept.
+- **Room reflection**: the parts of the VR room. They stay in the room around you, and no longer show in the reflections. The table, the cabinet, a topper and the balls stay in them.
+
+Both are **Off** in the Frame build, which is the fast choice. **On** gives the reflections back. **Automatic** keeps them on a table that holds its full resolution, and on one that was below it for 10 of the last 60 seconds, the first minute not counted, leaves out the extra mirrors, then the room if that is not enough, for the rest of the table.
+
+| Headless, 2160², On → Off | GPU per frame | Frame rate | Left out |
+|---|---|---|---|
+| Robot Invasion | 22.7 → 9.4 ms | 36 → 72 fps | 3 mirrors |
+| 2001 | 14.5 → 8.3 ms | 67 → 72 fps | 2 mirrors |
+| Maverick | 16.4 → 11.1 ms | 36 → 72 fps | 80 parts of the room |
+| WildWest | 13.9 → 10.9 ms | 72 fps | 18 parts of the room |
+
+Most tables have nothing to leave out, and do not change: Addams, Darkest Dungeon and World Joker Tour, for example.
+
+**Settings** (Steam Frame screen, section *Reflections*; live, per table or for all): *Extra mirrors* and *Room reflection*, On / Off / Automatic, each with a status line.
+
 ## 8. Fewer bytes
 
 The scene pass renders directly to memory (section 3.1), so every pixel written or blended, and every pixel read again by the following
@@ -416,7 +436,7 @@ foveation is fixed).
 
 ### 12.1 The Steam Frame screen
 
-The screen of this edition's performance features, behind the Steam Frame icon of the rail. Its four sections:
+The screen of this edition's performance features, behind the Steam Frame icon of the rail. Its five sections:
 
 ![The Steam Frame screen, top: dynamic resolution and foveated rendering](img/performance-steam-frame-screen-1.jpg)
 
@@ -439,6 +459,10 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | | *Status line* | | | The parts simplified when the table loaded, and the share of the triangles left out over the last second (32 % on Addams in the screenshot). |
 | Scene buffer | **Compact scene buffer** | on / off | on | Renders the scene with 4 bytes per pixel instead of 8 ([section 8.1](#81-compact-scene-buffer)): 0.9 to 1.5 ms. Turn it off if banding shows in a table's smooth gradients. |
 | | *Status line* | | | The format in use: "RG11B10F (4 bytes per pixel)", "RGBA16F (8 bytes per pixel)", or "Not supported by the GPU". |
+| Reflections | **Extra mirrors** | On / Off / Automatic | Off | The mirrors other than the playfield's, which each draw the scene again ([section 7.5](#75-what-the-reflections-leave-out)): 6 to 13 ms on the tables that have heavy ones. |
+| | *Status line* | | | How many this table shows and whether they are drawn, and in Automatic mode why. |
+| | **Room reflection** | On / Off / Automatic | Off | The parts of the VR room in the reflections: 3 to 5 ms on tables with a large room. They stay in the room around you. |
+| | *Status line* | | | Whether the room is left out, or that no part of it reaches the reflections on this table. |
 
 All of them apply at once. **Save** stores them for the table being played or for all tables: a table with its own values keeps
 them, so a demanding table can have, for example, a lower minimum resolution or its anti-aliasing always foveated. **Defaults** puts
@@ -502,6 +526,7 @@ A series of 2026-10-30 measured, with temporary test code, the opportunities lef
 | Reflection probe with coarser meshes (4× / 8× the error) | −0.09 / −0.20 ms (Addams) | Not worth it |
 | Small parts left out of the probe (16 / 64 px) | 0 / 0 (Addams), −0.14 (Ghostbusters, 64 px) | Not worth it |
 | Reflection probe at 75 % / 50 % of its size | −0.17 / −0.19 (Addams), −0.15 / −0.48 (Ghostbusters) | Not worth it |
+| Leaving parts out of the reflections (2026-11-01) | −3 to −13 ms on the tables with extra mirrors or a large room | Implemented for these (section 7.5); small, high or heavy parts in general: not worth it |
 | Reflections "Balls Only" / off | −1.13 / −1.11 (Addams), −1.29 / −1.34 (Ghostbusters) | A per-table option already (*Reflection quality*) |
 | Dynamic resolution target 88 % / 90 % | Both tables already at full size | Not measurable on these tables |
 

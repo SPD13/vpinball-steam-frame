@@ -16,6 +16,7 @@
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
 #include "steamframe/PerfPanel.h"
+#include "steamframe/Reflections.h"
 #endif
 
 #include <bit>
@@ -1361,6 +1362,10 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
 // rate image, the only way the anti-aliasing pass is foveated.
 void VRDevice::UpdateAutoFoveatedAntialiasing(bool belowFullResolution)
 {
+   #if defined(VPX_STEAM_FRAME)
+   if (VPX::Reflections::OnPlayedFrame(belowFullResolution, m_frameBudgetMs)) // Reflections set to Automatic go first: what they leave out shows less than this pass
+      return;
+   #endif
    if (m_foveateAntialiasingMode != 2 || m_foveateAntialiasingAutoOn || !m_foveationShadingRate || m_frameBudgetMs <= 0.f)
       return;
    if (m_autoAAWarmupMs < 60000.f)
