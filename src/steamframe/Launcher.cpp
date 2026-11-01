@@ -268,7 +268,7 @@ static const LobbyRoomFile* FindLobbyRoom(int value)
 
 static std::filesystem::path GetLobbyRoomTable(const LobbyRoomFile& room)
 {
-   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, room.table ? room.table : "blankTable.vpx");
+   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, room.table ? room.table : "blankTable.vpz");
 }
 
 std::filesystem::path Launcher::GetLobbyTablePath() const
@@ -278,7 +278,7 @@ std::filesystem::path Launcher::GetLobbyTablePath() const
    const LobbyRoomFile* const room = FindLobbyRoom(GetLobbyRoomChoice());
    if (room && room->table && FileExists(GetLobbyRoomTable(*room)))
       return GetLobbyRoomTable(*room);
-   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpx");
+   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpz");
 }
 
 bool Launcher::IsLobbyRoomFile(const std::filesystem::path& tablePath)
@@ -677,6 +677,29 @@ string Launcher::GetLoadingText(const std::filesystem::path& tablePath, bool lob
    return "Loading " + name + "...";
 }
 
+// The first load of a table takes longer as it fills the table's cache on the disk, its compressed textures being what takes most of the time. That cache tells
+// a first load better than the play count: it also covers a table played before an update that made it recompress, or a restored library (backups leave it
+// out). It has to be found from the path alone (see FileLocator::GetTablePath for its two places), as the message shows before the table is loaded.
+string Launcher::GetLoadingWarning(const std::filesystem::path& tablePath, bool lobby) const
+{
+   if (lobby || !g_settingsService.GetAppSettings().GetPlayer_CompressTextures())
+      return {};
+   const std::filesystem::path title = tablePath.stem();
+   for (const std::filesystem::path& cacheFolder : { tablePath.parent_path() / "cache"sv / title, g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences) / "Cache"sv / title })
+   {
+      std::error_code ec;
+      for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(cacheFolder / "textures"sv, ec))
+         if (entry.path().extension() == ".vpxtex")
+            return {};
+   }
+   return "First load of this table: it takes more time. The next loads will be faster."s;
+}
+
+string Launcher::GetNextLoadingWarning() const
+{
+   return m_nextTableFilename.empty() ? string() : GetLoadingWarning(m_nextTableFilename, false);
+}
+
 string Launcher::GetNextLoadingText(bool playingLobby)
 {
    if (!m_nextTableFilename.empty())
@@ -703,6 +726,33 @@ WebServer& Launcher::GetWebServer()
       GetScoreStore(); // Created here, as the web server thread uses it
    }
    return *m_webServer;
+}
+
+void Launcher::MigrateSettings()
+{
+   // Upstream 64a480a96 (2026-11-01) split the VR placement between the place of the headset, the same for all tables, and offsets of each table:
+   // Orientation, TableX and TableY, set by the view centering, became HeadSetOrientation, HeadSetX and HeadSetY, and the height (TableZ) is now an
+   // adjustment of the lockbar height (VRDevice::OffsetTable). Without this, an update loses the placement of the room and the table.
+   // The old values are cleared once moved (saved as empty, read as 0), so this is done once.
+   Settings& settings = g_settingsService.GetAppSettings();
+   const auto oldProp = [](const string& propId)
+   {
+      return Settings::GetRegistry().Register(std::make_unique<VPX::Properties::FloatPropertyDef>(
+         "PlayerVR"s, propId, propId, "Replaced by the settings of upstream 64a480a96 (see Launcher::MigrateSettings)"s, false, -1000.f, 1000.f, 0.f, 0.f));
+   };
+   const auto orientation = oldProp("Orientation"s), tableX = oldProp("TableX"s), tableY = oldProp("TableY"s), tableZ = oldProp("TableZ"s);
+   const float o = settings.GetFloat(orientation), x = settings.GetFloat(tableX), y = settings.GetFloat(tableY), z = settings.GetFloat(tableZ);
+   if (o == 0.f && x == 0.f && y == 0.f && z == 0.f)
+      return;
+   settings.SetPlayerVR_HeadSetOrientation(Settings::GetPlayerVR_HeadSetOrientation_Property()->GetClamped(o), false);
+   settings.SetPlayerVR_HeadSetX(Settings::GetPlayerVR_HeadSetX_Property()->GetClamped(x), false);
+   settings.SetPlayerVR_HeadSetY(Settings::GetPlayerVR_HeadSetY_Property()->GetClamped(y), false);
+   if (z != 0.f)
+      settings.SetPlayer_LockbarHeight(Settings::GetPlayer_LockbarHeight_Property()->GetClamped(settings.GetPlayer_LockbarHeight() + z), false);
+   for (const auto& id : { orientation, tableX, tableY, tableZ })
+      settings.Reset(id);
+   settings.Save();
+   PLOGI << "VR placement settings moved to their new names: orientation " << o << ", X " << x << ", Y " << y << ", height " << z << " (added to the lockbar height)";
 }
 
 void Launcher::StartWebServerIfAlwaysOn()
@@ -913,6 +963,25 @@ void Launcher::OnBeforeLoadTable()
    SetupSharedPupFolder();
 }
 
+bool Launcher::RefuseTable(const PinTable* const table, const std::filesystem::path& tableFilename)
+{
+   constexpr int maxNames = 3;
+   string names;
+   int count = 0;
+   for (const IEditable* const part : table->GetParts())
+      if (part->GetItemType() == eItemPrimitive && static_cast<const Primitive*>(part)->HasMeshLoadFailed() && ++count <= maxNames)
+         names += (count > 1 ? ", '" : "'") + static_cast<const Primitive*>(part)->GetName() + '\'';
+   if (count == 0)
+      return false;
+   if (count > maxNames)
+      names += ", ...";
+   PLOGE << "Table not started, " << count << " mesh(es) could not be loaded: " << names;
+   m_refusedTableMessage = "'" + PathToUTF8(tableFilename.stem()) + "' cannot be played on this device.\n"
+      + (count == 1 ? "The mesh of its part "s : "The meshes of its parts "s) + names + (count == 1 ? " is"s : " are"s) + " too large or damaged, so the table was not started.\n"
+      + "Look for a lighter version of this table.";
+   return true;
+}
+
 void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby)
 {
    if (isLobby)
@@ -961,6 +1030,8 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
       return;
    }
    player->m_liveUI->OpenInGameUI("tables/picker"s);
+   if (!m_refusedTableMessage.empty())
+      player->m_liveUI->ShowMessage("Table cannot be played"s, std::exchange(m_refusedTableMessage, string()));
    // Back from a table: the scores of its games and their rank. Without any profile, nothing is asked: the scores stay unassigned, and can
    // be given to a profile later (from the browser, or the 'Who is playing?' page).
    if (m_lastSessionResult)

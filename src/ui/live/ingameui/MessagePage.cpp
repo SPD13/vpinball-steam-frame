@@ -33,6 +33,9 @@ void MessagePage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>("Continue"s, "Close this message"s, [this]() { m_player->m_liveUI->m_inGameUI.NavigateBack(); }));
 
 #ifdef VPX_STEAM_FRAME
+   // The lobby is the table picker: Continue gets back to it, and closing the lobby would quit the application
+   if (g_pplayer->m_isLobby)
+      return;
    const bool toLauncher = g_launcher->m_launcherMode;
 #else
    constexpr bool toLauncher = false;

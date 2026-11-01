@@ -39,8 +39,12 @@ public:
       vector<string> scoreIds;
    };
    std::optional<SessionResult> m_lastSessionResult;
+   string m_refusedTableMessage;
    // The table closes: its rating in the headset is kept for its page in the menu (see PerfPanel)
    void OnTableClosed(const Player* player);
+
+   // Moves the settings renamed upstream to their new names, once (called by main after the settings are loaded, before any table)
+   static void MigrateSettings();
 
 #ifdef VPX_TABLE_WEBSERVER
    // Web server to manage the table library from a browser. It runs from its activation in the table picker until the application is closed,
@@ -109,11 +113,14 @@ public:
    // Message of the loading screen shown while switching tables (see LiveUI::SetLoadingText): for a table (its name in the library), or for what follows
    // the table being closed (the next table, or the lobby in launcher mode; empty when the application quits)
    string GetLoadingText(const std::filesystem::path& tablePath, bool lobby);
+   string GetLoadingWarning(const std::filesystem::path& tablePath, bool lobby) const; // Below the message, for the first load of a table
+   string GetNextLoadingWarning() const;
    string GetNextLoadingText(bool playingLobby);
 
    // Steps of PlayTableCommand::Play: before the table is loaded, once it is loaded (the lobby is built from it), once its player is created
    // (the lobby opens the table picker), and after the player is closed
    void OnBeforeLoadTable();
+   bool RefuseTable(const PinTable* table, const std::filesystem::path& tableFilename); // A table that cannot be played as it is: not started, the lobby tells why
    void OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby);
    void OnPlayerCreated(Player* player, bool isLobby);
    void OnTableClosed();
