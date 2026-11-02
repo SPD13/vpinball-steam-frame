@@ -9,7 +9,7 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
 (section 7), 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15) and the simplified meshes
 (section 8.2), 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3), and the same day with
 the welding of meshes exported as separate triangles and the culling of the reflection, from Albator78 (section 8.2), and 2026-11-01 with the
-tables still below the native size (section 8.6), generic rules for the reflections (section 8.8) and the Reflections settings built from them (section 8.9).*
+tables still below the native size (section 8.6), generic rules for the reflections (section 8.8), the Reflections settings built from them (section 8.9) and the placement of the threads on the cores (section 8.10).*
 
 ## 1. Summary
 
@@ -53,6 +53,8 @@ tables still below the native size (section 8.6), generic rules for the reflecti
   what that allows by frames over the period that do not depend on the size. Missed frames and an over-reading GPU counter come with
   a render thread busy more than about 10 ms per frame, which makes it a limit for the first time (section 8.6). Two settings now leave the
   extra mirrors and the room out of the reflections, off by default on the Frame: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, WildWest 13.9 → 10.9 ms, Maverick 16.4 → 11.1 ms (section 8.9).
+- **A game started by Steam has cores 3 to 7; the headless runs before 2026-11-01 had all eight (2026-11-01).** Dynamic resolution figures from those runs are low where the render thread is busy: Darkest Dungeon 1858² then, 2130² with Steam's cores. Choosing the cores of the threads gained almost nothing headless with Steam's cores,
+  but in the headset Darkest Dungeon spends 62 % of its time at full resolution with it (62.3 and 62.5 %, two plays) against 1.9 to 19.4 % without (three plays), still rated yellow. It is on by default in the Frame build, and the owner heard no problem with the sound (section 8.10).
 
 ## 2. Method
 
@@ -373,6 +375,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 16 | Dynamic resolution ignores what the size does not cause: frames over the period independent of the size, and a counter reading over the GPU's busy time | Darkest Dungeon sits about 2 ms under the target at 1805²; 12 ms at 2160² | Small | **Proposed** 2026-11-01 (8.6): gain not measured |
 | 17 | VR room left out of the playfield reflection | **WildWest −2.7 to −3.3 ms, 2031² → 2160²; Maverick −5 ms, 36 → 72 fps**; little on other tables, nothing on Darkest Dungeon | Small per table (recipe), medium as a rule | **Done** 2026-11-01, setting *Room reflection* (8.9); the same result worn with a recipe, since dropped: green, 98.5 % at full size |
 | 18 | Mirrors other than the playfield | **Robot Invasion −11 to −12 ms, 1559² → 2155²; 2001 −5.2 ms**; Last Action Hero nothing; 4 tables of 94 have such mirrors | Small per table (recipe) or a step of the same rule | **Done** 2026-11-01, setting *Extra mirrors* (8.9); the same result worn with a recipe, since dropped: green, 100 % at full size |
+| 20 | Threads on chosen cores while a table is played: render on core 7, logic on 5 and 6, the others on 2 to 4 | **Worn, Darkest Dungeon 1.9–19.4 % → 62 % at full resolution** (3 plays without, 2 with), mean size about 1770² → 2070²; headless with Steam's cores, little | A small module | **Done** 2026-11-01, `Player.ThreadPlacement`, on by default, no menu entry (8.10); sound fine according to the owner; World Joker Tour worn and long plays not measured |
 | 19 | Simplify the parts of "group elements" collections that are not really merged | WildWest −0.6 ms, no change with dynamic resolution; Addams and LOTR nothing | One condition | Measured 2026-11-01 (8.6): low value |
 
 Details:
@@ -763,6 +766,8 @@ compute for the neighbours itself.
 
 ### 8.6 The tables below native (2026-11-01)
 
+*Correction of 2026-11-01: these runs were started over ssh with all eight cores allowed, while Steam gives a game cores 3 to 7 (section 8.10), so their sizes with dynamic resolution are low on tables with a busy render thread: Darkest Dungeon 1805² here, 2130² with Steam's cores; World Joker Tour and Lord of the Rings hold 2160² there. Their GPU times at fixed sizes are not concerned, nor the comparisons within a run series.*
+
 *Fork `master` at 294aa8410 for the code read; executable `~/perf-test/vpx-autoaa` (2026-10-31, all the work above, before the later fixes that
 do not touch rendering). Headless (section 2.1), fixed foveation, 100 s per run, the window from 40 s, one run per variant, bgfx's GPU profiler at fixed
 sizes, compact scene buffer and foveated tonemap and anti-aliasing on. Variants by script sidecars on hard links of the tables. Repeated base
@@ -938,6 +943,93 @@ The engine's test, with the real transforms, is more exact than the one read fro
 Automatic, with dynamic resolution, 170 s: Robot Invasion stays at the 1512² floor until the extra mirrors go, then 2160² (9.5 ms); WildWest at about 2000² until the room goes, then 2160² (10.8 ms). Each lost its parts in the second half of the run, as designed.
 
 The menu section was checked in a capture on the Frame (`docshot-hooks.py`): Off and Off, "3 extra mirrors left out" and "no part of it reaches the reflections" on Robot Invasion. The owner checked this build in the headset on 2026-11-01: it works.
+
+### 8.10 The threads on the cores (2026-11-01)
+
+*How the study went matters here, as its first result does not apply to real play. Traces: `Doc/test-hooks/dr-trace-hooks.py` (one line per frame), `dr-trace-report.py`. Placement without a rebuild: `thread-placer.py`, `placement-report.py`. Results on the Frame: `~/perf-test/results-trace`, `results-trace2`, `results-place`, `results-worn`, `results-worn-b`, `results-placed`. Headless runs of 130 s, the window from 40 s, one run per variant unless said.*
+
+**The cores of the Frame are not alike** (`lscpu`, `cpu_capacity`):
+
+| Cores | Type | Maximum clock | Capacity | What else may run there |
+|---|---|---|---|---|
+| 0, 1 | Cortex-A520 | 2.27 GHz | 216 | Most system threads, the eye tracking |
+| 2, 3, 4 | Cortex-A720 | 3.15 GHz | 855 | Most system threads; head tracking on 2 and 3; the compositor's render thread on 4 |
+| 5, 6 | not named by `lscpu` | 2.96 GHz | 803 | The compositor's render thread |
+| 7 | not named by `lscpu` | 3.05 GHz | 1024 | Threads with no limit only |
+
+The scheduler is energy-aware and places threads within what each is allowed. Steam starts a game with an affinity of `f8`, cores 3 to 7; it is not a cpuset, and a thread may widen it. VPX can choose its cores but not its priority (`RLIMIT_RTPRIO` and `RLIMIT_NICE` at 0, no capability).
+
+**The slow frames.** On Darkest Dungeon the size sawed between 1666² and 2026², 2 ms under the target (section 8.6). Started with all eight cores, the traces show: readings over the frame period 5.7–6.1 times per second, but only 0.13–0.35 frames missed per second; bgfx's GPU time on these frames stays at 8.7 ms against 8.1 ms when the runtime's counter reads 16 ms, so they are not slow on the GPU; about 80 % of the falls of the scale follow them. In these frames the frame preparation takes 6.2 ms against 3.2 ms, the render thread waits 8 ms against 4.5 ms, and the logic thread's CPU time grows as much as its wall time (+2.9 ms), with twice the involuntary context switches: it is running slower, not blocked.
+
+**All eight cores against the fast ones, which does not apply to real play.** Started over ssh, Darkest Dungeon went from 1858² and 4 % of its time at full size to 2127² and 79 % with the threads kept on cores 2 to 7. A Steam launch never had the slow cores for its threads, which the first worn session revealed.
+
+**Layouts, started over ssh, dynamic resolution:**
+
+| Layout | Darkest Dungeon: size, at full size, slow readings/s | Robot Invasion with its mirrors: size, slow readings/s, missed/s |
+|---|---|---|
+| All eight cores | 1858², 4 %, 5.85 | 1571², 8.21, 0.91 |
+| Cores 2 to 7 | 2127², 79 %, 0.99 | 1823², 6.29, 0.04 |
+| Cores 5 to 7 | 2127², 82 %, 0.52 | |
+| Logic and render on 5 to 7, the others on 2 to 4 | 2132², 84 %, 0.54 | 1908², 5.33, 0.02 |
+| **Render on 7, logic on 5 and 6, the others on 2 to 4** | **2131², 84 %, 0.53** | **1918², 3.41, 0.04** |
+| Logic on 7, render on 5 and 6, the others on 2 to 4 | 2127², 82 %, 0.65 | |
+
+Limiting VPX to cores 2 to 4, shared with SteamVR, was worse than cores 2 to 7 (2.28 readings per second against 1.02).
+
+**In the headset, Steam launch, Darkest Dungeon, one play each:**
+
+| | As started by Steam (`f8`) | Render on 7, logic on 5 and 6, others on 2 to 4 (`thread-placer.py`) |
+|---|---|---|
+| **Time at full resolution (the table's rating)** | **1.9 %**, 156 s | **62.3 %**, 171 s |
+| Size, mean / median (status lines, every 5 s) | 1562² / 1512² | 2071² / 2160² |
+| Status lines under 1600², from 40 s | 88 % | 0 % |
+| On time | 99.6 % | 99.6 % |
+| GPU busy | 82 % | 79 % |
+| Compositor on the GPU | 5.8 % | 6.3 % |
+| Peak temperature, GPU / CPU | 78 / 94 °C | 88 / 96 °C |
+
+The owner saw the difference. The GPU was as busy at 1512² as at 2160²: much of its busy time as started by Steam was not work on pixels, which the temperatures confirm. The compositor stays at 6 %, so the heavier state of section 8.6 was not at play. At 2160², the size still dips to about 2020–2080² every 20 seconds, for a reason not known.
+
+**As built: `Player.ThreadPlacement`** (`src/steamframe/ThreadPlacement.h`), on in the Frame build, no menu entry. From the end of the table's load to its close, a thread gives the threads of the process their cores by name, 4 times per second, since most threads are not VPX's and a thread takes the cores of the one that starts it. While a table loads, the threads keep what Steam gave them, for the workers that decompress textures and simplify meshes; the lobby is left alone. It only applies on this core layout, read from `cpu_capacity`.
+
+**Measured as built, headless, with Steam's cores (`taskset -c 3-7`), dynamic resolution:**
+
+| Table | Off: size, at full size, slow readings/s, missed/s | On | Render thread submission, off → on |
+|---|---|---|---|
+| Darkest Dungeon (PuP) | 2130², 82 %, 0.62, 0.07 | 2138², 86 %, 0.41, 0.03 | 4.91 → 4.41 ms |
+| Addams Family (PinMAME) | 2160², 100 %, 0, 0 | 2160², 100 %, 0, 0 | 1.34 → 1.39 ms |
+| World Joker Tour (PinMAME) | 2160², 100 %, 0.01, 0 | 2160², 100 %, 0.01, 0 | 4.46 → 3.66 ms |
+| Lord of the Rings (PinMAME) | 2160², 100 %, 0, 0 | 2160², 100 %, 0.08, 0 | 2.31 → 2.03 ms |
+| The Matrix (PuP) | 2146², 91 %, 0.27, 0.09 | 2144², 90 %, 0.28, 0.10 | 3.04 → 2.53 ms |
+| Legend of Zelda (PuP) | 2146², 92 %, 0.43, 0.15 | 2145², 93 %, 0.30, 0.15 | 4.37 → 3.87 ms |
+
+The load does not change (Darkest Dungeon's simplified meshes done at 3.10 s, 3.14 s without; Addams 1.71 s, 1.76 s), nor the temperatures (Lord of the Rings 97 °C on the CPU both ways).
+
+**In the headset, all the rated plays of Darkest Dungeon of 2026-11-01** (Steam launches by the owner; `vpinball.log`, sizes from all the status lines of each play). The first four plays ran the same build; the last one is the build with `Player.ThreadPlacement`, which adds only that:
+
+| Started | Threads | Time at full resolution (rating, yellow) | Played | On time | Size, mean / median |
+|---|---|---|---|---|---|
+| 14:44 | As started by Steam | 19.4 % | 47 s | 99.3 % | 1972² / 1969² |
+| 15:38 | As started by Steam | 6.5 % | 57 s | 99.8 % | 1760² / 1734² |
+| 17:41 | As started by Steam | 1.9 % | 156 s | 99.6 % | 1577² / 1512² |
+| 17:50 | Placed, by `thread-placer.py` | 62.3 % | 171 s | 99.6 % | 2074² / 2160² |
+| 21:43 | **Placed, as built** | **62.5 %** | 188 s | 99.7 % | 2063² / 2160² |
+
+**Other tables worn, as built:**
+
+| Table | Rating, time at full resolution | Played | Size, mean / median |
+|---|---|---|---|
+| Addams Family (PinMAME) | Green, 99.3 % | 82 s | 2108² / 2160² |
+| Addams Family, again | Green, 100 % | 45 s | 2101² / 2160² |
+| Ace of Speed (PinMAME) | Yellow, 92.8 % | 108 s | 2140² / 2160² |
+
+The log has no play of these two tables without the placement to compare with. They are listed to show that the PinMAME tables keep their resolution and their sound with PinMAME on cores 2 to 4: the owner heard no problem with the sound on these plays and on Darkest Dungeon.
+
+**Reading.** On Darkest Dungeon the gain is real and repeatable: the two plays with the placement agree within 0.2 points, and are three times the best play without it. The lowest play without it is the longest, so the two short ones probably flatter the state without placement. The comparison was not randomized: the plays without placement all came first, and none was played with the final build, the setting being its only difference from the build of the others. Headless with Steam's cores the placement does no harm and gains little: the render thread's submission is 0.5 ms shorter and the logic thread has half the context switches. Headless and worn disagree: Darkest Dungeon holds 2130² headless and 1577² worn in its longest play with the same cores, so what the placement protects the threads from is what the headset adds (tracking, passthrough, eye tracking, a load of 35–45 % on all cores against 20 %). Headless runs do not reproduce this state, so they cannot rule on this setting. Darkest Dungeon stays yellow: green needs 95 % of the time at full resolution.
+
+**Not settled.** Which conflict the placement removes. World Joker Tour, the other table far below native when worn without placement (6.3 % over 110 s, 12.7 % over 51 s, against 100 % headless), has not been played with it. Long plays and heat: the longest play with it lasted 188 s, and temperatures were only recorded for the 17:41 and 17:50 plays. The 20-second dips. The sound has no measurement, only the owner's ears, since the log does not record dropouts. To compare again, `ThreadPlacement = 0` in the `[Player]` section turns it off.
+
+**For the next headless runs:** start them with `taskset -c 3-7`, as Steam does.
 
 ## 9. Reproduction
 

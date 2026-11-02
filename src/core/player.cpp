@@ -17,6 +17,7 @@
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
 #include "steamframe/ScoreTracker.h"
+#include "steamframe/ThreadPlacement.h"
 #include "steamframe/TableLibrary.h"
 #endif
 #include "core/VPXPluginAPIImpl.h"
@@ -1096,6 +1097,10 @@ void Player::InitTableSession(const bool isInitial)
          m_scoreTracker->Start();
       }
    }
+#ifdef VPX_STEAM_FRAME_HEADSET
+   if (m_playMode == PlayMode::Play && !m_isLobby)
+      VPX::ThreadPlacement::Start(m_ptable->GetSettings());
+#endif
 #endif
 
    // Update the play statistics of the frontend info file along the table (see docs/FileLayout.md)
@@ -1122,6 +1127,9 @@ void Player::ShutdownTableSession()
    }
 
 #ifdef VPX_STEAM_FRAME
+#ifdef VPX_STEAM_FRAME_HEADSET
+   VPX::ThreadPlacement::Stop();
+#endif
    // Last look at the scores while PinMAME and the script still run
    if (m_scoreTracker)
       m_scoreTracker->Finish();

@@ -53,6 +53,10 @@ target_sources(vpinball PRIVATE
    # What the reflections leave out, switched live
    src/steamframe/Reflections.h
    src/steamframe/Reflections.cpp
+
+   # Which cores the threads run on, on the Steam Frame
+   src/steamframe/ThreadPlacement.h
+   src/steamframe/ThreadPlacement.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp

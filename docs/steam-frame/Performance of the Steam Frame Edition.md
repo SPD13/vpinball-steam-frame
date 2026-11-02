@@ -49,7 +49,7 @@ Contents:
 7. [Fewer triangles](#7-fewer-triangles): culling, simplified meshes, welded meshes, reflection culling, what the reflections leave out
 8. [Fewer bytes](#8-fewer-bytes): compact scene buffer, FXAA luma in alpha
 9. [Anti-aliasing and image quality](#9-anti-aliasing-and-image-quality)
-10. [Memory, loading and table switches](#10-memory-loading-and-table-switches)
+10. [Memory, threads, loading and table switches](#10-memory-threads-loading-and-table-switches)
 11. [The performance panel](#11-the-performance-panel)
 12. [Settings reference](#12-settings-reference): the Steam Frame screen, Display & Performance
 13. [What was measured and not done](#13-what-was-measured-and-not-done)
@@ -421,7 +421,9 @@ reflection map read at the matching level of detail), which removes the sparkle 
 
 The anti-aliasing mode, the supersampling factor and the other graphics options are in the Display & Performance screen.
 
-## 10. Memory, loading and table switches
+## 10. Memory, threads, loading and table switches
+
+**Threads on chosen cores.** The cores of the Frame are not alike: two small ones, five fast ones and a fastest one. Steam gives a game cores 3 to 7 and leaves it to the system to move its threads between them, among others that may run there. While a table is played, this edition runs the render thread on core 7, the logic thread on cores 5 and 6, and the rest (PinMAME, sound, PuP) on cores 2 to 4. In the headset, Darkest Dungeon spends 62 % of its time at full resolution with this placement (two plays), against 1.9 to 19.4 % without it (three plays). Addams Family and Ace of Speed stay at 93 to 100 %, and the owner heard no problem with the sound. Headless with Steam's cores, on six tables, it does no harm and gains little: the render thread submits about 0.5 ms faster. Loading is not affected. No menu entry: `ThreadPlacement = 0` in the `[Player]` section of the settings turns it off.
 
 - **Memory between tables.** On Linux, the process grew by about 10 MB at each switch between the lobby and a table (Addams 964 →
   1207 MB after 15 switches), memory kept by glibc's allocator rather than leaked. The build sets the allocator's mmap threshold to
@@ -536,7 +538,7 @@ The settings that matter for performance on the Frame:
 
 ### 12.3 Settings without a menu entry
 
-Everything else described in this article works without a setting: the desktop mirror and the desktop window are never drawn on the
+*Thread placement* (`ThreadPlacement`, section `[Player]`, on) has no menu entry. Everything else described in this article works without a setting: the desktop mirror and the desktop window are never drawn on the
 Frame, the driver chooses direct rendering (`TU_AUTOTUNE_ALGO=profiled`, which a value set in the environment overrides), parts outside
 the view and parts that cannot appear in the reflection are skipped, meshes exported as separate triangles are welded before they are
 simplified, FXAA reads the luma from the alpha channel, specular anti-aliasing is always on, and the memory and session changes of
@@ -580,10 +582,9 @@ The ratings saved on the Frame from plays of 2026-10-31 gave 12 yellow tables of
 | Blade Runner 2049 | 51 % | 8.9 | 3.5 | 2.0 | not run | Not settled: fits headless |
 | CyberRace | 72 % | 11.2 | 6.5 | 0.6 | not run | Its scene pass, not split further |
 
-Repeated runs of the same table vary by 0.5 to 1.2 ms.
+Repeated runs of the same table vary by 0.5 to 1.2 ms. The sizes with dynamic resolution above came from runs that allowed all eight cores, while Steam gives a game cores 3 to 7: with Steam's cores, Darkest Dungeon holds 2130² headless, World Joker Tour and Lord of the Rings 2160². The GPU times at fixed size are not concerned.
 
-**Dynamic resolution stays low on some tables.** Darkest Dungeon is only 0.3 ms over the target at 2160², yet the resolution saws between 1666² and 2026², about 2 ms under the target, while it misses about as many frames at 1296² as at 2160². A frame over the
-frame period lowers the size at once, so the size pays for frames it does not cause. What these frames are is not established. A fix is the next thing to try, and its gain is not measured.
+**Dynamic resolution stays low on some tables.** In those runs Darkest Dungeon, only 0.3 ms over the target at 2160², sawed between 1666² and 2026², about 2 ms under the target. A frame over the frame period lowers the size at once, and the slow readings are not slow on the GPU: bgfx's GPU time stays about 8.7 ms when the counter reads 16 ms. In the headset with Steam's cores it was much worse, at the 1512² floor: see *Threads on chosen cores*, [section 10](#10-memory-threads-loading-and-table-switches).
 
 **The render thread is now a limit.** On these tables its wait for the frame preparation plus its submission takes up to 15 ms per frame (Addams 2.6, WildWest 5.5, Darkest Dungeon 9.7, Robot Invasion 12–15). Over about 10 ms, frames are missed whatever the size, and the runtime's counter reads 2 to
 6 ms above the GPU's real busy time, while it matches on the other tables. Dynamic resolution steers by that counter: Robot Invasion was lowered with the GPU 42 % busy. Why it reads high is not established. Overlapping the frame preparation with the submission (3–6 ms of wait on these tables), or

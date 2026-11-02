@@ -40,6 +40,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Simplified meshes** (Steam Frame > Simplified meshes, on by default in the Frame build, per table or for all): the large 3D parts of heavy tables are drawn with fewer triangles where the difference cannot be seen from the player's eyes, and in full when the player leans in (section 19).
 - **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
 - **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic. Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
+- **Thread placement** (no menu entry, `Player.ThreadPlacement`, Frame build): while a table is played, the render thread runs on core 7, the logic thread on cores 5 and 6 and the others on cores 2 to 4. Worn, Darkest Dungeon spends 62 % of its time at full resolution with it (two plays) against 1.9 to 19.4 % without (three plays); headless with Steam's cores it gains little (section 23).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
 - **No passthrough between tables**: from choosing a table to its first frame, and back to the lobby, the "Loading <table>..." message stands in front of the player, in the table's forward direction (not where the head looks), on a black background, instead of the headset falling back to SteamVR's own scene (the passthrough on the Frame) while the previous table closes and the next one loads.
 
@@ -452,6 +453,12 @@ A reflection draws the scene again every frame, and what it costs is the parts i
 
 Results and measurements: `docs/Performance on the Steam Frame.md`, sections 8.6, 8.8 and 8.9.
 
+## 23. Thread placement (2026-11-01)
+
+Files: `src/steamframe/ThreadPlacement.h/.cpp` (new), `src/core/player.cpp`, `src/core/Settings_properties.inl`, `steamframe/steamframe.cmake`.
+
+Steam starts a game with cores 3 to 7, and the scheduler moves its threads between these and shares them with SteamVR. VPX cannot raise its priority on the Frame, but it can choose its cores. `Player.ThreadPlacement`, on in the Frame build only and without a menu entry, starts a thread when the table is loaded (`Player`, end of the session's setup, not for the lobby) that gives the threads of the process their cores by name, 4 times per second: the logic thread on cores 5 and 6, `RenderThread` on core 7, the others on cores 2 to 4. It stops when the table closes and puts back what the threads had, so that the workers of the next load have all the cores. It does nothing unless `cpu_capacity` shows the Frame's layout. Measurements, and why headless runs must now start with `taskset -c 3-7`: `docs/Performance on the Steam Frame.md`, section 8.10.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -528,6 +535,8 @@ src/steamframe/SceneBufferFormat.h
 src/steamframe/SceneBufferFormat.cpp    scene buffers in RG11B10F, switched live (section 21)
 src/steamframe/Reflections.h
 src/steamframe/Reflections.cpp          what the reflections leave out, switched live (section 22)
+src/steamframe/ThreadPlacement.h
+src/steamframe/ThreadPlacement.cpp      the threads on chosen cores on the Frame (section 23)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md
