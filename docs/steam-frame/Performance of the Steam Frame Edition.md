@@ -49,7 +49,7 @@ Contents:
 7. [Fewer triangles](#7-fewer-triangles): culling, simplified meshes, welded meshes, reflection culling, what the reflections leave out
 8. [Fewer bytes](#8-fewer-bytes): compact scene buffer, FXAA luma in alpha
 9. [Anti-aliasing and image quality](#9-anti-aliasing-and-image-quality)
-10. [Memory, loading and table switches](#10-memory-loading-and-table-switches)
+10. [Memory, threads, loading and table switches](#10-memory-threads-loading-and-table-switches)
 11. [The performance panel](#11-the-performance-panel)
 12. [Settings reference](#12-settings-reference): the Steam Frame screen, Display & Performance
 13. [What was measured and not done](#13-what-was-measured-and-not-done)
@@ -170,7 +170,9 @@ part of the image was drawn, and scales it to the panel. Nothing is reallocated,
 thread, after each frame, `VRDevice::UpdateDynamicResolution` reads the GPU time of the runtime:
 
 - **Down** as soon as the GPU time, averaged over about five frames, is over the target (85 % of the frame period: 11.8 ms at 72 Hz), by
-  2 % per frame or more when far over; at once for a frame over the whole period.
+  2 % per frame or more when far over; at once for slow frames: over the whole period, or that missed their display. How many of those it
+  takes, close together, is the *sensitivity*: one at Low, 2 within 3 frames at Medium (the default), 3 within 5 at High. The others are left
+  out, as they are mostly not GPU work but a frame handed over late.
 - **Up** when the time expected at the next step stays under 97 % of the target, a quarter of a second after the last step down, by 0.3 %
   to 1 % per frame depending on the room left.
 - Between the **minimum** (70 % of the full size by default) and the **full size**, which is the render resolution of the table (125 % of
@@ -183,8 +185,8 @@ time, to **2150² on average, at full size 88–91 % of the time**, for a few fr
 run from a cool device held 72.0 fps without throttling, the GPU levelling at 85–86 °C. Early runs at fixed 2160² had 24 % of their
 frames reprojected by the compositor; with dynamic resolution, 4 %.
 
-**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (85 %) and the
-minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
+**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (85 %), the
+sensitivity (Medium) and the minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
 to the next table started); the Display & Performance screen shows it. See [section 12](#12-settings-reference).
 
 ## 5. Foveated rendering
@@ -323,7 +325,7 @@ setting.
 
 A reflection draws the scene again every frame, in a mirrored view, with its own draw calls. On the tables where it is expensive, what it costs is the parts it draws, on the GPU and on
 the render thread, far more than its size: on Darkest Dungeon its pass only goes from 1.39 to 1.79 ms between 1296² and 2160², and a reflection at half size saves about 0.5 to 0.8 ms ([section 13](#13-what-was-measured-and-not-done)). So
-two settings leave parts out rather than lower the quality of the rest. The playfield's reflection itself stays, with the table, the cabinet, the balls and a topper in it.
+two settings leave parts out rather than lower the quality of the rest, and a third, *Reflection size*, makes the reflection smaller where nothing can be left out. The playfield's reflection itself stays, with the table, the cabinet, the balls and a topper in it.
 
 **Extra mirrors.** A table can have planar reflections of its own besides the playfield's, usually on the walls of a cabinet, and each one is a whole further render of the scene. Robot Invasion has three, for three surfaces of a few triangles,
 two of them shown at only 5 % and 50 %: they draw 2,330 draws per frame instead of 990, and keep the render thread busy for 15 ms per frame instead of 7. With the setting off, a planar reflection other than the playfield's is not rendered, and
@@ -355,7 +357,9 @@ Most tables have nothing to leave out, and do not change: on Addams, Darkest Dun
 
 **What it changes on screen.** The wall surfaces of a table with extra mirrors look flatter, as they no longer reflect the table. A glossy playfield no longer shows the room, which may be noticed in a bright room. If a table looks better with them, set them to *On* or *Automatic* for that table: **Save** in this section stores them for the table being played or for all.
 
-**Settings** (Steam Frame screen, section *Reflections*; live, per table or for all): *Extra mirrors* and *Room reflection*, On / Off / Automatic, each with a status line that says what this table has and what was done with it.
+**Reflection size.** On tables where nothing can be left out, the reflection can still be made smaller: at *Half*, the playfield's reflection is rendered at half the size per axis (a quarter of the pixels) and stretched over the playfield. On Darkest Dungeon at 2160² it saves about 0.45 ms per frame and halves the frames over the whole period, so the table spends more time at full resolution (95.5 → 98.7 %) and misses fewer frames (0.22 → 0.035 per second, headless). The reflection is softer; the render thread's work does not change. *Half* is the default in the Frame build, for all tables (owner's choice, 2026-11-02); its look in the headset was not reviewed table by table, so set *Full* for a table whose glossy playfield matters more than the time.
+
+**Settings** (Steam Frame screen, section *Reflections*; live, per table or for all): *Extra mirrors* and *Room reflection*, On / Off / Automatic, each with a status line that says what this table has and what was done with it, and *Reflection size*, Full / Half.
 
 ## 8. Fewer bytes
 
@@ -421,7 +425,11 @@ reflection map read at the matching level of detail), which removes the sparkle 
 
 The anti-aliasing mode, the supersampling factor and the other graphics options are in the Display & Performance screen.
 
-## 10. Memory, loading and table switches
+## 10. Memory, threads, loading and table switches
+
+**Threads on chosen cores.** The cores of the Frame are not alike: two small ones, five fast ones and a fastest one. Steam gives a game cores 3 to 7 and leaves it to the system to move its threads between them, among others that may run there. While a table is played, this edition runs the render thread on core 7, the logic thread on cores 5 and 6, and the rest (PinMAME, sound, PuP) on cores 2 to 4. In the headset, Darkest Dungeon spends 62 % of its time at full resolution with this placement (two plays), against 1.9 to 19.4 % without it (three plays). Addams Family and Ace of Speed stay at 93 to 100 %, and the owner heard no problem with the sound. Headless with Steam's cores, on six tables, it does no harm and gains little: the render thread submits about 0.5 ms faster. Loading is not affected. No menu entry: `ThreadPlacement = 0` in the `[Player]` section of the settings turns it off.
+
+**PuP videos no longer hold up the frame.** Each new video on a PuP screen closes the previous hardware decoder, which takes several milliseconds. This used to happen under a lock needed to draw that screen, stopping the frame being prepared for about 10 ms every 4 to 5 s on Darkest Dungeon. The decoder is now closed outside that lock. Headless, the waits are gone, missed frames look lower, and the time at full resolution does not change. In the headset, one play of 111 s reached 74.7 % at full resolution, against 62 % in the two longer plays before, still rated yellow; a longer play has yet to confirm it. Tables without PuP are not concerned.
 
 - **Memory between tables.** On Linux, the process grew by about 10 MB at each switch between the lobby and a table (Addams 964 →
   1207 MB after 15 switches), memory kept by glibc's allocator rather than leaked. The build sets the allocator's mmap threshold to
@@ -476,9 +484,10 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | Section | Option | Values | Default (Frame) | What it does |
 |---|---|---|---|---|
 | Dynamic resolution | **Dynamic resolution** | on / off | on | Adjusts the rendering resolution every frame to the GPU time ([section 4](#4-dynamic-resolution)). Off, the table renders at its full resolution whatever it costs. |
-| | **Dynamic resolution target** | 50–100 % | 85 % | The GPU time aimed at, as a share of the frame period (85 % of 13.9 ms is 11.8 ms). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
+| | **Dynamic resolution target** | 50–100 % | 85 % | The GPU time aimed at, as a share of the frame period (85 % of 13.9 ms is 11.8 ms). 90 % suits a table that sits just under its full size (Darkest Dungeon: 87.7 % of the time at full resolution worn, against 48 % at 85 %), but on a table that cannot hold its full size it runs the GPU at its limit (Robot Invasion with its mirrors: a missed frame per second, against 0.14 at 85 %). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
+| | **Dynamic resolution sensitivity** | Low / Medium / High | Medium | How many slow frames (over the whole frame period, or missed), close together, it takes to lower the resolution at once: Low one, Medium 2 within 3 frames, High 3 within 5. A line under it recalls: "Low = more sensitive = will switch more often". Headless, Darkest Dungeon spends 58, 66 and 72 % of its time at full resolution at Low, Medium and High, for a few more missed frames (0, 0.03 and 0.04 per second); on Robot Invasion with its mirrors, at its limit, missed frames go from 0.06 to 0.13–0.14 per second. |
 | | **Dynamic resolution minimum** | 50–100 % | 70 % | The lowest resolution allowed, as a share of the full size per axis (70 % of 2160 is 1512 pixels, half the pixels). The headset's recommended resolution is 80 %. Raise it to keep a table sharper at the price of missed frames. |
-| | *Status line* | | | The resolution of the last frame, the GPU time against the frame period and the target, and "held" when a frame pacing stall was detected ([section 2.2](#22-the-desktop-window-is-not-drawn-the-end-of-the-frame-pacing-stall)). |
+| | *Status line* | | | The resolution of the last frame, the GPU time against the frame period and the target, the readings left out by the sensitivity, and "held" when a frame pacing stall was detected ([section 2.2](#22-the-desktop-window-is-not-drawn-the-end-of-the-frame-pacing-stall)). |
 | Foveated rendering | **Foveated rendering** | Off / Low / Medium / High | Medium | How small the full-rate area around the gaze is ([section 5](#5-foveated-rendering)). On Addams the three levels cost about the same (11.2–11.5 ms against 14.3 ms off). |
 | | **Eye-tracked foveation** | on / off | on | Follows the eyes. Off, or when eye tracking is not active in the headset settings, the full-rate area is a wide disc fixed at the center of the view. |
 | | **Foveated tone mapping** | on / off | on | Shades the tone mapping pass with the same pattern ([section 6](#6-foveated-post-processing)): about 0.8 ms. |
@@ -494,6 +503,7 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | | *Status line* | | | How many this table shows and whether they are drawn, and in Automatic mode why. |
 | | **Room reflection** | On / Off / Automatic | Off | The parts of the VR room in the reflections: 3 to 5 ms on tables with a large room. They stay in the room around you. |
 | | *Status line* | | | Whether the room is left out, or that no part of it reaches the reflections on this table. |
+| | **Reflection size** | Full / Half | Half | The size of the reflections, per axis. Half renders them with a quarter of the pixels: softer reflections, for 0.45 ms less per frame on Darkest Dungeon at 2160², where it halves the slow frames (time at full resolution 95.5 → 98.7 %, missed frames 0.22 → 0.035 per second). Applied at once. |
 
 All of them apply at once. **Save** stores them for the table being played or for all tables: a table with its own values keeps
 them, so a demanding table can have, for example, a lower minimum resolution or its anti-aliasing always foveated. **Defaults** puts
@@ -536,7 +546,7 @@ The settings that matter for performance on the Frame:
 
 ### 12.3 Settings without a menu entry
 
-Everything else described in this article works without a setting: the desktop mirror and the desktop window are never drawn on the
+*Thread placement* (`ThreadPlacement`, section `[Player]`, on) has no menu entry. Everything else described in this article works without a setting: the desktop mirror and the desktop window are never drawn on the
 Frame, the driver chooses direct rendering (`TU_AUTOTUNE_ALGO=profiled`, which a value set in the environment overrides), parts outside
 the view and parts that cannot appear in the reflection are skipped, meshes exported as separate triangles are welded before they are
 simplified, FXAA reads the luma from the alpha channel, specular anti-aliasing is always on, and the memory and session changes of
@@ -580,10 +590,9 @@ The ratings saved on the Frame from plays of 2026-10-31 gave 12 yellow tables of
 | Blade Runner 2049 | 51 % | 8.9 | 3.5 | 2.0 | not run | Not settled: fits headless |
 | CyberRace | 72 % | 11.2 | 6.5 | 0.6 | not run | Its scene pass, not split further |
 
-Repeated runs of the same table vary by 0.5 to 1.2 ms.
+Repeated runs of the same table vary by 0.5 to 1.2 ms. The sizes with dynamic resolution above came from runs that allowed all eight cores, while Steam gives a game cores 3 to 7: with Steam's cores, Darkest Dungeon holds 2130² headless, World Joker Tour and Lord of the Rings 2160². The GPU times at fixed size are not concerned.
 
-**Dynamic resolution stays low on some tables.** Darkest Dungeon is only 0.3 ms over the target at 2160², yet the resolution saws between 1666² and 2026², about 2 ms under the target, while it misses about as many frames at 1296² as at 2160². A frame over the
-frame period lowers the size at once, so the size pays for frames it does not cause. What these frames are is not established. A fix is the next thing to try, and its gain is not measured.
+**Dynamic resolution stays low on some tables.** In those runs Darkest Dungeon, only 0.3 ms over the target at 2160², sawed between 1666² and 2026², about 2 ms under the target. A frame over the frame period lowers the size at once, and the slow readings are not slow on the GPU: bgfx's GPU time stays about 8.7 ms when the counter reads 16 ms. In the headset with Steam's cores it was much worse, at the 1512² floor: see *Threads on chosen cores*, [section 10](#10-memory-threads-loading-and-table-switches).
 
 **The render thread is now a limit.** On these tables its wait for the frame preparation plus its submission takes up to 15 ms per frame (Addams 2.6, WildWest 5.5, Darkest Dungeon 9.7, Robot Invasion 12–15). Over about 10 ms, frames are missed whatever the size, and the runtime's counter reads 2 to
 6 ms above the GPU's real busy time, while it matches on the other tables. Dynamic resolution steers by that counter: Robot Invasion was lowered with the GPU 42 % busy. Why it reads high is not established. Overlapping the frame preparation with the submission (3–6 ms of wait on these tables), or
@@ -600,7 +609,7 @@ Other ways of lightening the reflection, tried and set aside, on Darkest Dungeon
 | Parts over 100 units above the playfield out | 1.65 ms | 1.66 ms | Nothing to speak of |
 | Heavy parts out (over 10,000 triangles) | 1.30 ms, the statues gone | 1.67 ms | Not worth it |
 | Coarser meshes (8 times the error) | 1.91 ms | 1.62 ms | Depends on the table |
-| Half size | 2.04 ms | 1.24 ms | 0.5–0.8 ms of GPU, softer reflections, nothing on the render thread: a possible further step |
+| Half size | 2.04 ms | 1.24 ms | 0.5–0.8 ms of GPU, softer reflections, nothing on the render thread: made the setting *Reflection size*, Half by default ([section 7.5](#75-what-the-reflections-leave-out)) |
 
 The "group elements" of a table's collections were also suspected, as 47 tables of 95 use them and these parts escape the simplified meshes: clearing the flag gave WildWest 0.6 ms, with no gain in resolution, and nothing on Addams or Lord of the Rings.
 
