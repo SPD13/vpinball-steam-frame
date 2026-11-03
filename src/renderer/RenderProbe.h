@@ -111,6 +111,9 @@ private:
    RenderTarget* m_desktopPrerenderRT = nullptr;
    RenderTarget* m_desktopBlurRT = nullptr;
    int m_desktopStaticAccumCount = 0;
+#if defined(VPX_STEAM_FRAME)
+   unsigned int m_reflectionSizeRevision = 0; // Steam Frame Edition: the size of the render targets (Settings Player/ReflectionSize, see src/steamframe/Reflections.h)
+#endif
    RenderPass* m_copyPass = nullptr; // Pass that performs the screen space copy
    vector<RenderPass*> m_probePasses; // Passes recorded by this probe's renders since the last ApplyAreaOfInterest (which applies the area of interest to them only)
 };
