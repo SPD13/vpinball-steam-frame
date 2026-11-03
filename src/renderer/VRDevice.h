@@ -603,7 +603,7 @@ private:
    // against the target fraction of the frame period: down at once when the frame is over it, up slowly when it is well under; between
    // the runtime's recommended size and the size of the swapchain (the table's ResFactor)
    std::atomic<bool> m_dynamicResolution = false; // Set by the settings page while the render thread reads it
-   std::atomic<float> m_dynamicResolutionTarget = 0.85f; // GPU time target, as a fraction of the frame period
+   std::atomic<float> m_dynamicResolutionTarget = 0.9f; // GPU time target, as a fraction of the frame period (Settings PlayerVR/DynamicResolutionTarget; 85 % until 2026-11-02)
    std::atomic<int> m_dynamicResolutionSensitivity = 1; // Settings PlayerVR/DynamicResolutionSensitivity: how many readings over the frame period lower the scale at once (see UpdateDynamicResolution)
    std::atomic<float> m_dynamicResolutionMinScale = 0.7f; // Lowest scale, as a fraction of the swapchain size
    std::atomic<float> m_dynamicRenderScale = 1.f; // Scale given to the renderer for the next frame
