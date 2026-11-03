@@ -613,7 +613,7 @@ private:
    XrTime m_lastPredictedDisplayTime = 0; // Of the previous frame: a step of more than one frame period means a frame missed its display
    unsigned int m_framesSinceMissed = 0;
    unsigned int m_missedFrames = 0, m_heldReadings = 0, m_leftOutReadings = 0, m_stallBreaks = 0; // Since the last status log
-   uint32_t m_overPeriodHistory = 0; // One bit per reading, the last one lowest: over the frame period or not (see UpdateDynamicResolution)
+   uint32_t m_overPeriodHistory = 0; // One bit per reading, the last one lowest: slow (over the frame period, or its frame missed) or not (see UpdateDynamicResolution)
    unsigned int m_stallWindowFrames = 0, m_stallWindowHeld = 0; // Readings, and held readings, in the current second
    unsigned int m_stallBreaksLeft = 0; // For the current table (see UpdateDynamicResolution)
    unsigned int m_framesSinceDecrease = 0; // The scale rises again a quarter of a second after it was lowered (see UpdateDynamicResolution)
