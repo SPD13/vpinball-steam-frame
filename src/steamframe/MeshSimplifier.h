@@ -13,12 +13,14 @@
 // the view at its full render resolution: about 1 VP unit at 0.5 m on the Frame at 2160x2160); the reflection probe allows more. Leaning
 // in brings back the full mesh.
 //
-// Not simplified: animated meshes, grouped parts, additive parts and light maps (unless they coincide with a simplified part), small meshes.
-// Meshes that coincide (same index list and vertex positions, like a part and its 'off' layer) are simplified once and share the result, so
-// that stacked layers stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
+// Not simplified: animated meshes, grouped parts, small meshes, and additive parts and light maps that do not lie on a simplified part.
+// Meshes that coincide (same index list and vertex positions, like a part and its 'off' copy) are simplified once and share the result, so
+// that stacked parts stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
 // levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
-// A part with an additive part or a light map lying on it that does not coincide with it is not simplified either (tables baked with light maps):
-// light maps are drawn on the very surface of their part, and a simplified surface would hide patches of the light.
+// Additive parts and light maps (layers) are drawn on the very surface of the part under them, without writing depth: a layer made of
+// triangles of its part (tables baked with light maps trim them to the lit triangles) is simplified with that part, from the same collapses,
+// and draws the level the part draws. The edges of the layers on the part and the seams of their textures do not move. A part under a layer
+// that is not made of its triangles is not simplified.
 
 #include "math/Mesh.h"
 #include "math/matrix.h"
@@ -46,8 +48,11 @@ struct MeshLevels final
       uint32_t first = 0; // Position in the primitive's index buffer, set up by Primitive::RenderSetup
    };
    vector<Level> levels;
-   Vertex3Ds loadSize; // Size of the primitive when it was simplified
+   Vertex3Ds loadSize; // Size of the primitive when it was simplified (of the leader for a layer)
    size_t sourceIndices = 0, sourceVertices = 0; // Mesh the levels were made from (the levels are dropped if it changed)
+   // A layer simplified with the part under it: that part, whose bounds, placement and level choice the layer follows, so that both always
+   // draw the same level (the layer's levels are the part's levels, on the layer's own vertices)
+   Primitive* leader = nullptr;
 };
 
 class MeshSimplifier final
@@ -76,16 +81,17 @@ public:
 
    // Picks the index range a primitive draws: the full mesh (first 0, count of the mesh) or one of its levels. 'currentLevel' keeps the level
    // of the main view between frames (-1 for the full mesh), so that a level only gets coarser with some margin.
-   // 'renderHeight' is the height of the view in pixels at its full render resolution.
-   void SelectRange(const MeshLevels* levels, const Mesh& mesh, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight, bool isReflectionPass,
-      int& currentLevel, uint32_t& first, uint32_t& count) const;
+   // 'renderHeight' is the height of the view in pixels at its full render resolution. 'boundsMesh', 'fullMatrix' and 'currentLevel' are those
+   // of the levels' leader for a layer simplified with the part under it.
+   void SelectRange(const MeshLevels* levels, const Mesh& mesh, const Mesh& boundsMesh, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight,
+      bool isReflectionPass, int& currentLevel, uint32_t& first, uint32_t& count) const;
 
 private:
    MeshSimplifier() = default;
 
-   struct Group; // Coinciding primitives simplified together
+   struct Group; // Coinciding primitives simplified together, with the layers lying on them
    void Simplify(const Group& group);
-   void LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers);
+   void AttachLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers);
 
    bool m_enabled = false;
    float m_allowedPixels = 0.f; // Allowed error, in pixels
@@ -98,8 +104,9 @@ private:
    mutable float m_savedShare = NAN;
 
    std::mutex m_statsMutex;
-   int m_nMeshes = 0, m_nShared = 0, m_nSkipped = 0, m_nUnderLayers = 0, m_nLayers = 0;
-   size_t m_trisIn = 0, m_trisUnderLayers = 0;
+   int m_nMeshes = 0, m_nShared = 0, m_nCandidates = 0, m_nCandidatesDone = 0;
+   int m_nLayers = 0, m_nLayersWithPart = 0, m_nUnderLayers = 0, m_nUnmatched = 0;
+   size_t m_trisIn = 0, m_trisUnderLayers = 0, m_trisLayersWithPart = 0;
    double m_layersMs = 0.;
    vector<size_t> m_trisPerLevel;
    double m_cpuMs = 0.;

@@ -492,7 +492,9 @@ exports), and nothing on light tables. Points of design, with a proposal for eac
 - **Which parts.** Static parts and parts that move (the bound is in the part's own space); not vertex-animated meshes, light maps,
   additive parts, meshes under about 500 triangles, nor parts whose mesh the script rewrites. Grouped parts are merged at load and need checking separately.
   Meshes that coincide (a part and its "off" or light map layer, as Addams' GI pairs and LOTR's `wireramps`) are simplified once and
-  share the index list, so the layers stay exactly on top of each other.
+  share the index list, so the layers stay exactly on top of each other. Since 2026-11-02, light maps made of some of their part's
+  triangles (tables baked with VLM) are simplified with the part, from the same collapses, the edges of the light maps and the seams of
+  their textures locked (`docs/Steam Frame Branch.md`, section 19).
 - **Settings.** On by default in the Frame build with a per-table switch (as texture compression has), off by default elsewhere; an
   upstream pull request later, as an option.
 - **Validation.** The Mac captures of Table Geometry, section 6 (wire guides, printed artwork), the owner's check in the headset with

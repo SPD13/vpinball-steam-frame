@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
+#include <numeric>
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
@@ -63,8 +65,11 @@ static constexpr size_t kLayerSamples = 64;
 
 struct MeshSimplifier::Group
 {
-   vector<Primitive*> parts; // The first one is simplified, the others share its levels
+   vector<Primitive*> parts; // The first one is simplified, the others (coinciding, not layers) share its levels
    size_t triangles = 0;
+   vector<Primitive*> layers; // Layers lying on the first part, coinciding with it or made of some of its triangles: simplified with it
+   Matrix3D matrix; // Placement on the table of the first part, then of each layer, taken when the table loads
+   vector<Matrix3D> layerMatrices;
 };
 
 MeshSimplifier& MeshSimplifier::Get()
@@ -85,6 +90,267 @@ static bool IsGrouped(const Primitive* p)
 static bool IsLayer(const Primitive* p)
 {
    return p->m_d.m_addBlend || !p->m_d.m_szLightmap.empty();
+}
+
+// Primitives whose mesh may get levels of its own
+static bool IsCandidate(const Primitive* p)
+{
+   return p->m_d.m_use3DMesh && !p->IsPlayfield() && p->m_mesh.m_animationFrames.empty() && p->m_mesh.NumIndices() >= 3 * kMinTriangles && !IsGrouped(p);
+}
+
+// Grid of the places looked for, cells of twice the distance looked for: a place and the box around it touch at most 2 cells per axis
+static int CellOf(float x)
+{
+   return static_cast<int>(floorf(x / (2.f * kCoincidence)));
+}
+static uint64_t CellKey(int x, int y, int z)
+{
+   return (static_cast<uint64_t>(x & 0x1FFFFF) << 42) | (static_cast<uint64_t>(y & 0x1FFFFF) << 21) | static_cast<uint64_t>(z & 0x1FFFFF);
+}
+
+// Places of vertices: one id per exact position (meshoptimizer collapses the vertices at a position together)
+static size_t PlacesOf(const float* pos, size_t stride, size_t count, vector<unsigned int>& place)
+{
+   vector<unsigned int> order(count);
+   std::iota(order.begin(), order.end(), 0u);
+   const auto at = [pos, stride](unsigned int i) { return std::tie(pos[i * stride], pos[i * stride + 1], pos[i * stride + 2]); };
+   std::sort(order.begin(), order.end(), [&at](unsigned int a, unsigned int b) { return at(a) < at(b); });
+   place.resize(count);
+   size_t n = 0;
+   for (size_t i = 0; i < count; i++)
+   {
+      if (i > 0 && at(order[i]) != at(order[i - 1]))
+         n++;
+      place[order[i]] = static_cast<unsigned int>(n);
+   }
+   return count ? n + 1 : 0;
+}
+
+// What the layers of a group cover of its part: for each triangle of the part, the layers drawn on it, each with its vertices at the triangle's corners
+struct LayerCover
+{
+   struct Entry
+   {
+      unsigned int layer; // In Group::layers
+      unsigned int v[3]; // Vertices of the layer at the corners of the part's triangle, in their order
+   };
+   vector<unsigned int> start; // Entries of triangle t of the part: start[t] to start[t + 1]
+   vector<Entry> entries;
+};
+
+// Finds each triangle of each layer among the triangles of the part, by the places of their vertices on the table (within kCoincidence, winding
+// kept). False when a layer has a triangle the part does not have: the layer is not made of the part's triangles.
+static bool CoverOfLayers(const Primitive* part, const Matrix3D& matrix, const vector<Primitive*>& layers, const vector<Matrix3D>& layerMatrices, LayerCover& cover)
+{
+   const Mesh& mesh = part->m_mesh;
+   const size_t nv = mesh.NumVertices(), nt = mesh.NumIndices() / 3;
+   vector<unsigned int> place;
+   const size_t nPlaces = PlacesOf(&mesh.m_vertices.data()->x, sizeof(Vertex3D_NoTex2) / sizeof(float), nv, place);
+   vector<Vertex3Ds> placePos(nPlaces);
+   for (size_t i = 0; i < nv; i++)
+   {
+      const Vertex3D_NoTex2& v = mesh.m_vertices[i];
+      placePos[place[i]] = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+   }
+   std::unordered_map<uint64_t, vector<unsigned int>> grid;
+   for (size_t i = 0; i < nPlaces; i++)
+      if (std::isfinite(placePos[i].x) && std::isfinite(placePos[i].y) && std::isfinite(placePos[i].z))
+         grid[CellKey(CellOf(placePos[i].x), CellOf(placePos[i].y), CellOf(placePos[i].z))].push_back(static_cast<unsigned int>(i));
+
+   // The triangles of the part by their places, from the smallest one
+   struct Key
+   {
+      unsigned int a, b, c;
+      bool operator==(const Key& o) const { return a == o.a && b == o.b && c == o.c; }
+   };
+   struct KeyHash
+   {
+      size_t operator()(const Key& k) const { return (static_cast<size_t>(k.a) * 0x9E3779B97F4A7C15ull) ^ (static_cast<size_t>(k.b) * 0xC2B2AE3D27D4EB4Full) ^ k.c; }
+   };
+   const auto keyOf = [](unsigned int a, unsigned int b, unsigned int c)
+   {
+      return (a < b && a < c) ? Key { a, b, c } : (b < c) ? Key { b, c, a } : Key { c, a, b };
+   };
+   std::unordered_map<Key, unsigned int, KeyHash> triangleOf;
+   triangleOf.reserve(nt);
+   for (size_t t = 0; t < nt; t++)
+   {
+      const unsigned int i0 = mesh.m_indices[t * 3], i1 = mesh.m_indices[t * 3 + 1], i2 = mesh.m_indices[t * 3 + 2];
+      if (i0 >= nv || i1 >= nv || i2 >= nv)
+         return false;
+      const unsigned int p0 = place[i0], p1 = place[i1], p2 = place[i2];
+      if (p0 != p1 && p1 != p2 && p0 != p2)
+         triangleOf.emplace(keyOf(p0, p1, p2), static_cast<unsigned int>(t));
+   }
+
+   // Layers placed as the part (baked light maps are) have their vertices at the very positions of the part's: found without the grid
+   const auto bitsOf = [](const Vertex3D_NoTex2& v)
+   {
+      Key k;
+      memcpy(&k.a, &v.x, sizeof(float));
+      memcpy(&k.b, &v.y, sizeof(float));
+      memcpy(&k.c, &v.z, sizeof(float));
+      return k;
+   };
+   std::unordered_map<Key, unsigned int, KeyHash> exactPlace;
+
+   vector<std::pair<unsigned int, LayerCover::Entry>> found;
+   for (size_t l = 0; l < layers.size(); l++)
+   {
+      const Mesh& layer = layers[l]->m_mesh;
+      const size_t lnv = layer.NumVertices();
+      vector<int> layerPlace(lnv, -1);
+      const bool samePlacement = memcmp(&layerMatrices[l], &matrix, sizeof(Matrix3D)) == 0;
+      if (samePlacement && exactPlace.empty())
+      {
+         exactPlace.reserve(nPlaces);
+         for (size_t i = 0; i < nv; i++)
+            exactPlace.emplace(bitsOf(mesh.m_vertices[i]), place[i]);
+      }
+      for (size_t i = 0; i < lnv; i++)
+      {
+         const Vertex3D_NoTex2& v = layer.m_vertices[i];
+         if (const auto exact = samePlacement ? exactPlace.find(bitsOf(v)) : exactPlace.end(); exact != exactPlace.end())
+         {
+            layerPlace[i] = static_cast<int>(exact->second);
+            continue;
+         }
+         const Vertex3Ds p = layerMatrices[l].MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+         if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+            continue;
+         float best = FLT_MAX;
+         for (int x = CellOf(p.x - kCoincidence); x <= CellOf(p.x + kCoincidence); x++)
+            for (int y = CellOf(p.y - kCoincidence); y <= CellOf(p.y + kCoincidence); y++)
+               for (int z = CellOf(p.z - kCoincidence); z <= CellOf(p.z + kCoincidence); z++)
+               {
+                  const auto cell = grid.find(CellKey(x, y, z));
+                  if (cell == grid.end())
+                     continue;
+                  for (const unsigned int id : cell->second)
+                  {
+                     const Vertex3Ds& q = placePos[id];
+                     const float dx = fabsf(q.x - p.x), dy = fabsf(q.y - p.y), dz = fabsf(q.z - p.z);
+                     if (dx <= kCoincidence && dy <= kCoincidence && dz <= kCoincidence && dx + dy + dz < best)
+                     {
+                        best = dx + dy + dz;
+                        layerPlace[i] = static_cast<int>(id);
+                     }
+                  }
+               }
+      }
+      for (size_t i = 0; i + 2 < layer.NumIndices(); i += 3)
+      {
+         const unsigned int a = layer.m_indices[i], b = layer.m_indices[i + 1], c = layer.m_indices[i + 2];
+         if (a >= lnv || b >= lnv || c >= lnv || layerPlace[a] < 0 || layerPlace[b] < 0 || layerPlace[c] < 0)
+            return false;
+         const unsigned int pa = layerPlace[a], pb = layerPlace[b], pc = layerPlace[c];
+         if (pa == pb || pb == pc || pa == pc)
+            continue; // Draws nothing
+         const auto t = triangleOf.find(keyOf(pa, pb, pc));
+         if (t == triangleOf.end())
+            return false;
+         LayerCover::Entry e { static_cast<unsigned int>(l), { 0, 0, 0 } };
+         for (int k = 0; k < 3; k++)
+         {
+            const unsigned int pk = place[mesh.m_indices[t->second * 3 + k]];
+            e.v[k] = pk == pa ? a : pk == pb ? b : c;
+         }
+         found.emplace_back(t->second, e);
+      }
+   }
+
+   // By triangle, then layer (a layer drawing a triangle twice counts once)
+   std::stable_sort(found.begin(), found.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+   cover.start.assign(nt + 1, 0);
+   cover.entries.clear();
+   cover.entries.reserve(found.size());
+   for (size_t i = 0; i < found.size(); i++)
+   {
+      if (i > 0 && found[i].first == found[i - 1].first && found[i].second.layer == found[i - 1].second.layer)
+         continue;
+      cover.entries.push_back(found[i].second);
+      cover.start[found[i].first + 1]++;
+   }
+   for (size_t t = 0; t < nt; t++)
+      cover.start[t + 1] += cover.start[t];
+   return true;
+}
+
+// The vertices given to the simplifier for a part with layers: a copy of a vertex for each set of layer vertices it meets (the layers on the triangle
+// and their texture coordinates at the corner), so that a simplified triangle tells which layers draw it and with which of their vertices. The
+// places where the triangles do not all meet the same set (the edges of a layer on the part, the seams of a layer's texture) are locked: the
+// simplifier only collapses a vertex whose triangles all have the same layers, continuous in their textures.
+struct LayerSplit
+{
+   vector<unsigned int> source; // Vertex of the simplifier's input that each copy repeats
+   vector<unsigned char> lock; // meshopt_SimplifyVertex_* of each copy
+   vector<unsigned int> start; // Layer vertices of copy s: start[s] to start[s + 1] in 'layer' and 'vertex', by layer
+   vector<unsigned int> layer, vertex;
+};
+
+static void SplitForLayers(const LayerCover& cover, const vector<Primitive*>& layers, const vector<unsigned int>* triangles, const vector<float>& pos,
+   vector<unsigned int>& indices, LayerSplit& split)
+{
+   vector<unsigned int> place;
+   const size_t nPlaces = PlacesOf(pos.data(), 3, pos.size() / 3, place);
+   struct SetHash
+   {
+      size_t operator()(const vector<uint32_t>& v) const
+      {
+         return std::hash<std::string_view>()(std::string_view(reinterpret_cast<const char*>(v.data()), v.size() * sizeof(uint32_t)));
+      }
+   };
+   std::unordered_map<vector<uint32_t>, unsigned int, SetHash> sets;
+   vector<uint32_t> set;
+   vector<unsigned int> placeSet(nPlaces, ~0u);
+   vector<unsigned char> placeLocked(nPlaces, 0);
+   std::unordered_map<uint64_t, unsigned int> copyOf;
+   copyOf.reserve(pos.size() / 3);
+   split.source.clear();
+   split.layer.clear();
+   split.vertex.clear();
+   split.start.assign(1, 0);
+   for (size_t j = 0; j + 2 < indices.size(); j += 3)
+   {
+      const size_t t = triangles ? (*triangles)[j / 3] : j / 3;
+      for (int k = 0; k < 3; k++)
+      {
+         const unsigned int v = indices[j + k];
+         set.clear();
+         for (unsigned int e = cover.start[t]; e < cover.start[t + 1]; e++)
+         {
+            const LayerCover::Entry& entry = cover.entries[e];
+            const Vertex3D_NoTex2& lv = layers[entry.layer]->m_mesh.m_vertices[entry.v[k]];
+            uint32_t u, w;
+            memcpy(&u, &lv.tu, sizeof(u));
+            memcpy(&w, &lv.tv, sizeof(w));
+            set.push_back(entry.layer);
+            set.push_back(u);
+            set.push_back(w);
+         }
+         const unsigned int setId = sets.try_emplace(set, static_cast<unsigned int>(sets.size())).first->second;
+         const unsigned int p = place[v];
+         if (placeSet[p] == ~0u)
+            placeSet[p] = setId;
+         else if (placeSet[p] != setId)
+            placeLocked[p] = 1;
+         const auto [copy, added] = copyOf.try_emplace((static_cast<uint64_t>(v) << 32) | setId, static_cast<unsigned int>(split.source.size()));
+         if (added)
+         {
+            split.source.push_back(v);
+            for (unsigned int e = cover.start[t]; e < cover.start[t + 1]; e++)
+            {
+               split.layer.push_back(cover.entries[e].layer);
+               split.vertex.push_back(cover.entries[e].v[k]);
+            }
+            split.start.push_back(static_cast<unsigned int>(split.layer.size()));
+         }
+         indices[j + k] = copy->second;
+      }
+   }
+   split.lock.resize(split.source.size());
+   for (size_t s = 0; s < split.source.size(); s++)
+      split.lock[s] = placeLocked[place[split.source[s]]] ? meshopt_SimplifyVertex_Lock : 0;
 }
 
 // The parts are placed the same way and their vertices (scaled by their size) are at the same places
@@ -111,8 +377,10 @@ static bool Coincide(const Primitive* a, const Primitive* b)
 // vanish, and 'toMesh' gives for each the vertex of the mesh that draws it: the one of the group with the closest normal. As the simplifier compares
 // attributes with the positions scaled to the mesh extent, 'normalWeight' (to divide by the mesh extent and multiply by a level's bound) and
 // 'uvWeight' make the weights that do not depend on the size of the mesh: a texture coordinate may then shift the artwork by the level's bound on
-// the surface, whatever the size of the part. Returns false for a mesh that holds invalid values, which is then simplified as it is.
-static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, vector<float>& attr, vector<unsigned int>& indices, vector<unsigned int>& toMesh, float& normalWeight, float& uvWeight)
+// the surface, whatever the size of the part. 'triangles' gives for each triangle of 'indices' the triangle of the mesh it comes from. Returns
+// false for a mesh that holds invalid values, which is then simplified as it is.
+static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, vector<float>& attr, vector<unsigned int>& indices, vector<unsigned int>& toMesh,
+   vector<unsigned int>& triangles, float& normalWeight, float& uvWeight)
 {
    const size_t nv = pos.size() / 3;
    struct Key
@@ -190,8 +458,9 @@ static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, ve
    // Size of a texture on the surface, in VP units per unit of texture coordinates: the median over the triangles, as a few have garbage ones
    vector<float> scales;
    scales.reserve(meshIndices.size() / 3);
-   vector<unsigned int> weldedIndices;
+   vector<unsigned int> weldedIndices, weldedTriangles;
    weldedIndices.reserve(meshIndices.size());
+   weldedTriangles.reserve(meshIndices.size() / 3);
    for (size_t i = 0; i + 2 < meshIndices.size(); i += 3)
    {
       const unsigned int i0 = meshIndices[i], i1 = meshIndices[i + 1], i2 = meshIndices[i + 2];
@@ -201,6 +470,7 @@ static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, ve
       weldedIndices.push_back(g0);
       weldedIndices.push_back(g1);
       weldedIndices.push_back(g2);
+      weldedTriangles.push_back(static_cast<unsigned int>(i / 3));
       const float* const p0 = &pos[i0 * 3], * const p1 = &pos[i1 * 3], * const p2 = &pos[i2 * 3];
       const Vertex3Ds e1(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]), e2(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
       const float* const t0 = &attr[i0 * 5 + 3], * const t1 = &attr[i1 * 5 + 3], * const t2 = &attr[i2 * 5 + 3];
@@ -229,24 +499,33 @@ static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, ve
    pos.swap(weldedPos);
    attr.swap(weldedAttr);
    indices.swap(weldedIndices);
+   triangles.swap(weldedTriangles);
    return true;
 }
 
-// A layer pass only draws where it is not behind the depth of the part it lies on, so that it needs the very surface of that part. A layer that
-// coincides with its part shares the part's levels, but the others (tables baked with light maps trim most of them to the lit triangles of the
-// part) keep the full mesh: under them, a simplified part would hide patches of the light. These parts are left out, with the layers that share
-// their levels. The layers' vertices are compared with the vertices of the parts, on the table, as a layer and its part need not be placed the
-// same way. Small parts are not concerned, but small layers are: all the layers of the table are looked at.
-void MeshSimplifier::LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers)
+// A layer pass only draws where it is not behind the depth of the part it lies on, so that it needs the very surface of that part: a layer lying on
+// a simplified part is simplified with it (Simplify). Finds the layers lying on each group's part, comparing the layers' vertices with the vertices
+// of the parts on the table, as a layer and its part need not be placed the same way. Small parts are not concerned, but small layers are: all the
+// layers of the table are looked at. A layer that lies on two parts, or that cannot draw a level (animated, drawn with its group), leaves them out.
+void MeshSimplifier::AttachLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers)
 {
+   // The layers coinciding with a part are simplified with it as the others
+   for (const auto& g : groups)
+   {
+      g->matrix = g->parts[0]->RecalculateMatrices();
+      for (auto p = g->parts.begin() + 1; p != g->parts.end();)
+         if (IsLayer(*p))
+         {
+            g->layers.push_back(*p);
+            p = g->parts.erase(p);
+         }
+         else
+            ++p;
+   }
+   m_nLayers = static_cast<int>(layers.size());
    if (layers.empty() || groups.empty())
       return;
    const auto t0 = std::chrono::steady_clock::now();
-
-   // A grid of twice the distance looked for: a place and the box around it touch at most 2 cells per axis
-   const float cellSize = 2.f * kCoincidence;
-   const auto cellOf = [cellSize](float x) { return static_cast<int>(floorf(x / cellSize)); };
-   const auto cellKey = [](int x, int y, int z) { return (static_cast<uint64_t>(x & 0x1FFFFF) << 42) | (static_cast<uint64_t>(y & 0x1FFFFF) << 21) | static_cast<uint64_t>(z & 0x1FFFFF); };
 
    struct Sample
    {
@@ -255,11 +534,14 @@ void MeshSimplifier::LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& gr
    };
    vector<Sample> samples;
    vector<unsigned int> samplesOfLayer(layers.size(), 0);
+   vector<Matrix3D> layerMatrices(layers.size());
+   std::unordered_map<const Primitive*, unsigned int> indexOf;
    std::unordered_map<uint64_t, vector<unsigned int>> grid;
    Vertex3Ds lo(FLT_MAX, FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
    for (size_t l = 0; l < layers.size(); l++)
    {
-      const Matrix3D& matrix = layers[l]->RecalculateMatrices();
+      indexOf[layers[l]] = static_cast<unsigned int>(l);
+      layerMatrices[l] = layers[l]->RecalculateMatrices();
       const Mesh& mesh = layers[l]->m_mesh;
       const size_t step = max(mesh.NumIndices() / kLayerSamples, static_cast<size_t>(1));
       for (size_t i = 0; i < mesh.NumIndices(); i += step)
@@ -267,7 +549,7 @@ void MeshSimplifier::LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& gr
          if (mesh.m_indices[i] >= mesh.NumVertices())
             continue;
          const Vertex3D_NoTex2& v = mesh.m_vertices[mesh.m_indices[i]];
-         const Vertex3Ds pos = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+         const Vertex3Ds pos = layerMatrices[l].MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
          if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z))
             continue;
          const unsigned int id = static_cast<unsigned int>(samples.size());
@@ -275,52 +557,87 @@ void MeshSimplifier::LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& gr
          samplesOfLayer[l]++;
          lo.x = min(lo.x, pos.x); lo.y = min(lo.y, pos.y); lo.z = min(lo.z, pos.z);
          hi.x = max(hi.x, pos.x); hi.y = max(hi.y, pos.y); hi.z = max(hi.z, pos.z);
-         for (int x = cellOf(pos.x - kCoincidence); x <= cellOf(pos.x + kCoincidence); x++)
-            for (int y = cellOf(pos.y - kCoincidence); y <= cellOf(pos.y + kCoincidence); y++)
-               for (int z = cellOf(pos.z - kCoincidence); z <= cellOf(pos.z + kCoincidence); z++)
-                  grid[cellKey(x, y, z)].push_back(id);
+         for (int x = CellOf(pos.x - kCoincidence); x <= CellOf(pos.x + kCoincidence); x++)
+            for (int y = CellOf(pos.y - kCoincidence); y <= CellOf(pos.y + kCoincidence); y++)
+               for (int z = CellOf(pos.z - kCoincidence); z <= CellOf(pos.z + kCoincidence); z++)
+                  grid[CellKey(x, y, z)].push_back(id);
       }
    }
    lo.x -= kCoincidence; lo.y -= kCoincidence; lo.z -= kCoincidence;
    hi.x += kCoincidence; hi.y += kCoincidence; hi.z += kCoincidence;
 
-   vector<unsigned int> hits(layers.size());
-   vector<const Group*> seenBy(samples.size(), nullptr);
+   // The groups each layer lies on
+   vector<vector<unsigned int>> groupsOf(layers.size());
+   vector<char> coinciding(layers.size(), 0);
+   for (size_t gi = 0; gi < groups.size(); gi++)
+      for (const Primitive* layer : groups[gi]->layers)
+      {
+         const unsigned int l = indexOf[layer];
+         groupsOf[l].push_back(static_cast<unsigned int>(gi));
+         coinciding[l] = 1;
+      }
+   vector<unsigned int> hits(layers.size(), 0), touched;
+   vector<unsigned int> seenBy(samples.size(), ~0u);
+   for (size_t gi = 0; gi < groups.size(); gi++)
+   {
+      const Primitive* const part = groups[gi]->parts[0];
+      const Matrix3D& matrix = groups[gi]->matrix;
+      touched.clear();
+      for (const Vertex3D_NoTex2& v : part->m_mesh.m_vertices)
+      {
+         const Vertex3Ds pos = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+         if (!(pos.x >= lo.x && pos.x <= hi.x && pos.y >= lo.y && pos.y <= hi.y && pos.z >= lo.z && pos.z <= hi.z))
+            continue;
+         const auto cell = grid.find(CellKey(CellOf(pos.x), CellOf(pos.y), CellOf(pos.z)));
+         if (cell == grid.end())
+            continue;
+         for (const unsigned int id : cell->second)
+         {
+            const Sample& sample = samples[id];
+            if (seenBy[id] == gi || fabsf(sample.pos.x - pos.x) > kCoincidence || fabsf(sample.pos.y - pos.y) > kCoincidence || fabsf(sample.pos.z - pos.z) > kCoincidence)
+               continue;
+            seenBy[id] = static_cast<unsigned int>(gi);
+            if (hits[sample.layer]++ == 0)
+               touched.push_back(sample.layer);
+         }
+      }
+      for (const unsigned int l : touched)
+      {
+         if (static_cast<float>(hits[l]) >= kLayerShare * static_cast<float>(samplesOfLayer[l])
+            && std::find(groupsOf[l].begin(), groupsOf[l].end(), static_cast<unsigned int>(gi)) == groupsOf[l].end())
+            groupsOf[l].push_back(static_cast<unsigned int>(gi));
+         hits[l] = 0;
+      }
+   }
+
+   vector<char> leaveOut(groups.size(), 0);
+   for (size_t l = 0; l < layers.size(); l++)
+   {
+      if (groupsOf[l].empty())
+         continue;
+      if (groupsOf[l].size() > 1 || !layers[l]->m_mesh.m_animationFrames.empty() || IsGrouped(layers[l]))
+      {
+         for (const unsigned int gi : groupsOf[l])
+            leaveOut[gi] = 1;
+         continue;
+      }
+      if (!coinciding[l])
+         groups[groupsOf[l][0]]->layers.push_back(layers[l]);
+   }
+   size_t gi = 0;
    std::erase_if(groups,
       [&](const std::shared_ptr<Group>& g)
       {
-         Primitive* const part = g->parts[0];
-         const Matrix3D& matrix = part->RecalculateMatrices();
-         std::fill(hits.begin(), hits.end(), 0u);
-         for (const Vertex3D_NoTex2& v : part->m_mesh.m_vertices)
+         if (!leaveOut[gi++])
          {
-            const Vertex3Ds pos = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
-            if (!(pos.x >= lo.x && pos.x <= hi.x && pos.y >= lo.y && pos.y <= hi.y && pos.z >= lo.z && pos.z <= hi.z))
-               continue;
-            const auto cell = grid.find(cellKey(cellOf(pos.x), cellOf(pos.y), cellOf(pos.z)));
-            if (cell == grid.end())
-               continue;
-            for (const unsigned int id : cell->second)
-            {
-               const Sample& sample = samples[id];
-               if (seenBy[id] == g.get() || fabsf(sample.pos.x - pos.x) > kCoincidence || fabsf(sample.pos.y - pos.y) > kCoincidence || fabsf(sample.pos.z - pos.z) > kCoincidence)
-                  continue;
-               seenBy[id] = g.get();
-               const unsigned int count = ++hits[sample.layer];
-               if (static_cast<float>(count) >= kLayerShare * static_cast<float>(samplesOfLayer[sample.layer])
-                  && std::find(g->parts.begin(), g->parts.end(), layers[sample.layer]) == g->parts.end())
-               {
-                  const int parts = static_cast<int>(g->parts.size());
-                  m_nSkipped += parts;
-                  m_nUnderLayers += parts;
-                  m_trisUnderLayers += g->triangles * parts;
-                  return true;
-               }
-            }
+            for (const Primitive* layer : g->layers)
+               g->layerMatrices.push_back(layerMatrices[indexOf[layer]]);
+            return false;
          }
-         return false;
+         m_nUnderLayers += static_cast<int>(g->parts.size());
+         m_trisUnderLayers += g->triangles * g->parts.size();
+         return true;
       });
-   m_nLayers = static_cast<int>(layers.size());
    m_layersMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
@@ -328,8 +645,9 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
 {
    m_enabled = table->GetSettings().GetPlayer_SimplifyMeshes();
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
-   m_nMeshes = m_nShared = m_nSkipped = m_nUnderLayers = m_nLayers = 0;
-   m_trisUnderLayers = 0;
+   m_nMeshes = m_nShared = m_nCandidates = m_nCandidatesDone = 0;
+   m_nLayers = m_nLayersWithPart = m_nUnderLayers = m_nUnmatched = 0;
+   m_trisUnderLayers = m_trisLayersWithPart = 0;
    m_layersMs = 0.;
    m_savedShare = NAN;
    m_windowSaved = m_windowTriangles = m_frameSaved = 0;
@@ -350,9 +668,10 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
       p->m_meshLevel = -1;
       if (p->m_d.m_use3DMesh && p->m_mesh.NumIndices() >= 3 && IsLayer(p))
          layers.push_back(p);
-      if (p->m_d.m_use3DMesh && !p->IsPlayfield() && p->m_mesh.m_animationFrames.empty() && p->m_mesh.NumIndices() >= 3 * kMinTriangles && !IsGrouped(p))
+      if (IsCandidate(p))
          candidates.push_back(p);
    }
+   m_nCandidates = static_cast<int>(candidates.size());
    if (!m_enabled)
       return;
 
@@ -381,22 +700,18 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
       group->parts.push_back(p);
    }
 
-   // Additive parts and light maps are only simplified with a coinciding part that is not one: alone, they lie on top of another part's
-   // surface, which would not be simplified the same way
+   // Additive parts and light maps are only simplified with a part that is not one, under them: alone, they lie on top of another part's surface,
+   // which would not be simplified the same way
    std::erase_if(groups,
-      [this](const std::shared_ptr<Group>& g)
+      [](const std::shared_ptr<Group>& g)
       {
          const auto base = std::find_if(g->parts.begin(), g->parts.end(), [](const Primitive* p) { return !IsLayer(p); });
          if (base == g->parts.end())
-         {
-            m_nSkipped += static_cast<int>(g->parts.size());
             return true;
-         }
          std::iter_swap(g->parts.begin(), base);
          return false;
       });
-   // And a part is not simplified under a layer that does not coincide with it
-   LeaveOutPartsUnderLayers(groups, layers);
+   AttachLayers(groups, layers);
 
    // The largest first, so that they do not end the loading alone
    std::sort(groups.begin(), groups.end(), [](const auto& a, const auto& b) { return a->triangles > b->triangles; });
@@ -407,9 +722,10 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
 void MeshSimplifier::Simplify(const Group& group)
 {
    const auto t0 = std::chrono::steady_clock::now();
-   const Primitive* const p = group.parts[0];
+   Primitive* const p = group.parts[0];
    const Mesh& mesh = p->m_mesh;
    const size_t nv = mesh.NumVertices();
+   const size_t tris = mesh.NumIndices() / 3;
 
    // Positions scaled by the part's size, so that the error is a distance on the table
    vector<float> pos(nv * 3), attr(nv * 5);
@@ -428,11 +744,42 @@ void MeshSimplifier::Simplify(const Group& group)
    float weights[5] = { kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight, kAttributeWeight };
 
    // Exports of separate triangles: the levels come from a welded copy of the mesh
-   vector<unsigned int> indices(mesh.m_indices), toMesh;
+   vector<unsigned int> indices(mesh.m_indices), toMesh, triangles;
    float normalWeight = 0.f, uvWeight = 0.f;
-   const bool welded = static_cast<float>(nv) >= kUnweldedVerticesPerTriangle * static_cast<float>(mesh.NumIndices() / 3) && Weld(mesh.m_indices, pos, attr, indices, toMesh, normalWeight, uvWeight);
+   const bool welded = static_cast<float>(nv) >= kUnweldedVerticesPerTriangle * static_cast<float>(tris) && Weld(mesh.m_indices, pos, attr, indices, toMesh, triangles, normalWeight, uvWeight);
    if (welded)
       weights[3] = weights[4] = uvWeight;
+
+   // Layers on the part: the simplifier gets a copy of a vertex per set of layer vertices it meets, and the edges of the layers are locked
+   const auto leaveOut = [this, &group, tris, t0]()
+   {
+      const std::lock_guard<std::mutex> lock(m_statsMutex);
+      m_cpuMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      m_end = std::chrono::steady_clock::now();
+      m_nUnmatched++;
+      m_nUnderLayers += static_cast<int>(group.parts.size());
+      m_trisUnderLayers += tris * group.parts.size();
+   };
+   const bool withLayers = !group.layers.empty();
+   LayerSplit split;
+   if (withLayers)
+   {
+      LayerCover cover;
+      if (!CoverOfLayers(p, group.matrix, group.layers, group.layerMatrices, cover))
+      {
+         leaveOut();
+         return;
+      }
+      SplitForLayers(cover, group.layers, welded ? &triangles : nullptr, pos, indices, split);
+      vector<float> splitPos(split.source.size() * 3), splitAttr(split.source.size() * 5);
+      for (size_t s = 0; s < split.source.size(); s++)
+      {
+         std::copy_n(&pos[split.source[s] * 3], 3, &splitPos[s * 3]);
+         std::copy_n(&attr[split.source[s] * 5], 5, &splitAttr[s * 5]);
+      }
+      pos.swap(splitPos);
+      attr.swap(splitAttr);
+   }
    const size_t nSimplified = pos.size() / 3;
 
    auto levels = std::make_shared<MeshLevels>();
@@ -445,6 +792,7 @@ void MeshSimplifier::Simplify(const Group& group)
    for (size_t i = 0; i < nSimplified; i++)
       ids[i] = static_cast<unsigned int>(i);
    vector<float> localPos = pos, localAttr = attr;
+   vector<unsigned char> localLock = split.lock;
    vector<int> remap(nSimplified);
    size_t sourceCount = indices.size();
    float sourceError = 0.f;
@@ -457,7 +805,7 @@ void MeshSimplifier::Simplify(const Group& group)
          weights[0] = weights[1] = weights[2] = normalWeight * bound;
       float stepError = 0.f;
       const size_t n = meshopt_simplifyWithAttributes(dst.data(), local.data(), sourceCount, localPos.data(), ids.size(), sizeof(float) * 3, localAttr.data(),
-         sizeof(float) * 5, weights, 5, nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute | (welded ? kWeldOptions : 0), &stepError);
+         sizeof(float) * 5, weights, 5, withLayers ? localLock.data() : nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute | (welded ? kWeldOptions : 0), &stepError);
       if (n < 3 * kMinLevelTriangles)
          break;
       if (static_cast<float>(n) > kKeepRatio * static_cast<float>(sourceCount))
@@ -492,6 +840,59 @@ void MeshSimplifier::Simplify(const Group& group)
          std::copy_n(&pos[ids[i] * 3], 3, &localPos[i * 3]);
          std::copy_n(&attr[ids[i] * 5], 5, &localAttr[i * 5]);
       }
+      if (withLayers)
+      {
+         localLock.resize(ids.size());
+         for (size_t i = 0; i < ids.size(); i++)
+            localLock[i] = split.lock[ids[i]];
+      }
+   }
+
+   // The levels of the layers: the triangles of each level whose corners meet a layer, on the layer's vertices. All the corners of a triangle meet
+   // the same layers, as only the vertices whose triangles all have the same layers move.
+   vector<vector<vector<unsigned int>>> layerLevels(group.layers.size(), vector<vector<unsigned int>>(levels->levels.size()));
+   if (withLayers)
+   {
+      bool consistent = true;
+      for (size_t l = 0; l < levels->levels.size() && consistent; l++)
+      {
+         const vector<unsigned int>& li = levels->levels[l].indices;
+         for (size_t i = 0; i + 2 < li.size() && consistent; i += 3)
+         {
+            const unsigned int a = split.start[li[i]], b = split.start[li[i + 1]], c = split.start[li[i + 2]];
+            const unsigned int n = split.start[li[i] + 1] - a;
+            if (split.start[li[i + 1] + 1] - b != n || split.start[li[i + 2] + 1] - c != n)
+            {
+               consistent = false;
+               break;
+            }
+            for (unsigned int e = 0; e < n; e++)
+            {
+               const unsigned int layer = split.layer[a + e];
+               if (split.layer[b + e] != layer || split.layer[c + e] != layer)
+               {
+                  consistent = false;
+                  break;
+               }
+               vector<unsigned int>& out = layerLevels[layer][l];
+               out.push_back(split.vertex[a + e]);
+               out.push_back(split.vertex[b + e]);
+               out.push_back(split.vertex[c + e]);
+            }
+         }
+      }
+      for (const auto& layer : layerLevels)
+         for (const auto& level : layer)
+            consistent &= !level.empty();
+      if (!consistent)
+      {
+         leaveOut();
+         return;
+      }
+      // The part's levels draw the vertices the copies repeat
+      for (MeshLevels::Level& level : levels->levels)
+         for (unsigned int& i : level.indices)
+            i = split.source[i];
    }
    // The levels of a welded mesh draw vertices of the mesh
    if (welded)
@@ -504,15 +905,12 @@ void MeshSimplifier::Simplify(const Group& group)
    m_cpuMs += ms;
    m_end = std::chrono::steady_clock::now();
    if (levels->levels.empty())
-   {
-      m_nSkipped += static_cast<int>(group.parts.size());
       return;
-   }
    for (Primitive* part : group.parts)
       part->m_meshLevels = levels;
-   const size_t tris = mesh.NumIndices() / 3;
-   m_nMeshes += static_cast<int>(group.parts.size());
+   m_nMeshes += static_cast<int>(group.parts.size() + group.layers.size());
    m_nShared += static_cast<int>(group.parts.size()) - 1;
+   m_nCandidatesDone += static_cast<int>(group.parts.size());
    m_trisIn += tris * group.parts.size();
    for (size_t b = 0; b < std::size(kBounds); b++)
    {
@@ -521,6 +919,35 @@ void MeshSimplifier::Simplify(const Group& group)
          if (level.error <= kBounds[b])
             t = level.indices.size() / 3;
       m_trisPerLevel[b] += t * group.parts.size();
+   }
+   for (size_t layer = 0; layer < group.layers.size(); layer++)
+   {
+      Primitive* const lp = group.layers[layer];
+      auto layerLevelsOf = std::make_shared<MeshLevels>();
+      layerLevelsOf->loadSize = p->m_d.m_vSize;
+      layerLevelsOf->sourceIndices = lp->m_mesh.NumIndices();
+      layerLevelsOf->sourceVertices = lp->m_mesh.NumVertices();
+      layerLevelsOf->leader = p;
+      for (size_t l = 0; l < levels->levels.size(); l++)
+      {
+         MeshLevels::Level& level = layerLevelsOf->levels.emplace_back();
+         level.indices = std::move(layerLevels[layer][l]);
+         level.error = levels->levels[l].error;
+      }
+      lp->m_meshLevels = layerLevelsOf;
+      const size_t layerTris = lp->m_mesh.NumIndices() / 3;
+      m_nLayersWithPart++;
+      m_nCandidatesDone += IsCandidate(lp) ? 1 : 0;
+      m_trisIn += layerTris;
+      m_trisLayersWithPart += layerTris;
+      for (size_t b = 0; b < std::size(kBounds); b++)
+      {
+         size_t t = layerTris;
+         for (const MeshLevels::Level& level : layerLevelsOf->levels)
+            if (level.error <= kBounds[b])
+               t = level.indices.size() / 3;
+         m_trisPerLevel[b] += t;
+      }
    }
 }
 
@@ -534,12 +961,16 @@ void MeshSimplifier::LogStats()
    std::stringstream perLevel;
    for (size_t b = 0; b < std::size(kBounds); b++)
       perLevel << (b ? ", " : "") << kBounds[b] << " VPU " << m_trisPerLevel[b];
-   PLOGI << "Mesh simplification: " << m_nMeshes << " meshes (" << m_nShared << " sharing the levels of a coinciding part), " << m_nSkipped
-         << " skipped; " << m_trisIn << " triangles, at most " << perLevel.str() << "; " << static_cast<int>(m_cpuMs) << " ms of CPU, done "
+   PLOGI << "Mesh simplification: " << m_nMeshes << " meshes (" << m_nShared << " sharing the levels of a coinciding part, " << m_nLayersWithPart
+         << " additive parts and light maps simplified with the part under them), " << max(m_nCandidates - m_nCandidatesDone, 0) << " large meshes skipped; "
+         << m_trisIn << " triangles, at most " << perLevel.str() << "; " << static_cast<int>(m_cpuMs) << " ms of CPU, done "
          << static_cast<int>(std::chrono::duration<double, std::milli>(m_end - m_start).count()) << " ms after the start of the loading";
    if (m_nLayers > 0)
-      PLOGI << "Mesh simplification: " << m_nUnderLayers << " parts left out under the " << m_nLayers << " additive parts and light maps of the table ("
-            << m_trisUnderLayers << " triangles), found in " << static_cast<int>(m_layersMs) << " ms";
+   {
+      PLOGI << "Mesh simplification: " << m_nLayers << " additive parts and light maps on the table, " << m_nLayersWithPart << " simplified with the part under them ("
+            << m_trisLayersWithPart << " triangles), found in " << static_cast<int>(m_layersMs) << " ms; " << m_nUnderLayers
+            << " parts left out under a layer lying on two parts or not made of their triangles (" << m_trisUnderLayers << " triangles, " << m_nUnmatched << " not matched)";
+   }
 }
 
 std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels)
@@ -563,8 +994,8 @@ std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd,
    return std::make_shared<IndexBuffer>(rd, indices);
 }
 
-void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight, bool isReflectionPass,
-   int& currentLevel, uint32_t& first, uint32_t& count) const
+void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, const Mesh& boundsMesh, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight,
+   bool isReflectionPass, int& currentLevel, uint32_t& first, uint32_t& count) const
 {
    first = 0;
    count = static_cast<uint32_t>(mesh.NumIndices());
@@ -580,7 +1011,8 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
    Vertex3Ds lo(FLT_MAX, FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
    for (int i = 0; i < 8; i++)
    {
-      Vertex3Ds c((i & 1) ? mesh.m_minAABound.x : mesh.m_maxAABound.x, (i & 2) ? mesh.m_minAABound.y : mesh.m_maxAABound.y, (i & 4) ? mesh.m_minAABound.z : mesh.m_maxAABound.z);
+      Vertex3Ds c((i & 1) ? boundsMesh.m_minAABound.x : boundsMesh.m_maxAABound.x, (i & 2) ? boundsMesh.m_minAABound.y : boundsMesh.m_maxAABound.y,
+         (i & 4) ? boundsMesh.m_minAABound.z : boundsMesh.m_maxAABound.z);
       fullMatrix.MultiplyVector(c);
       lo.x = min(lo.x, c.x); lo.y = min(lo.y, c.y); lo.z = min(lo.z, c.z);
       hi.x = max(hi.x, c.x); hi.y = max(hi.y, c.y); hi.z = max(hi.z, c.z);
