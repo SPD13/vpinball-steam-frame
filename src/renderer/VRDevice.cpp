@@ -192,12 +192,14 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_foveationFlipY = settings.GetPlayerVR_FoveationFlipY();
       m_dynamicResolution = settings.GetPlayerVR_DynamicResolution();
       m_dynamicResolutionTarget = clamp(settings.GetPlayerVR_DynamicResolutionTarget(), 0.5f, 1.f);
+      m_dynamicResolutionSensitivity = clamp(settings.GetPlayerVR_DynamicResolutionSensitivity(), 0, 2);
       m_dynamicResolutionMinScale = clamp(settings.GetPlayerVR_DynamicResolutionMinScale(), 0.5f, 1.f);
       m_dynamicRenderScale = 1.f; // Each table starts at full size
       m_frameBudgetMs = 0.f; // Learned again from the session's frame periods
       m_dynamicResolutionHeld = false;
       m_lastPredictedDisplayTime = 0;
       m_framesSinceMissed = 0;
+      m_overPeriodHistory = 0;
       m_stallWindowFrames = 0;
       m_stallWindowHeld = 0;
       m_stallBreaksLeft = 3;
@@ -1228,7 +1230,7 @@ void VRDevice::SetDynamicResolution(bool enabled)
 // Render thread, once per frame: the scale of the next frame from the GPU time of the last one. The counter is the runtime's measure of the
 // application's GPU work for a frame, so it includes everything the frame renders and follows the GPU clock (the Frame slows its GPU down
 // as it heats up, which this absorbs). The scale follows the GPU time averaged over a few frames, by small steps: down as soon as it is
-// over the target (at once for a frame over the whole period), so a heavy view is caught within a few frames, up when the next step is
+// over the target (at once for frames over the whole period, as many as the sensitivity setting asks), so a heavy view is caught within a few frames, up when the next step is
 // expected to stay under it (the cost following the pixels), a quarter of a second after the last step down, faster with more room. The lower limit is the setting's minimum scale, the upper one the swapchain size
 // chosen with ResFactor.
 void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime)
@@ -1330,9 +1332,21 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
       m_heldReadings++;
       return;
    }
+   // Sensitivity: how many readings over the whole frame period, close together, it takes to act on them. Low: each one. Medium: 2 within 3 readings. High: 3 within 5. The others, their
+   // frame on time, are left out: they are mostly not GPU work (bgfx's GPU time stays the same on these frames, while the counter reads up to twice the period), and lowering the scale for
+   // each of them, with a quarter of a second before it may rise, keeps Darkest Dungeon under what it sustains (docs/Performance on the Steam Frame.md, section 8.12). A missed frame always counts
+   static constexpr int kOverPeriodReadings[3] = { 1, 2, 3 }, kOverPeriodWindow[3] = { 1, 3, 5 };
+   const int sensitivity = clamp(m_dynamicResolutionSensitivity.load(), 0, 2);
+   const bool overPeriod = gpuMs > budgetMs;
+   m_overPeriodHistory = (m_overPeriodHistory << 1) | (overPeriod ? 1u : 0u);
+   if (overPeriod && periods < 2 && std::popcount(m_overPeriodHistory & ((1u << kOverPeriodWindow[sensitivity]) - 1u)) < kOverPeriodReadings[sensitivity])
+   {
+      m_leftOutReadings++;
+      return;
+   }
    // The readings averaged over about 5 frames: single frames over the target are frequent on some tables (Addams Family), and lowering the
    // scale for each of them, then waiting before rising, kept it well under what the table sustains (it only rose while the player looked
-   // away from the table). A frame over the whole frame period lowers it at once.
+   // away from the table). A frame over the whole frame period that counts (see above) lowers it at once.
    m_smoothedGpuMs = m_smoothedGpuMs <= 0.f ? gpuMs : m_smoothedGpuMs + (gpuMs - m_smoothedGpuMs) * 0.2f;
    const float steerMs = gpuMs > budgetMs ? max(gpuMs, m_smoothedGpuMs) : m_smoothedGpuMs;
    float scale = m_dynamicRenderScale;
@@ -1423,9 +1437,10 @@ void VRDevice::LogRuntimeStatus()
    if (m_foveationEyeTrackedActive)
       status += std::format(" (gaze{} L {:.2f},{:.2f} R {:.2f},{:.2f})", m_gazeRayValid ? " ray" : "", m_foveationCenter[0].x, m_foveationCenter[0].y, m_foveationCenter[1].x, m_foveationCenter[1].y);
    status += " | Dynamic resolution: " + GetDynamicResolutionStatus();
-   status += std::format(", {} frames missed, {} readings held, {} stall breaks", m_missedFrames, m_heldReadings, m_stallBreaks);
+   status += std::format(", {} frames missed, {} readings held, {} left out, {} stall breaks", m_missedFrames, m_heldReadings, m_leftOutReadings, m_stallBreaks);
    m_missedFrames = 0;
    m_heldReadings = 0;
+   m_leftOutReadings = 0;
    m_stallBreaks = 0;
    for (const auto& counter : m_performanceCounters)
    {
