@@ -55,6 +55,11 @@ static constexpr float kWeldNormalChange = 0.15f;
 static constexpr unsigned int kWeldOptions = meshopt_SimplifyPermissive;
 // Texture coordinates beyond this are garbage of the export (seen up to 1e24): kept out of the simplifier's error
 static constexpr float kWeldMaxUV = 100.f;
+// A layer (additive part or light map) lies on a part when at least this share of its vertices are at places of the part's vertices (within
+// kCoincidence). Tables baked with light maps have clearly two kinds: at 100 % the layers of a part, under 40 % the neighbours that touch it.
+static constexpr float kLayerShare = 0.5f;
+// Vertices of each layer tested against the parts
+static constexpr size_t kLayerSamples = 64;
 
 struct MeshSimplifier::Group
 {
@@ -74,6 +79,12 @@ static bool IsGrouped(const Primitive* p)
       if (collection->m_groupElements)
          return true;
    return false;
+}
+
+// Additive parts and light maps: drawn over the surface of another part, without writing depth
+static bool IsLayer(const Primitive* p)
+{
+   return p->m_d.m_addBlend || !p->m_d.m_szLightmap.empty();
 }
 
 // The parts are placed the same way and their vertices (scaled by their size) are at the same places
@@ -221,11 +232,105 @@ static bool Weld(const vector<unsigned int>& meshIndices, vector<float>& pos, ve
    return true;
 }
 
+// A layer pass only draws where it is not behind the depth of the part it lies on, so that it needs the very surface of that part. A layer that
+// coincides with its part shares the part's levels, but the others (tables baked with light maps trim most of them to the lit triangles of the
+// part) keep the full mesh: under them, a simplified part would hide patches of the light. These parts are left out, with the layers that share
+// their levels. The layers' vertices are compared with the vertices of the parts, on the table, as a layer and its part need not be placed the
+// same way. Small parts are not concerned, but small layers are: all the layers of the table are looked at.
+void MeshSimplifier::LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers)
+{
+   if (layers.empty() || groups.empty())
+      return;
+   const auto t0 = std::chrono::steady_clock::now();
+
+   // A grid of twice the distance looked for: a place and the box around it touch at most 2 cells per axis
+   const float cellSize = 2.f * kCoincidence;
+   const auto cellOf = [cellSize](float x) { return static_cast<int>(floorf(x / cellSize)); };
+   const auto cellKey = [](int x, int y, int z) { return (static_cast<uint64_t>(x & 0x1FFFFF) << 42) | (static_cast<uint64_t>(y & 0x1FFFFF) << 21) | static_cast<uint64_t>(z & 0x1FFFFF); };
+
+   struct Sample
+   {
+      Vertex3Ds pos;
+      unsigned int layer;
+   };
+   vector<Sample> samples;
+   vector<unsigned int> samplesOfLayer(layers.size(), 0);
+   std::unordered_map<uint64_t, vector<unsigned int>> grid;
+   Vertex3Ds lo(FLT_MAX, FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (size_t l = 0; l < layers.size(); l++)
+   {
+      const Matrix3D& matrix = layers[l]->RecalculateMatrices();
+      const Mesh& mesh = layers[l]->m_mesh;
+      const size_t step = max(mesh.NumIndices() / kLayerSamples, static_cast<size_t>(1));
+      for (size_t i = 0; i < mesh.NumIndices(); i += step)
+      {
+         if (mesh.m_indices[i] >= mesh.NumVertices())
+            continue;
+         const Vertex3D_NoTex2& v = mesh.m_vertices[mesh.m_indices[i]];
+         const Vertex3Ds pos = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+         if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z))
+            continue;
+         const unsigned int id = static_cast<unsigned int>(samples.size());
+         samples.push_back(Sample { pos, static_cast<unsigned int>(l) });
+         samplesOfLayer[l]++;
+         lo.x = min(lo.x, pos.x); lo.y = min(lo.y, pos.y); lo.z = min(lo.z, pos.z);
+         hi.x = max(hi.x, pos.x); hi.y = max(hi.y, pos.y); hi.z = max(hi.z, pos.z);
+         for (int x = cellOf(pos.x - kCoincidence); x <= cellOf(pos.x + kCoincidence); x++)
+            for (int y = cellOf(pos.y - kCoincidence); y <= cellOf(pos.y + kCoincidence); y++)
+               for (int z = cellOf(pos.z - kCoincidence); z <= cellOf(pos.z + kCoincidence); z++)
+                  grid[cellKey(x, y, z)].push_back(id);
+      }
+   }
+   lo.x -= kCoincidence; lo.y -= kCoincidence; lo.z -= kCoincidence;
+   hi.x += kCoincidence; hi.y += kCoincidence; hi.z += kCoincidence;
+
+   vector<unsigned int> hits(layers.size());
+   vector<const Group*> seenBy(samples.size(), nullptr);
+   std::erase_if(groups,
+      [&](const std::shared_ptr<Group>& g)
+      {
+         Primitive* const part = g->parts[0];
+         const Matrix3D& matrix = part->RecalculateMatrices();
+         std::fill(hits.begin(), hits.end(), 0u);
+         for (const Vertex3D_NoTex2& v : part->m_mesh.m_vertices)
+         {
+            const Vertex3Ds pos = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
+            if (!(pos.x >= lo.x && pos.x <= hi.x && pos.y >= lo.y && pos.y <= hi.y && pos.z >= lo.z && pos.z <= hi.z))
+               continue;
+            const auto cell = grid.find(cellKey(cellOf(pos.x), cellOf(pos.y), cellOf(pos.z)));
+            if (cell == grid.end())
+               continue;
+            for (const unsigned int id : cell->second)
+            {
+               const Sample& sample = samples[id];
+               if (seenBy[id] == g.get() || fabsf(sample.pos.x - pos.x) > kCoincidence || fabsf(sample.pos.y - pos.y) > kCoincidence || fabsf(sample.pos.z - pos.z) > kCoincidence)
+                  continue;
+               seenBy[id] = g.get();
+               const unsigned int count = ++hits[sample.layer];
+               if (static_cast<float>(count) >= kLayerShare * static_cast<float>(samplesOfLayer[sample.layer])
+                  && std::find(g->parts.begin(), g->parts.end(), layers[sample.layer]) == g->parts.end())
+               {
+                  const int parts = static_cast<int>(g->parts.size());
+                  m_nSkipped += parts;
+                  m_nUnderLayers += parts;
+                  m_trisUnderLayers += g->triangles * parts;
+                  return true;
+               }
+            }
+         }
+         return false;
+      });
+   m_nLayers = static_cast<int>(layers.size());
+   m_layersMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
 void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
 {
    m_enabled = table->GetSettings().GetPlayer_SimplifyMeshes();
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
-   m_nMeshes = m_nShared = m_nSkipped = 0;
+   m_nMeshes = m_nShared = m_nSkipped = m_nUnderLayers = m_nLayers = 0;
+   m_trisUnderLayers = 0;
+   m_layersMs = 0.;
    m_savedShare = NAN;
    m_windowSaved = m_windowTriangles = m_frameSaved = 0;
    m_windowStart = std::chrono::steady_clock::now();
@@ -235,7 +340,7 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
    m_start = std::chrono::steady_clock::now();
    m_end = m_start;
 
-   vector<Primitive*> candidates;
+   vector<Primitive*> candidates, layers;
    for (IEditable* part : table->GetParts())
    {
       if (part->GetItemType() != eItemPrimitive)
@@ -243,6 +348,8 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
       Primitive* const p = static_cast<Primitive*>(part);
       p->m_meshLevels = nullptr;
       p->m_meshLevel = -1;
+      if (p->m_d.m_use3DMesh && p->m_mesh.NumIndices() >= 3 && IsLayer(p))
+         layers.push_back(p);
       if (p->m_d.m_use3DMesh && !p->IsPlayfield() && p->m_mesh.m_animationFrames.empty() && p->m_mesh.NumIndices() >= 3 * kMinTriangles && !IsGrouped(p))
          candidates.push_back(p);
    }
@@ -276,11 +383,10 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
 
    // Additive parts and light maps are only simplified with a coinciding part that is not one: alone, they lie on top of another part's
    // surface, which would not be simplified the same way
-   const auto isLayer = [](const Primitive* p) { return p->m_d.m_addBlend || !p->m_d.m_szLightmap.empty(); };
    std::erase_if(groups,
-      [this, &isLayer](const std::shared_ptr<Group>& g)
+      [this](const std::shared_ptr<Group>& g)
       {
-         const auto base = std::find_if(g->parts.begin(), g->parts.end(), [&isLayer](const Primitive* p) { return !isLayer(p); });
+         const auto base = std::find_if(g->parts.begin(), g->parts.end(), [](const Primitive* p) { return !IsLayer(p); });
          if (base == g->parts.end())
          {
             m_nSkipped += static_cast<int>(g->parts.size());
@@ -289,6 +395,8 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
          std::iter_swap(g->parts.begin(), base);
          return false;
       });
+   // And a part is not simplified under a layer that does not coincide with it
+   LeaveOutPartsUnderLayers(groups, layers);
 
    // The largest first, so that they do not end the loading alone
    std::sort(groups.begin(), groups.end(), [](const auto& a, const auto& b) { return a->triangles > b->triangles; });
@@ -429,6 +537,9 @@ void MeshSimplifier::LogStats()
    PLOGI << "Mesh simplification: " << m_nMeshes << " meshes (" << m_nShared << " sharing the levels of a coinciding part), " << m_nSkipped
          << " skipped; " << m_trisIn << " triangles, at most " << perLevel.str() << "; " << static_cast<int>(m_cpuMs) << " ms of CPU, done "
          << static_cast<int>(std::chrono::duration<double, std::milli>(m_end - m_start).count()) << " ms after the start of the loading";
+   if (m_nLayers > 0)
+      PLOGI << "Mesh simplification: " << m_nUnderLayers << " parts left out under the " << m_nLayers << " additive parts and light maps of the table ("
+            << m_trisUnderLayers << " triangles), found in " << static_cast<int>(m_layersMs) << " ms";
 }
 
 std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels)

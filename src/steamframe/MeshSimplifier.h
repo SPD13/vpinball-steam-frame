@@ -17,6 +17,8 @@
 // Meshes that coincide (same index list and vertex positions, like a part and its 'off' layer) are simplified once and share the result, so
 // that stacked layers stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
 // levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
+// A part with an additive part or a light map lying on it that does not coincide with it is not simplified either (tables baked with light maps):
+// light maps are drawn on the very surface of their part, and a simplified surface would hide patches of the light.
 
 #include "math/Mesh.h"
 #include "math/matrix.h"
@@ -27,6 +29,7 @@
 class IndexBuffer;
 class ModelViewProj;
 class PinTable;
+class Primitive;
 class RenderDevice;
 namespace progschj { class ThreadPool; }
 
@@ -82,6 +85,7 @@ private:
 
    struct Group; // Coinciding primitives simplified together
    void Simplify(const Group& group);
+   void LeaveOutPartsUnderLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers);
 
    bool m_enabled = false;
    float m_allowedPixels = 0.f; // Allowed error, in pixels
@@ -94,8 +98,9 @@ private:
    mutable float m_savedShare = NAN;
 
    std::mutex m_statsMutex;
-   int m_nMeshes = 0, m_nShared = 0, m_nSkipped = 0;
-   size_t m_trisIn = 0;
+   int m_nMeshes = 0, m_nShared = 0, m_nSkipped = 0, m_nUnderLayers = 0, m_nLayers = 0;
+   size_t m_trisIn = 0, m_trisUnderLayers = 0;
+   double m_layersMs = 0.;
    vector<size_t> m_trisPerLevel;
    double m_cpuMs = 0.;
    std::chrono::steady_clock::time_point m_start, m_end;
