@@ -277,6 +277,10 @@ private:
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(Reflections::GetRoomReflectionStatus().c_str());
          }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_ReflectionSize, //
+         []() { return Reflections::GetReflectionSize(); }, //
+         [](int, int v) { Reflections::SetReflectionSize(v); }));
    }
 };
 
