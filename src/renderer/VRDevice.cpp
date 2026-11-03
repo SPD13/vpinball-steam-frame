@@ -1354,14 +1354,16 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
       m_heldReadings++;
       return;
    }
-   // Sensitivity: how many readings over the whole frame period, close together, it takes to act on them. Low: each one. Medium: 2 within 3 readings. High: 3 within 5. The others, their
-   // frame on time, are left out: they are mostly not GPU work (bgfx's GPU time stays the same on these frames, while the counter reads up to twice the period), and lowering the scale for
-   // each of them, with a quarter of a second before it may rise, keeps Darkest Dungeon under what it sustains (docs/Performance on the Steam Frame.md, section 8.12). A missed frame always counts
-   static constexpr int kOverPeriodReadings[3] = { 1, 2, 3 }, kOverPeriodWindow[3] = { 1, 3, 5 };
+   // Sensitivity: how many slow readings, close together, it takes to act on them. A slow reading is over the whole frame period, or of a frame that missed its display. Low: each one.
+   // Medium: 2 within 3 readings. High: 3 within 5. The others are left out: they are mostly not GPU work (bgfx's GPU time stays the same on these frames, while the counter reads up to twice
+   // the period; at 80 % GPU busy, Darkest Dungeon still misses a frame or two every 5 seconds, from a frame handed over late), and lowering the scale for each of them, with a quarter of
+   // a second before it may rise, keeps Darkest Dungeon under what it sustains (docs/Performance on the Steam Frame.md, section 8.12). A view that is really too heavy makes frames slow
+   // one after the other, and is caught within 2 or 3 frames
+   static constexpr int kSlowReadings[3] = { 1, 2, 3 }, kSlowWindow[3] = { 1, 3, 5 };
    const int sensitivity = clamp(m_dynamicResolutionSensitivity.load(), 0, 2);
-   const bool overPeriod = gpuMs > budgetMs;
-   m_overPeriodHistory = (m_overPeriodHistory << 1) | (overPeriod ? 1u : 0u);
-   if (overPeriod && periods < 2 && std::popcount(m_overPeriodHistory & ((1u << kOverPeriodWindow[sensitivity]) - 1u)) < kOverPeriodReadings[sensitivity])
+   const bool slow = gpuMs > budgetMs || periods >= 2;
+   m_overPeriodHistory = (m_overPeriodHistory << 1) | (slow ? 1u : 0u);
+   if (slow && std::popcount(m_overPeriodHistory & ((1u << kSlowWindow[sensitivity]) - 1u)) < kSlowReadings[sensitivity])
    {
       m_leftOutReadings++;
       return;
