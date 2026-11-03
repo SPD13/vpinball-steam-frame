@@ -5,6 +5,10 @@
 
 #include <sstream>
 #include <iomanip>
+#if defined(VPX_STEAM_FRAME)
+#include <condition_variable>
+#include <deque>
+#endif
 
 #include <plog/Init.h>
 #include <plog/Formatters/TxtFormatter.h>
@@ -136,6 +140,101 @@ public:
    }
 };
 
+#if defined(VPX_STEAM_FRAME) && defined(__STANDALONE__) && !defined(__ANDROID__)
+// Steam Frame Edition: the log file and the console are written by a thread of their own. They were written by the thread that logs, and
+// a line written by the logic thread while it prepared a frame could wait for the disk for several milliseconds (seen on the Frame with
+// the line of the controller models, 2026-11-02; a table's script prints and PuP's errors come from that thread too), which delays the
+// frame. The line is formatted at once, with the time and the thread that logged it, and written shortly after. If the process crashes,
+// the lines of the last moment may not be written.
+class PreformattedFormatter
+{
+public:
+   static plog::util::nstring header() { return plog::util::nstring(); }
+   static plog::util::nstring format(const plog::Record& record) { return record.getMessage(); }
+};
+
+class AsyncAppender final : public plog::IAppender
+{
+public:
+   AsyncAppender(plog::IAppender* file, plog::IAppender* console)
+      : m_file(file)
+      , m_console(console)
+      , m_thread([this]() { Run(); })
+   {
+   }
+
+   ~AsyncAppender() override
+   {
+      {
+         std::lock_guard lock(m_mutex);
+         m_stop = true;
+      }
+      m_wake.notify_one();
+      if (m_thread.joinable())
+         m_thread.join();
+   }
+
+   void write(const plog::Record& record) PLOG_OVERRIDE
+   {
+      Line line { record.getSeverity(), ThreadAwareTxtFormatter<false>::format(record) };
+      {
+         std::lock_guard lock(m_mutex);
+         if (m_queue.size() < 100000)
+            m_queue.push_back(std::move(line));
+         else
+            m_dropped++;
+      }
+      m_wake.notify_one();
+   }
+
+private:
+   struct Line
+   {
+      plog::Severity severity;
+      plog::util::nstring text;
+   };
+
+   void Run()
+   {
+      SetThreadName("LogWriter"s);
+      std::deque<Line> lines;
+      std::unique_lock lock(m_mutex);
+      while (true)
+      {
+         m_wake.wait(lock, [this]() { return m_stop || !m_queue.empty(); });
+         lines.swap(m_queue);
+         const size_t dropped = std::exchange(m_dropped, 0);
+         const bool stop = m_stop;
+         lock.unlock();
+         if (dropped > 0)
+            lines.push_back(Line { plog::warning, std::to_string(dropped) + " log lines dropped: the log was written faster than the disk took them\n" });
+         for (const Line& line : lines)
+         {
+            plog::Record record(line.severity, "", 0, "", nullptr, 0);
+            record << line.text.c_str();
+            m_file->write(record);
+            m_console->write(record);
+         }
+         lines.clear();
+         lock.lock();
+         if (stop && m_queue.empty())
+            return;
+      }
+   }
+
+   plog::IAppender* const m_file;
+   plog::IAppender* const m_console;
+   std::mutex m_mutex;
+   std::condition_variable m_wake;
+   std::deque<Line> m_queue;
+   size_t m_dropped = 0;
+   bool m_stop = false;
+   std::thread m_thread; // Last: started once the members it uses exist
+};
+
+static plog::RollingFileAppender<PreformattedFormatter>* s_asyncFileAppender = nullptr;
+#endif
+
 Logger* Logger::m_pInstance = nullptr;
 
 static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>>* s_fileAppender = nullptr;
@@ -158,6 +257,17 @@ void Logger::SetupLogger(const bool enable)
       {
          initialized = true;
          const std::filesystem::path logPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "vpinball.log");
+#if defined(VPX_STEAM_FRAME) && defined(__STANDALONE__) && !defined(__ANDROID__)
+         // Steam Frame Edition: the file and the console written by a thread of their own (see AsyncAppender), the debugger window as before
+         static plog::RollingFileAppender<PreformattedFormatter> asyncFileAppender(PathToUTF8(logPath).c_str(), 1024 * 1024 * 5, 1); // Opened as UTF-8
+         static plog::ColorConsoleAppender<PreformattedFormatter> asyncConsoleAppender;
+         static AsyncAppender asyncAppender(&asyncFileAppender, &asyncConsoleAppender); // Destroyed first, writing what is left
+         s_asyncFileAppender = &asyncFileAppender;
+         static DebugAppender debugAppender;
+         plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&debugAppender);
+         plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&asyncAppender);
+         plog::Logger<PLOG_NO_DBG_OUT_INSTANCE_ID>::getInstance()->addAppender(&asyncAppender);
+#else
          static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>> fileAppender(PathToUTF8(logPath).c_str(), 1024 * 1024 * 5, 1); // Opened as UTF-8
          s_fileAppender = &fileAppender;
          static DebugAppender debugAppender;
@@ -181,6 +291,7 @@ void Logger::SetupLogger(const bool enable)
          plog::Logger<PLOG_NO_DBG_OUT_INSTANCE_ID>::getInstance()->addAppender(&webServerAppender);
 #endif  
 #endif
+#endif
       }
       #ifdef _DEBUG
       maxLogSeverity = plog::debug;
@@ -200,6 +311,10 @@ void Logger::Init()
 
 void Logger::Truncate()
 {
+#if defined(VPX_STEAM_FRAME) && defined(__STANDALONE__) && !defined(__ANDROID__)
+   if (s_asyncFileAppender)
+      s_asyncFileAppender->truncate();
+#endif
    if (s_fileAppender)
       s_fileAppender->truncate();
 }
