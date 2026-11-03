@@ -379,7 +379,9 @@ static vector<Section> GetSections(Screen screen)
    case Screen::SteamFrame:
       return {
          Section { "Dynamic resolution"s, kVR,
-            { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale),
+            { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
+               Label("Dynamic resolution sensitivity help"s),
+               Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale),
                Label("Dynamic resolution status"s) },
             false, false },
          Section { "Foveated rendering"s, kVR, { Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Prop(Settings::m_propPlayerVR_FoveateTonemapping),
