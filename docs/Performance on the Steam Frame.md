@@ -9,7 +9,7 @@ Addams Family VR room (heavy, PinMAME WPC). Updated 2026-10-20 with the measurem
 (section 7), 2026-10-29 with a review of the GPU opportunities left on Addams (section 8, items 10 to 15) and the simplified meshes
 (section 8.2), 2026-10-30 with the series that measured items 2, 10, 11, 12, 14 and 15 on Addams and Ghostbusters (section 8.3), and the same day with
 the welding of meshes exported as separate triangles and the culling of the reflection, from Albator78 (section 8.2), and 2026-11-01 with the
-tables still below the native size (section 8.6), generic rules for the reflections (section 8.8), the Reflections settings built from them (section 8.9) and the placement of the threads on the cores (section 8.10).*
+tables still below the native size (section 8.6), generic rules for the reflections (section 8.8), the Reflections settings built from them (section 8.9) and the placement of the threads on the cores (section 8.10), and 2026-11-02 with the wait of the logic thread on PuP's decoders (section 8.11) and the sensitivity of dynamic resolution (section 8.12).*
 
 ## 1. Summary
 
@@ -55,6 +55,8 @@ tables still below the native size (section 8.6), generic rules for the reflecti
   extra mirrors and the room out of the reflections, off by default on the Frame: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, WildWest 13.9 → 10.9 ms, Maverick 16.4 → 11.1 ms (section 8.9).
 - **A game started by Steam has cores 3 to 7; the headless runs before 2026-11-01 had all eight (2026-11-01).** Dynamic resolution figures from those runs are low where the render thread is busy: Darkest Dungeon 1858² then, 2130² with Steam's cores. Choosing the cores of the threads gained almost nothing headless with Steam's cores,
   but in the headset Darkest Dungeon spends 62 % of its time at full resolution with it (62.3 and 62.5 %, two plays) against 1.9 to 19.4 % without (three plays), still rated yellow. It is on by default in the Frame build, and the owner heard no problem with the sound (section 8.10).
+- **On PuP tables, the largest slow frames were a wait for a video decoder being closed (2026-11-02).** Each new video closed the previous hardware decoder under a lock that the logic thread needs to draw the PuP screens, stopping it for about 10 ms every 4 to 5 s on Darkest Dungeon. The decoder is now closed outside that lock. Headless, the waits are gone and missed frames look lower, but the time at full resolution does not move. Worn, one play of 111 s reached 74.7 % at full resolution against 62 % before, still rated yellow (section 8.11).
+- **Dynamic resolution has a sensitivity setting, Medium by default, and its default target is now 90 % (2026-11-02).** It sets how many frames over the whole period, close together, lower the resolution at once: Low one, as before; Medium 2 within 3 frames; High 3 within 5. Headless, Darkest Dungeon goes from 58 % of its time at full resolution (Low) to 66 % (Medium) and 72 % (High), for 0.03–0.04 missed frames per second instead of none; Robot Invasion with its mirrors, at its limit, misses 0.13–0.14 frames per second instead of 0.06. Worn, Darkest Dungeon at Medium with the target at 90 % reached 87.7 % at full resolution (74.7 % at Low and 85 %), for 0.42 missed frames per second instead of 0.15; the owner then made 90 % the default for all tables, not measured on the others (section 8.12).
 
 ## 2. Method
 
@@ -371,12 +373,13 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 12 | Scene buffer in RG11B10F (4 bytes per pixel) instead of RGBA16F (8) | **−0.66 ms on Addams, −1.28 ms on Ghostbusters**; with item 10, −2.12 and −2.69 ms | One format in the Frame build, after checking that nothing reads the alpha, that no value is negative, and banding | **Done** 2026-10-31, a live switch on by default in the Frame build (`Player.CompactSceneBuffer`, Steam Frame > Scene buffer): −0.88 ms on Addams, −1.52 ms on Ghostbusters with item 10 on (8.4); checked worn by the owner |
 | 13 | Render-only mesh simplification, with a coarser mesh in the reflection probe | **Addams −1.29 ms at 2160² (11.86 → 10.57 ms), native 95 % of the time instead of 45 % with dynamic resolution**; Iron Man −0.5, Attack from Mars −0.2, LOTR −0.24 | Medium | **Done** (in master since 2026-10-29; 8.2, measured on the Frame 2026-10-29); meshes exported as separate triangles welded first, 2026-10-30: Albator78 19.8 → 11.1 ms |
 | 14 | Hardware multiview: one vertex shader run for both eyes | Unknown: one eye drawn saves 4.16 ms on Addams, 3.06 ms on Ghostbusters, but that includes the second eye's pixels, which multiview keeps | Large: bgfx has no multiview, and VPX's varyings are in view space | Bound measured 2026-10-30 (8.3), too loose to decide |
-| 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | Not measurable on Addams and Ghostbusters (8.3): both hold 2160² at any target; to try on a table below the ceiling (LOTR) |
-| 16 | Dynamic resolution ignores what the size does not cause: frames over the period independent of the size, and a counter reading over the GPU's busy time | Darkest Dungeon sits about 2 ms under the target at 1805²; 12 ms at 2160² | Small | **Proposed** 2026-11-01 (8.6): gain not measured |
+| 15 | Dynamic resolution target above 85 % of the period | The GPU time left idle each frame (about 2 ms) | Settings | **Done** 2026-11-02, default 90 % on the owner's choice after the worn plays of 8.12 (Darkest Dungeon 87.7 % at full resolution with Medium sensitivity, for 0.42 missed frames per second); not measured on other tables |
+| 16 | Dynamic resolution ignores what the size does not cause: frames over the period independent of the size, and a counter reading over the GPU's busy time | Darkest Dungeon sits about 2 ms under the target at 1805²; 12 ms at 2160² | Small | **Done in part** 2026-11-02: one cause of these frames removed, item 21 (8.11); the readings over the period left out by the setting *Dynamic resolution sensitivity*, Medium by default (8.12); the counter reading over the GPU's busy time remains |
 | 17 | VR room left out of the playfield reflection | **WildWest −2.7 to −3.3 ms, 2031² → 2160²; Maverick −5 ms, 36 → 72 fps**; little on other tables, nothing on Darkest Dungeon | Small per table (recipe), medium as a rule | **Done** 2026-11-01, setting *Room reflection* (8.9); the same result worn with a recipe, since dropped: green, 98.5 % at full size |
 | 18 | Mirrors other than the playfield | **Robot Invasion −11 to −12 ms, 1559² → 2155²; 2001 −5.2 ms**; Last Action Hero nothing; 4 tables of 94 have such mirrors | Small per table (recipe) or a step of the same rule | **Done** 2026-11-01, setting *Extra mirrors* (8.9); the same result worn with a recipe, since dropped: green, 100 % at full size |
-| 20 | Threads on chosen cores while a table is played: render on core 7, logic on 5 and 6, the others on 2 to 4 | **Worn, Darkest Dungeon 1.9–19.4 % → 62 % at full resolution** (3 plays without, 2 with), mean size about 1770² → 2070²; headless with Steam's cores, little | A small module | **Done** 2026-11-01, `Player.ThreadPlacement`, on by default, no menu entry (8.10); sound fine according to the owner; World Joker Tour worn and long plays not measured |
+| 20 | Threads on chosen cores while a table is played: render on core 7, logic on 5 and 6, the others on 2 to 4 | **Worn, Darkest Dungeon 1.9–19.4 % → 62 % at full resolution** (3 plays without, 2 with), mean size about 1770² → 2070²; headless with Steam's cores, little | A small module | **Done** 2026-11-01, `Player.ThreadPlacement`, on by default, no menu entry (8.10); sound fine according to the owner; World Joker Tour worn 6.3–12.7 % → 33 % (one play with it); long plays not measured |
 | 19 | Simplify the parts of "group elements" collections that are not really merged | WildWest −0.6 ms, no change with dynamic resolution; Addams and LOTR nothing | One condition | Measured 2026-11-01 (8.6): low value |
+| 21 | PuP's decoder closed outside the lock that drawing its screens takes | **Worn, Darkest Dungeon 62 % → 74.7 % at full resolution** (one play of 111 s, two of 171 and 188 s before); headless, waits 18–22 → 0 in 90 s, missed frames 0.07–0.17 → 0.04–0.05/s, time at full size unchanged | A few lines | **Done** 2026-11-02, in master 0659ce1e7 (8.11); PuP tables only; a longer play to confirm |
 
 Details:
 
@@ -812,7 +815,7 @@ reflection is the statues of the table (reflection off −2.7 ms, and 1.7 ms les
 candidate triangles only fall to 1.12 M at 1 VPU. Scene pass about 3.6 ms fixed + 0.65 ms per million pixels per eye. At 2160² it is only 0.3 ms
 over the target, yet dynamic resolution saws between 1666² and 2026² at 9–10 ms, about 2 ms under the target (WildWest, at the same target, stays at it). Darkest Dungeon misses
 about as many frames at 1296² (0.8 per 5 s) as at 2160² (1.2–2.6 per 5 s), and a frame over the period lowers the scale at once: the size pays for what it does not cause. What these
-frames are is not established.
+frames are is not established. (2026-11-02: one kind is established, a wait for a PuP decoder being closed, section 8.11; the others are not.)
 
 **World Joker Tour** gains 1.8 ms without reflection (872 of its 1 835 draws are in it). **Lord of the Rings** gains only 0.5 ms that way: it is its scene pass, 7.4 ms,
 not split further here; it is also the hottest, GPU 93 °C and CPU 97 °C in 100 s.
@@ -853,7 +856,7 @@ only `MeshSimplifier`'s `IsGrouped` is too wide (WildWest 194 000 → 477 000 ca
 |---|---|---|---|---|
 | 1 | Extra mirrors and the room out of the reflections (items 18, 17) | The largest gains measured, and tables to come can have them too | With the recipes that came first, worn: Robot Invasion 1 % → 100 % of the time at full size (47 s played), WildWest 0 % → 98.5 % (53 s) | **Done** as settings (8.9), first recipes per table (dropped); the owner checked the build in the headset, 2026-11-01 |
 | 2 | A run worn with `perf-sampler.py`, on World Joker Tour or Darkest Dungeon | Several tables rate well under what headless runs give; tells whether worn play is the heavier state | Tells how far the headless figures hold | |
-| 3 | Dynamic resolution: count the frames that lower the scale, then ignore those the size does not cause (item 16) | Darkest Dungeon sits 2 ms under the target; also steers by a counter that reads high | Darkest Dungeon from 1805² towards 2100², not measured | A headless series, counting missed frames |
+| 3 | Dynamic resolution: count the frames that lower the scale, then ignore those the size does not cause (item 16) | Darkest Dungeon sits 2 ms under the target; also steers by a counter that reads high | Darkest Dungeon from 1805² towards 2100², not measured | A headless series, counting missed frames; one cause of these frames removed first, section 8.11 |
 | 4 | Overlap of frame preparation and submission (item 5) | The render thread is now a limit: 3–6 ms of wait per frame on these tables | Fewer missed frames over 10 ms of render thread; large work | After 1 and 3, which remove part of it |
 | 5 | Scene pass of Lord of the Rings and CyberRace | The reflection does not explain them; not split yet | Unknown | A series by part, as for WildWest's room |
 
@@ -912,6 +915,7 @@ The half size gives about 0.5–0.8 ms on both, against 0.19 and 0.48 ms on Adda
 - Steps A and B replace the recipes in the measured cost: the same parts for Robot Invasion, and the same 10.8 ms for WildWest. They also find 2001 and Maverick, which have no recipe, and leave Last Action Hero, Masters of the Universe and Ace of Speed at about what they were: where these parts are cheap, removing them gains little, so they should only go on a table that needs it.
 - A step can therefore be applied by need: Always Off / Always On / Automatic, as for the foveated anti-aliasing. Automatic has a cost the recipes do not have: a table runs below native until the decision, a minute with the warm-up of the anti-aliasing. Remembering the decision per table (with the rating, `table-stats.json`) would make the next starts right from the first frame.
 - Darkest Dungeon and World Joker Tour gain from neither step. Their way is item 16, and the half-size reflection as a possible third step (not measured on today's executable). "Balls Only" stays the last resort, by the player's choice.
+- **Half-size reflection on Darkest Dungeon, measured again 2026-11-02** (`Doc/test-hooks/probe-scale-hooks.py`, `VPX_PROBE_SCALE=0.5`: the probe 1080² per eye instead of 2160²; the executable of section 8.12 with the target at 90 % and the sensitivity at Medium; headless, eye tracking not active, two runs each, alternated, `~/perf-test/results-probe`). At fixed 2160²: runtime GPU time 11.41 and 11.48 → 10.98 and 10.97 ms, bgfx's 10.62 and 10.67 → 10.20 and 10.19 ms, GPU busy 83 → 79.5 %, readings over the period 1.40 and 1.51 → 0.66 and 0.63 per second, missed frames 0.12 and 0.13 → 0.02 and 0 per second; the render thread's submission unchanged. With dynamic resolution as the player has it: time at full size 96.1 and 94.9 → 98.2 and 99.2 %, missed frames 0.25 and 0.19 → 0.01 and 0.06 per second. The price is a softer playfield reflection, not yet looked at in the headset. Made the setting *Reflection size* (`Player.ReflectionSize`, Steam Frame screen, Reflections section), Half by default in the Frame build on the owner's choice, for all tables: the other tables are not measured with it.
 
 Not seen worn: Maverick and 2001 with these parts out, and any table with the rule itself. If the rule is built, the recipes are not needed.
 
@@ -1025,11 +1029,133 @@ The load does not change (Darkest Dungeon's simplified meshes done at 3.10 s, 3.
 
 The log has no play of these two tables without the placement to compare with. They are listed to show that the PinMAME tables keep their resolution and their sound with PinMAME on cores 2 to 4: the owner heard no problem with the sound on these plays and on Darkest Dungeon.
 
+**World Joker Tour worn:**
+
+| Date, started | Threads | Time at full resolution (rating, yellow) | Played | GPU per million pixels | Readings held per status line |
+|---|---|---|---|---|---|
+| 10-31, 22:05 | As started by Steam, earlier build | 6.3 % | 110 s | 2.77 ms | 41 |
+| 11-01, 15:40 | As started by Steam, the build of the plays above | 12.7 % | 51 s | 2.80 ms | 46 |
+| 11-01, about 22:02 | **Placed, as built** | **33.0 %** | 138 s | 2.55 ms | 19 |
+
+The figures of the last play's two right columns come from its last minute only, as `vpinball.log` was cut at 5 MB during the play. Its GPU time at 2160² is 10.3–11.3 ms against 9.7 ms headless, under the target of 11.8 ms, and the size still falls to 2012–2146² about every other status line.
+
 **Reading.** On Darkest Dungeon the gain is real and repeatable: the two plays with the placement agree within 0.2 points, and are three times the best play without it. The lowest play without it is the longest, so the two short ones probably flatter the state without placement. The comparison was not randomized: the plays without placement all came first, and none was played with the final build, the setting being its only difference from the build of the others. Headless with Steam's cores the placement does no harm and gains little: the render thread's submission is 0.5 ms shorter and the logic thread has half the context switches. Headless and worn disagree: Darkest Dungeon holds 2130² headless and 1577² worn in its longest play with the same cores, so what the placement protects the threads from is what the headset adds (tracking, passthrough, eye tracking, a load of 35–45 % on all cores against 20 %). Headless runs do not reproduce this state, so they cannot rule on this setting. Darkest Dungeon stays yellow: green needs 95 % of the time at full resolution.
 
-**Not settled.** Which conflict the placement removes. World Joker Tour, the other table far below native when worn without placement (6.3 % over 110 s, 12.7 % over 51 s, against 100 % headless), has not been played with it. Long plays and heat: the longest play with it lasted 188 s, and temperatures were only recorded for the 17:41 and 17:50 plays. The 20-second dips. The sound has no measurement, only the owner's ears, since the log does not record dropouts. To compare again, `ThreadPlacement = 0` in the `[Player]` section turns it off.
+**Not settled.** Which conflict the placement removes. World Joker Tour rose less than Darkest Dungeon, on one play: at full size it is under the GPU target, and what keeps it down is not known. Long plays and heat: the longest play with it lasted 188 s, and temperatures were only recorded for the 17:41 and 17:50 plays. The 20-second dips. The sound has no measurement, only the owner's ears, since the log does not record dropouts. To compare again, `ThreadPlacement = 0` in the `[Player]` section turns it off.
 
 **For the next headless runs:** start them with `taskset -c 3-7`, as Steam does.
+
+### 8.11 PuP's decoders and the logic thread (2026-11-02)
+
+*Timers per step and thread state of each frame preparation: `Doc/test-hooks/dr-prep-hooks.py`, `dr-prep-report.py`. Stacks of the threads at the moment of a sleep: `dr-sleep-hooks.py`, `dr-sleep-report.py`. Built with `DRTRACE=1 DRRULE=1 DRPREP=1 DRSLEEP=1 reflections-build.sh <worktree> hooks`. Results on the Frame: `~/perf-test/results-prep`, `results-sleep1`, `results-sleep`, `results-stopfix`. Headless runs of 130 s, the window from 40 s, Darkest Dungeon with Steam's cores (`taskset -c 3-7`). The timer and stack runs had a test rule of dynamic resolution on (`VPX_DR_RULE=1`, not in master), the comparison of the fix has master's.*
+
+**What the slow preparations are.** Of the preparations more than 2.5 ms over the median, 84 % are followed within 4 frames by a reading over the frame period (81 % with all eight cores, one run each), and nearly all their excess is in `Renderer::Render3DScene`: +6.62 of +6.91 ms with Steam's cores. With Steam's cores, 59 slow preparations in 90 s, against 3.8 ms for the others:
+
+| Kind | Count | Preparation | CPU time | What happens |
+|---|---|---|---|---|
+| **Goes to sleep once** | 20 | **17.0 ms** | 4.7 ms | Asleep about 12 ms; the other frames never sleep |
+| Taken off its core | 21 | 7.8 ms | 7.2 ms | About 2 interruptions |
+| Neither | 18 | 7.0 ms | 7.0 ms | Runs longer with no switch; not explained |
+
+With all eight cores there are 802 in 90 s, of which 769 are taken off their core about 8 times: this is what the placement of section 8.10 removes. The sleeps stay.
+
+**Where it sleeps.** `perf record -e context-switches` cannot show it without root: on the Frame (`perf_event_paranoid` 2) it records no sample. A temporary thread in VPX therefore watches the logic thread during `Render3DScene`, and once it has found it asleep twice in a row, signals the threads, whose handlers take a backtrace. In two runs, 40 of the 41 sleeps caught are the same stack:
+
+```
+PUPMediaPlayer::Render          waits for the player's m_mutex
+PUPScreen::Render
+PUPManager::Render
+Flasher::RenderCabinetDisplay
+Flasher::Render
+Renderer::RenderDynamics
+Renderer::Render3DScene
+```
+
+A PuP command thread was running each time. Sampled every 1.5 ms during the wait, 34 of 43 samples of the PuP threads are in `Play` → `StopBlocking` → `avcodec_free_context`, closing the V4L2 decoder (`close`, buffers released by `ioctl` and `munmap`); 8 are opening the next decoder, which is outside the lock. Each new video on a screen stops the previous one, and `StopBlocking` closed its decoder holding `m_mutex`. The step took 8 to 23 ms in these frames (medians 14.2 and 12.1 ms, against 3.0 ms), about once every 4 to 5 s. The render thread is not involved: it is waiting for the logic thread. The plugin's prepare frame message, measured separately, costs nothing: the wait comes later, when the scene draws the PuP screens.
+
+Videos of at least 640×360 open a hardware decoder (`OpenStream`), so tables with PuP videos of that size can have this wait. Tables without PuP cannot: this does not explain World Joker Tour (section 8.10), which is a PinMAME table.
+
+**The fix** (`PUPMediaPlayer::StopBlocking`, in master 0659ce1e7). The format and codec contexts are swapped out under the lock and closed after it, as the loop path of `Run` already did. While they close, `Render` draws the held frame, as it does once `StopBlocking` has returned.
+
+**Headless, the same rule of dynamic resolution as master, runs alternated:**
+
+| | Before | Before | Fix | Fix |
+|---|---|---|---|---|
+| Size | 2099² | 2094² | 2102² | 2110² |
+| Time at full size | 54.6 % | 54.9 % | 46.5 % | 55.1 % |
+| Readings over the period per second | 1.04 | 1.01 | 1.20 | 1.09 |
+| Missed per second | 0.07 | 0.17 | 0.04 | 0.05 |
+| On time | 99.90 % | 99.76 % | 99.94 % | 99.93 % |
+| Slow preparations per second | 0.54 | 0.68 | 0.50 | 0.40 |
+| Mean slow preparation | 9.8 ms | 10.5 ms | 8.1 ms | 8.4 ms |
+| Preparations asleep over 2 ms | 18 | 24 | 12 | 1 |
+
+A report script ran on the Frame for a moment during the second run with the fix. A third run with the fix, with the sleep trace on, caught no wait on this lock in 5 sleeps: 4 are the "Controller models" line that `VRControllerModels::Render` logs every 5 s, waiting for the disk, and 1 was not asleep by the time of the backtrace. It is left out of the table, as it has the trace and a blocked decoder (below): 2113², 55.6 %, 0.92, 0.01.
+
+Before the fix, 8 of the 23 missed frames came within 70 ms after a sleep, and about a quarter of the readings over the period. The sleeps were 0.2 to 0.27 per second against 1 reading over the period per second, so they cannot be most of them.
+
+**In the headset, Darkest Dungeon, Steam launch, with the placement of section 8.10:**
+
+| Started | Build | Time at full resolution (rating, yellow) | Played | On time | Size, mean / median |
+|---|---|---|---|---|---|
+| 11-01, 17:50 | Before, placed by `thread-placer.py` | 62.3 % | 171 s | 99.6 % | 2074² / 2160² |
+| 11-01, 21:43 | Before, placed as built | 62.5 % | 188 s | 99.7 % | 2063² / 2160² |
+| 11-02, 16:41 | **Fix** | **74.7 %** | **111 s** | **99.8 %** | **2089² / 2160²** |
+
+Eye-tracked, no blocked decoder. Of the 23 status lines after the load, 18 are at 2160²; 4 of the 5 others are in the first 45 s. The executable is the one of the 21:43 play: only `plugin-pup.so` differs.
+
+**Reading.** The wait is removed: that is measured, and the stack leaves no doubt about the cause. Missed frames look lower, on two runs each. Headless, the time at full size does not move, as the readings over the period stay at about 1 per second: this fix alone does not end item 16. Worn, the gain of 12 points is more than the 0.2 points between the two plays before, and more than the headless runs predict, for a reason not known. It is a single play, 60 to 77 s shorter than those it is compared with, a day later and not randomized, so it is not yet a measure of the gain. Darkest Dungeon stays yellow: green needs 95 %.
+
+**Not settled.**
+
+- A play of about 3 minutes, to compare with the two before.
+- The look: whether videos change cleanly has not been checked by the log or the headless runs.
+- The other PuP tables, The Matrix and Legend of Zelda, are not measured with the fix.
+- The first run with the fix still has 12 preparations asleep over 2 ms, and no stacks: their cause is not known. The kinds "taken off its core" and "neither" remain.
+- The third run with the fix logged a hardware decoder blocked for 2 s, recovered in software (`file=BG-Overlay.mp4`). This also happens without the fix (2 other logs of the 390 in `~/perf-test`, and The Matrix about every other run, according to the commit that added the recovery). The fix does not change the order of the work on the command thread, and that run was the only one of the five whose hook signalled the PuP threads, which later hung a worn play with such a thread spinning in FFmpeg's `v4l2_dequeue_v4l2buf` (a signal leaves `errno` at `EINTR`, and its `poll` with no timeout then loops forever). So the hook is the likely cause here too, not proven.
+- The "Controller models" log line, on the logic thread every 5 s. Headless its output goes to a file; a Steam launch was not measured.
+- These headless runs cannot be compared with those of 2026-11-01: since the Frame was restarted, the log says "Fixed: eye tracking not active" headless instead of eye-tracked, and GPU time at full size is 11.45 ms against 10.8 ms, at the same clock. The time at full size is 55 % against 85 %. The link between the two is likely, not proven. The worn play was eye-tracked.
+
+### 8.12 The sensitivity of dynamic resolution (2026-11-02)
+
+*Traces: `Doc/test-hooks/dr-trace-hooks.py`, `dr-rule-report.py`, `dr-replay.py`. Results on the Frame: `~/perf-test/results-dr` (the first rule, 2026-11-01), `results-sens`. Headless runs of 130 s, the window from 40 s, with Steam's cores (`taskset -c 3-7`), the placement of section 8.10 and the PuP fix of section 8.11; one run per level, two on Darkest Dungeon.*
+
+**Why.** A reading over the whole frame period lowered the scale at once and blocked any rise for a quarter of a second. On Darkest Dungeon most of these readings are not GPU work: bgfx's GPU time stays the same on those frames, and they follow a late frame preparation on the logic thread (sections 8.10, 8.11). In a worn play of 105 s (2026-11-02, test build), the scale dipped 51 times, for 0.5 s each (median) and down to 1966², with 47 of the dips started by one such reading, while frames were on time (0.07 missed per second) and the GPU time at full size was 11.3 ms against the target of 11.8 ms. The table sat at full size 68 % of the time.
+
+**The setting.** *Dynamic resolution sensitivity* (`PlayerVR/DynamicResolutionSensitivity`, Steam Frame screen and VR settings page, live): how many readings over the period, close together, it takes for them to count.
+
+| Level | Readings over the period that count | |
+|---|---|---|
+| Low | Each one | The behaviour before |
+| **Medium** (default) | 2 within 3 readings | The rule measured on 2026-11-01 |
+| High | 3 within 5 readings | |
+
+The others are left out, of the average too. A frame that missed its display always counts. The status line in the log counts the readings left out.
+
+**Measured.**
+
+| Table | Low | Medium | High |
+|---|---|---|---|
+| Darkest Dungeon: size, time at full size | 2121², 59.5 and 55.6 % | 2135² and 2137², 62.2 and 69.1 % | 2139² and 2140², 70.4 and 74.0 % |
+| Darkest Dungeon: missed frames per second, on time | 0, 100 % | 0.04 and 0.02, 99.94 and 99.97 % | 0.05 and 0.03, 99.93 and 99.96 % |
+| Robot Invasion with its mirrors (at its limit): size, missed per second | 1870², 0.06 | 1867², 0.14 | 1885², 0.13 |
+| Legend of Zelda: time at full size, missed per second | 96.7 %, 0 | 99.1 %, 0 | 100 %, 0.01 |
+
+Darkest Dungeon at Medium with the target at 90 % instead of 85 %: 2156², 96.4 % of the time at full size, 0.21 missed frames per second (99.71 % on time), one run.
+
+**Reading.** Each level gains on the table it was made for, and costs a few missed frames. On Darkest Dungeon headless, Medium gains 8 points and High 15, for 0.03–0.04 missed frames per second, about one every 30 seconds. On Robot Invasion, which cannot hold its full size, nothing is gained and the missed frames double, to about one every 7 seconds: where a table is really too heavy, the left-out readings were real. The 2026-11-01 runs of the first rule (the same as Medium) found the same on Robot Invasion (0.15 → 0.51 missed frames per second), and less gain than here on Darkest Dungeon, where their runs at Low already reached 85 %: those runs were eye-tracked and these are not, probably the reason (section 8.11). Worn, a replay of the play above gives 67 % at Low and 84 % with the readings left out, and with the target at 90 %, 78 and 93 %; the replay does not model the frames that would then miss. Medium is the default, as the owner chose.
+
+**Worn, Darkest Dungeon, one play each (2026-11-02, Steam launches by the owner, eye-tracked, the PuP fix in):**
+
+| Sensitivity | Time at full resolution (rating, yellow) | Played | On time | Mean size, status lines from the third | Lines at 2160² | Missed per second | Readings left out | GPU at 2160² |
+|---|---|---|---|---|---|---|---|---|
+| Low (16:41) | 74.7 % | 111 s | 99.8 % | 2109² | 17 of 22 | 0.15 | 0 | 11.05 ms |
+| Medium (19:43) | 48.0 % | 86 s | 99.7 % | 2139² | 10 of 18 | 0.26 | 77 | 11.39 ms |
+| Medium, target 90 % (19:48) | **87.7 %** | 124 s | 99.4 % | 2143² | 20 of 26 | **0.42** | 121 | 11.55 ms |
+
+At Medium the deep dips are gone (lowest line 2074², against 1740², 1904² and 1967² at Low) and the mean size is higher, but for its first 30 s the table sat at 2074–2120², 96–98 %, with the GPU at 11.5–11.9 ms, at the target: the averaged rule, which the sensitivity does not change, held it just under the full size, and the rating counts only the full size. The GPU time at 2160² was 0.34 ms higher than in the play at Low, for a reason not known (another part of the game, the view). Missed frames rose from 0.15 to 0.26 per second. With the target at 90 % (11.5–12.0 ms at 2160²; the first three status lines, during the load, still at 85 %), the table held 2160² in 20 of 26 lines and never went under 2066², the best rating of the day, for 0.42 missed frames per second, one every 2.4 s. One play each, not randomized: they do not settle the defaults, and whether the missed frames show is the player's call. After these plays the owner set the default target to 90 % for all tables (it was 85 %); the other tables were not measured at 90 %, and on a table that cannot hold its full size the GPU now runs up to 12.5 ms instead of 11.8.
+
+**Not settled.** One worn play per level. One run per level per table, two on Darkest Dungeon: the two runs at Medium differ by 7 points. Robot Invasion's missed frames at Medium and High come from one run each. The target of 90 % with Medium gains most on Darkest Dungeon and misses a frame every 5 seconds: not tried worn, nor on other tables.
 
 ## 9. Reproduction
 

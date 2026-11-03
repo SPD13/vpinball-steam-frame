@@ -62,8 +62,8 @@ Contents:
 the GPU clock. The same counter drives the dynamic resolution and the performance panel. With `VPX_GPU_PROFILE=1`, the log adds bgfx's
 GPU time per render target (scene, reflection probe, tone mapping, FXAA, bloom...), which is how the cost of each pass is known.
 
-**The budget.** At 72 Hz a frame has 13.9 ms. The dynamic resolution aims at 85 % of it, **11.8 ms**, to keep a margin for the
-compositor and for heavier moments.
+**The budget.** At 72 Hz a frame has 13.9 ms. The dynamic resolution aims at 90 % of it, **12.5 ms**, to keep a margin for the
+compositor and for heavier moments (85 %, 11.8 ms, until 2026-11-02: the measurements before that date were made with it).
 
 **Headless runs.** Most measurements are made with nobody in the headset: test builds pin both eyes at a player's place in front of the
 table (25 cm behind and 50 cm above the front of the playfield, 64 mm apart) and keep rendering although SteamVR does not display the
@@ -169,8 +169,10 @@ case, the Frame build adjusts the resolution every frame.
 part of the image was drawn, and scales it to the panel. Nothing is reallocated, so the scale can change every frame. On the render
 thread, after each frame, `VRDevice::UpdateDynamicResolution` reads the GPU time of the runtime:
 
-- **Down** as soon as the GPU time, averaged over about five frames, is over the target (85 % of the frame period: 11.8 ms at 72 Hz), by
-  2 % per frame or more when far over; at once for a frame over the whole period.
+- **Down** as soon as the GPU time, averaged over about five frames, is over the target (90 % of the frame period: 12.5 ms at 72 Hz), by
+  2 % per frame or more when far over; at once for frames over the whole period. How many of those it takes, close together, is the
+  *sensitivity*: one at Low, 2 within 3 frames at Medium (the default), 3 within 5 at High. The others are left out, as they are mostly not
+  GPU work but a late frame; a frame that misses its display always counts.
 - **Up** when the time expected at the next step stays under 97 % of the target, a quarter of a second after the last step down, by 0.3 %
   to 1 % per frame depending on the room left.
 - Between the **minimum** (70 % of the full size by default) and the **full size**, which is the render resolution of the table (125 % of
@@ -183,8 +185,8 @@ time, to **2150² on average, at full size 88–91 % of the time**, for a few fr
 run from a cool device held 72.0 fps without throttling, the GPU levelling at 85–86 °C. Early runs at fixed 2160² had 24 % of their
 frames reprojected by the compositor; with dynamic resolution, 4 %.
 
-**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (85 %) and the
-minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
+**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (90 %), the
+sensitivity (Medium) and the minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
 to the next table started); the Display & Performance screen shows it. See [section 12](#12-settings-reference).
 
 ## 5. Foveated rendering
@@ -425,6 +427,8 @@ The anti-aliasing mode, the supersampling factor and the other graphics options 
 
 **Threads on chosen cores.** The cores of the Frame are not alike: two small ones, five fast ones and a fastest one. Steam gives a game cores 3 to 7 and leaves it to the system to move its threads between them, among others that may run there. While a table is played, this edition runs the render thread on core 7, the logic thread on cores 5 and 6, and the rest (PinMAME, sound, PuP) on cores 2 to 4. In the headset, Darkest Dungeon spends 62 % of its time at full resolution with this placement (two plays), against 1.9 to 19.4 % without it (three plays). Addams Family and Ace of Speed stay at 93 to 100 %, and the owner heard no problem with the sound. Headless with Steam's cores, on six tables, it does no harm and gains little: the render thread submits about 0.5 ms faster. Loading is not affected. No menu entry: `ThreadPlacement = 0` in the `[Player]` section of the settings turns it off.
 
+**PuP videos no longer hold up the frame.** Each new video on a PuP screen closes the previous hardware decoder, which takes several milliseconds. This used to happen under a lock needed to draw that screen, stopping the frame being prepared for about 10 ms every 4 to 5 s on Darkest Dungeon. The decoder is now closed outside that lock. Headless, the waits are gone, missed frames look lower, and the time at full resolution does not change. In the headset, one play of 111 s reached 74.7 % at full resolution, against 62 % in the two longer plays before, still rated yellow; a longer play has yet to confirm it. Tables without PuP are not concerned.
+
 - **Memory between tables.** On Linux, the process grew by about 10 MB at each switch between the lobby and a table (Addams 964 →
   1207 MB after 15 switches), memory kept by glibc's allocator rather than leaked. The build sets the allocator's mmap threshold to
   1 MB at start: **about 430 MB less at the table and 460 MB less in the lobby**, flat from switch to switch, for tables loading 3 to 5 %
@@ -478,9 +482,10 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | Section | Option | Values | Default (Frame) | What it does |
 |---|---|---|---|---|
 | Dynamic resolution | **Dynamic resolution** | on / off | on | Adjusts the rendering resolution every frame to the GPU time ([section 4](#4-dynamic-resolution)). Off, the table renders at its full resolution whatever it costs. |
-| | **Dynamic resolution target** | 50–100 % | 85 % | The GPU time aimed at, as a share of the frame period (85 % of 13.9 ms is 11.8 ms). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
+| | **Dynamic resolution target** | 50–100 % | 90 % | The GPU time aimed at, as a share of the frame period (90 % of 13.9 ms is 12.5 ms; 85 % until 2026-11-02). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
+| | **Dynamic resolution sensitivity** | Low / Medium / High | Medium | How many frames over the whole frame period, close together, it takes to lower the resolution at once: Low one, Medium 2 within 3 frames, High 3 within 5. A missed frame always counts. A line under it recalls: "Low = more sensitive = will switch more often". Headless, Darkest Dungeon spends 58, 66 and 72 % of its time at full resolution at Low, Medium and High, for a few more missed frames (0, 0.03 and 0.04 per second); on Robot Invasion with its mirrors, at its limit, missed frames go from 0.06 to 0.13–0.14 per second. |
 | | **Dynamic resolution minimum** | 50–100 % | 70 % | The lowest resolution allowed, as a share of the full size per axis (70 % of 2160 is 1512 pixels, half the pixels). The headset's recommended resolution is 80 %. Raise it to keep a table sharper at the price of missed frames. |
-| | *Status line* | | | The resolution of the last frame, the GPU time against the frame period and the target, and "held" when a frame pacing stall was detected ([section 2.2](#22-the-desktop-window-is-not-drawn-the-end-of-the-frame-pacing-stall)). |
+| | *Status line* | | | The resolution of the last frame, the GPU time against the frame period and the target, the readings left out by the sensitivity, and "held" when a frame pacing stall was detected ([section 2.2](#22-the-desktop-window-is-not-drawn-the-end-of-the-frame-pacing-stall)). |
 | Foveated rendering | **Foveated rendering** | Off / Low / Medium / High | Medium | How small the full-rate area around the gaze is ([section 5](#5-foveated-rendering)). On Addams the three levels cost about the same (11.2–11.5 ms against 14.3 ms off). |
 | | **Eye-tracked foveation** | on / off | on | Follows the eyes. Off, or when eye tracking is not active in the headset settings, the full-rate area is a wide disc fixed at the center of the view. |
 | | **Foveated tone mapping** | on / off | on | Shades the tone mapping pass with the same pattern ([section 6](#6-foveated-post-processing)): about 0.8 ms. |
@@ -496,6 +501,7 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | | *Status line* | | | How many this table shows and whether they are drawn, and in Automatic mode why. |
 | | **Room reflection** | On / Off / Automatic | Off | The parts of the VR room in the reflections: 3 to 5 ms on tables with a large room. They stay in the room around you. |
 | | *Status line* | | | Whether the room is left out, or that no part of it reaches the reflections on this table. |
+| | **Reflection size** | Full / Half | Half | The size of the reflections, per axis. Half renders them with a quarter of the pixels: softer reflections, for 0.45 ms less per frame on Darkest Dungeon at 2160², where it halves the slow frames (time at full resolution 95.5 → 98.7 %, missed frames 0.22 → 0.035 per second). Applied at once. |
 
 All of them apply at once. **Save** stores them for the table being played or for all tables: a table with its own values keeps
 them, so a demanding table can have, for example, a lower minimum resolution or its anti-aliasing always foveated. **Defaults** puts
