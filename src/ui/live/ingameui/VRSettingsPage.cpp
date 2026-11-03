@@ -297,6 +297,16 @@ void VRSettingsPage::BuildPage()
       [this]() { return m_player->m_vrDevice->GetDynamicResolutionTarget(); }, //
       [this](float, float v) { m_player->m_vrDevice->SetDynamicResolutionTarget(v); }));
    AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayerVR_DynamicResolutionSensitivity, //
+      [this]() { return m_player->m_vrDevice->GetDynamicResolutionSensitivity(); }, //
+      [this](int, int v) { m_player->m_vrDevice->SetDynamicResolutionSensitivity(v); }));
+   AddItem(std::make_unique<InGameUIItem>("Dynamic resolution sensitivity help"s, ""s,
+      [](int, const InGameUIItem*)
+      {
+         ImGui::AlignTextToFramePadding();
+         ImGui::TextDisabled("Low = more sensitive = will switch more often");
+      }));
+   AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayerVR_DynamicResolutionMinScale, 100.f, "%4.0f %%"s, //
       [this]() { return m_player->m_vrDevice->GetDynamicResolutionMinScale(); }, //
       [this](float, float v) { m_player->m_vrDevice->SetDynamicResolutionMinScale(v); }));

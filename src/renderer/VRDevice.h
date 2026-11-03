@@ -342,6 +342,8 @@ public:
    void SetDynamicResolution(bool enabled);
    float GetDynamicResolutionTarget() const { return m_dynamicResolutionTarget; }
    void SetDynamicResolutionTarget(float target) { m_dynamicResolutionTarget = clamp(target, 0.5f, 1.f); }
+   int GetDynamicResolutionSensitivity() const { return m_dynamicResolutionSensitivity; }
+   void SetDynamicResolutionSensitivity(int level) { m_dynamicResolutionSensitivity = clamp(level, 0, 2); }
    float GetDynamicResolutionMinScale() const { return m_dynamicResolutionMinScale; }
    void SetDynamicResolutionMinScale(float minScale) { m_dynamicResolutionMinScale = clamp(minScale, 0.5f, 1.f); }
    // Scale the next frame renders at (1 when disabled, and while a table image is captured: the capture reads the whole swapchain image, at full sharpness)
@@ -655,6 +657,7 @@ private:
    // the runtime's recommended size and the size of the swapchain (the table's ResFactor)
    std::atomic<bool> m_dynamicResolution = false; // Set by the settings page while the render thread reads it
    std::atomic<float> m_dynamicResolutionTarget = 0.85f; // GPU time target, as a fraction of the frame period
+   std::atomic<int> m_dynamicResolutionSensitivity = 1; // Settings PlayerVR/DynamicResolutionSensitivity: how many readings over the frame period lower the scale at once (see UpdateDynamicResolution)
    std::atomic<float> m_dynamicResolutionMinScale = 0.7f; // Lowest scale, as a fraction of the swapchain size
    std::atomic<float> m_dynamicRenderScale = 1.f; // Scale given to the renderer for the next frame
    std::atomic<float> m_lastGpuFrameTimeMs = 0.f; // Last reading of the counter, for the status
@@ -662,7 +665,8 @@ private:
    std::atomic<bool> m_dynamicResolutionHeld = false; // The last reading was taken for a frame pacing stall, not GPU work: the scale was kept
    XrTime m_lastPredictedDisplayTime = 0; // Of the previous frame: a step of more than one frame period means a frame missed its display
    unsigned int m_framesSinceMissed = 0;
-   unsigned int m_missedFrames = 0, m_heldReadings = 0, m_stallBreaks = 0; // Since the last status log
+   unsigned int m_missedFrames = 0, m_heldReadings = 0, m_leftOutReadings = 0, m_stallBreaks = 0; // Since the last status log
+   uint32_t m_overPeriodHistory = 0; // One bit per reading, the last one lowest: over the frame period or not (see UpdateDynamicResolution)
    unsigned int m_stallWindowFrames = 0, m_stallWindowHeld = 0; // Readings, and held readings, in the current second
    unsigned int m_stallBreaksLeft = 0; // For the current table (see UpdateDynamicResolution)
    unsigned int m_framesSinceDecrease = 0; // The scale rises again a quarter of a second after it was lowered (see UpdateDynamicResolution)
