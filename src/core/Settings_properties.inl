@@ -167,13 +167,15 @@ PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendere
 // Which cores the threads run on while a table is played, see src/steamframe/ThreadPlacement.h; no menu entry
 PropBool(Player, ThreadPlacement, "Thread placement"s, "Run the render thread, the logic thread and the others on cores of their own while a table is played"s, true);
 #endif
-// What the reflections leave out, see src/steamframe/Reflections.h; off in the build of the Steam Frame
+// What the reflections leave out and their size, see src/steamframe/Reflections.h; off and half in the build of the Steam Frame
 #ifdef VPX_STEAM_FRAME_HEADSET
 PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
 PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
+PropEnum(Player, ReflectionSize, "Reflection size"s, "Size of the reflections, the playfield's and the other mirrors', per axis. Half renders them with a quarter of the pixels: softer reflections, for less GPU time per frame (0.45 ms on Darkest Dungeon at 2160 x 2160, where it halves the frames over the period)"s, int, 1, "Full"s, "Half"s);
 #else
 PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
 PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
+PropEnum(Player, ReflectionSize, "Reflection size"s, "Size of the reflections, the playfield's and the other mirrors', per axis. Half renders them with a quarter of the pixels: softer reflections, for less GPU time per frame (0.45 ms on Darkest Dungeon at 2160 x 2160, where it halves the frames over the period)"s, int, 0, "Full"s, "Half"s);
 #endif
 #endif
 PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to manage Depth Buffer on a DirectX 9 build. May solve some rendering issues"s, false);
