@@ -225,7 +225,13 @@ PSC_ERROR_IMPLEMENT(scriptApi); // Implement script error
 LPI_IMPLEMENT_CPP // Implement shared log support
 
 MSGPI_FOLDER_VAL_SETTING(pinMAMEPathProp, "PinMAMEPath", "PinMAME Path", "Folder that contains PinMAME subfolders (roms, nvram, ...)", true, "", 1024);
+#if defined(VPX_STEAM_FRAME)
+// On by default: at every power-on, WPC machines checksum their ROMs before they accept a game (Addams Family: Start ignored for 8 s).
+// PinMAME's cheat mode writes the ROMs' own "skip the checksum" marker (wpc.c), and has no effect on the other systems.
+MSGPI_BOOL_VAL_SETTING(cheatProp, "Cheat", "Cheat Mode", "Faster start of WPC machines: they skip the checksum of their ROMs at power-on", true, true);
+#else
 MSGPI_BOOL_VAL_SETTING(cheatProp, "Cheat", "Cheat Mode", "", true, false);
+#endif
 
 static std::mutex romLoadErrorsMutex;
 static string romLoadErrors;
