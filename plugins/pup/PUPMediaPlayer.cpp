@@ -325,13 +325,14 @@ void PUPMediaPlayer::StopBlocking()
    }
    lock.lock();
 
-   if (m_pFormatContext)
-      m_libAv._avformat_close_input(&m_pFormatContext);
-   m_pFormatContext = nullptr;
-
-   if (m_pVideoContext)
-      m_libAv._avcodec_free_context(&m_pVideoContext);
-   m_pVideoContext = nullptr;
+   // Closing a hardware decoder takes several milliseconds, and Render waits for this lock in the middle of a frame: they are only swapped out
+   // here, and closed at the end, without the lock
+   AVFormatContext* pFormatContext = nullptr;
+   AVCodecContext* pVideoContext = nullptr;
+   AVCodecContext* pAudioContext = nullptr;
+   std::swap(m_pFormatContext, pFormatContext);
+   std::swap(m_pVideoContext, pVideoContext);
+   std::swap(m_pAudioContext, pAudioContext);
    m_videoStream = -1;
 
    int holdSlot = -1;
@@ -372,9 +373,6 @@ void PUPMediaPlayer::StopBlocking()
       m_libAv._sws_freeContext(m_swsContext);
    m_swsContext = nullptr;
 
-   if (m_pAudioContext)
-      m_libAv._avcodec_free_context(&m_pAudioContext);
-   m_pAudioContext = nullptr;
    m_audioFormat = AV_SAMPLE_FMT_NONE;
    m_audioStream = -1;
 
@@ -383,6 +381,14 @@ void PUPMediaPlayer::StopBlocking()
    m_pAudioConversionContext = nullptr;
 
    StopAudioStream(m_audioStreamId);
+
+   lock.unlock();
+   if (pFormatContext)
+      m_libAv._avformat_close_input(&pFormatContext);
+   if (pVideoContext)
+      m_libAv._avcodec_free_context(&pVideoContext);
+   if (pAudioContext)
+      m_libAv._avcodec_free_context(&pAudioContext);
 }
 
 void PUPMediaPlayer::SetLoop(bool loop)
