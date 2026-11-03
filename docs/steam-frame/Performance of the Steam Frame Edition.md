@@ -62,8 +62,8 @@ Contents:
 the GPU clock. The same counter drives the dynamic resolution and the performance panel. With `VPX_GPU_PROFILE=1`, the log adds bgfx's
 GPU time per render target (scene, reflection probe, tone mapping, FXAA, bloom...), which is how the cost of each pass is known.
 
-**The budget.** At 72 Hz a frame has 13.9 ms. The dynamic resolution aims at 90 % of it, **12.5 ms**, to keep a margin for the
-compositor and for heavier moments (85 %, 11.8 ms, until 2026-11-02: the measurements before that date were made with it).
+**The budget.** At 72 Hz a frame has 13.9 ms. The dynamic resolution aims at 85 % of it, **11.8 ms**, to keep a margin for the
+compositor and for heavier moments.
 
 **Headless runs.** Most measurements are made with nobody in the headset: test builds pin both eyes at a player's place in front of the
 table (25 cm behind and 50 cm above the front of the playfield, 64 mm apart) and keep rendering although SteamVR does not display the
@@ -169,10 +169,10 @@ case, the Frame build adjusts the resolution every frame.
 part of the image was drawn, and scales it to the panel. Nothing is reallocated, so the scale can change every frame. On the render
 thread, after each frame, `VRDevice::UpdateDynamicResolution` reads the GPU time of the runtime:
 
-- **Down** as soon as the GPU time, averaged over about five frames, is over the target (90 % of the frame period: 12.5 ms at 72 Hz), by
-  2 % per frame or more when far over; at once for frames over the whole period. How many of those it takes, close together, is the
-  *sensitivity*: one at Low, 2 within 3 frames at Medium (the default), 3 within 5 at High. The others are left out, as they are mostly not
-  GPU work but a late frame; a frame that misses its display always counts.
+- **Down** as soon as the GPU time, averaged over about five frames, is over the target (85 % of the frame period: 11.8 ms at 72 Hz), by
+  2 % per frame or more when far over; at once for slow frames: over the whole period, or that missed their display. How many of those it
+  takes, close together, is the *sensitivity*: one at Low, 2 within 3 frames at Medium (the default), 3 within 5 at High. The others are left
+  out, as they are mostly not GPU work but a frame handed over late.
 - **Up** when the time expected at the next step stays under 97 % of the target, a quarter of a second after the last step down, by 0.3 %
   to 1 % per frame depending on the room left.
 - Between the **minimum** (70 % of the full size by default) and the **full size**, which is the render resolution of the table (125 % of
@@ -185,7 +185,7 @@ time, to **2150² on average, at full size 88–91 % of the time**, for a few fr
 run from a cool device held 72.0 fps without throttling, the GPU levelling at 85–86 °C. Early runs at fixed 2160² had 24 % of their
 frames reprojected by the compositor; with dynamic resolution, 4 %.
 
-**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (90 %), the
+**Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (85 %), the
 sensitivity (Medium) and the minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
 to the next table started); the Display & Performance screen shows it. See [section 12](#12-settings-reference).
 
@@ -482,8 +482,8 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | Section | Option | Values | Default (Frame) | What it does |
 |---|---|---|---|---|
 | Dynamic resolution | **Dynamic resolution** | on / off | on | Adjusts the rendering resolution every frame to the GPU time ([section 4](#4-dynamic-resolution)). Off, the table renders at its full resolution whatever it costs. |
-| | **Dynamic resolution target** | 50–100 % | 90 % | The GPU time aimed at, as a share of the frame period (90 % of 13.9 ms is 12.5 ms; 85 % until 2026-11-02). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
-| | **Dynamic resolution sensitivity** | Low / Medium / High | Medium | How many frames over the whole frame period, close together, it takes to lower the resolution at once: Low one, Medium 2 within 3 frames, High 3 within 5. A missed frame always counts. A line under it recalls: "Low = more sensitive = will switch more often". Headless, Darkest Dungeon spends 58, 66 and 72 % of its time at full resolution at Low, Medium and High, for a few more missed frames (0, 0.03 and 0.04 per second); on Robot Invasion with its mirrors, at its limit, missed frames go from 0.06 to 0.13–0.14 per second. |
+| | **Dynamic resolution target** | 50–100 % | 85 % | The GPU time aimed at, as a share of the frame period (85 % of 13.9 ms is 11.8 ms). 90 % suits a table that sits just under its full size (Darkest Dungeon: 87.7 % of the time at full resolution worn, against 48 % at 85 %), but on a table that cannot hold its full size it runs the GPU at its limit (Robot Invasion with its mirrors: a missed frame per second, against 0.14 at 85 %). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
+| | **Dynamic resolution sensitivity** | Low / Medium / High | Medium | How many slow frames (over the whole frame period, or missed), close together, it takes to lower the resolution at once: Low one, Medium 2 within 3 frames, High 3 within 5. A line under it recalls: "Low = more sensitive = will switch more often". Headless, Darkest Dungeon spends 58, 66 and 72 % of its time at full resolution at Low, Medium and High, for a few more missed frames (0, 0.03 and 0.04 per second); on Robot Invasion with its mirrors, at its limit, missed frames go from 0.06 to 0.13–0.14 per second. |
 | | **Dynamic resolution minimum** | 50–100 % | 70 % | The lowest resolution allowed, as a share of the full size per axis (70 % of 2160 is 1512 pixels, half the pixels). The headset's recommended resolution is 80 %. Raise it to keep a table sharper at the price of missed frames. |
 | | *Status line* | | | The resolution of the last frame, the GPU time against the frame period and the target, the readings left out by the sensitivity, and "held" when a frame pacing stall was detected ([section 2.2](#22-the-desktop-window-is-not-drawn-the-end-of-the-frame-pacing-stall)). |
 | Foveated rendering | **Foveated rendering** | Off / Low / Medium / High | Medium | How small the full-rate area around the gaze is ([section 5](#5-foveated-rendering)). On Addams the three levels cost about the same (11.2–11.5 ms against 14.3 ms off). |
