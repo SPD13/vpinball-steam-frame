@@ -122,4 +122,7 @@ private:
    ViewState& State(); // State of the currently active view
 
    RenderTarget* GetRenderTarget(bool isStaticRT);
+#if defined(VPX_STEAM_FRAME)
+   unsigned int m_reflectionSizeRevision = 0; // Steam Frame Edition: the size of the render targets (Settings Player/ReflectionSize, see src/steamframe/Reflections.h)
+#endif
 };

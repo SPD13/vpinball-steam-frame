@@ -383,6 +383,15 @@ RenderTarget* RenderProbe::GetRenderTarget(bool isStaticRT)
       int w, h;
       m_renderer->GetRenderSizeAA(w, h);
       const int downscale = GetRoughnessDownscale(m_roughness);
+      #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: plane reflections at half size per axis (Settings Player/ReflectionSize), sampled at screen coordinates as with the roughness downscale
+      if (m_type == PLANE_REFLECTION)
+      {
+         const float scale = VPX::Reflections::GetProbeScale();
+         w = max(1, static_cast<int>(lroundf(static_cast<float>(w) * scale)));
+         h = max(1, static_cast<int>(lroundf(static_cast<float>(h) * scale)));
+      }
+      #endif
       rt = new RenderTarget(m_renderer->m_renderDevice, m_renderer->IsStereo() ? SurfaceType::RT_STEREO : SurfaceType::RT_DEFAULT, m_name + (isStaticRT ? ".Stat" : ".Dyn"), w / downscale,
          h / downscale, m_renderer->GetRenderFormat(), true, 1, "Failed to create plane reflection render target", nullptr);
       if (!isStaticRT)
@@ -401,14 +410,24 @@ RenderTarget* RenderProbe::GetRenderTarget(bool isStaticRT)
 RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
 {
    assert(m_renderer != nullptr);
+   #if defined(VPX_STEAM_FRAME)
+   if (!VPX::Reflections::IsProbeShown(*this)) // Extra mirrors left out (Settings Player/ExtraMirrors)
+      return nullptr;
+   if (const unsigned int revision = VPX::Reflections::GetSizeRevision(); revision != m_reflectionSizeRevision) // Size changed (Settings Player/ReflectionSize)
+   {
+      // Made again at the new size for every view, the old ones deleted at the end of the frame (before the state of the view is taken: releasing drops it)
+      m_reflectionSizeRevision = revision;
+      vector<RenderView*> views;
+      for (const auto& [view, viewState] : m_viewState)
+         views.push_back(const_cast<RenderView*>(view));
+      for (RenderView* view : views)
+         ReleaseRenderTargets(view);
+   }
+   #endif
    ViewState& vs = State();
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    assert((renderMask & Renderer::REFLECTION_PASS) == 0);
-   #if defined(VPX_STEAM_FRAME)
-   if (!VPX::Reflections::IsProbeShown(*this)) // Extra mirrors left out (Settings Player/ExtraMirrors)
-      return nullptr;
-   #endif
    const ReflectionMode mode = min(m_reflection_mode, m_renderer->GetMaxReflectionMode());
 
    if (mode == REFL_NONE || (isStaticOnly && (mode == REFL_BALLS || mode == REFL_DYNAMIC)) || (isDynamicOnly && (mode == REFL_STATIC)))
