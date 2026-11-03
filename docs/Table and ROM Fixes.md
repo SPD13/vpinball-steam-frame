@@ -261,6 +261,39 @@ the Frame: the `DMDPUP` flasher of the cabinet in the headset.
 
 History: version 1, 2026-10-28.
 
+### <a id="aladdin-ultradmd"></a>Aladdin: scores on the cabinet's DMD
+
+Applies to: tables whose file name contains `Aladdin` (checked with *Aladdin (Original 2026) Tombg*, with its PinUP Player pack
+`Aladdin`). Another Aladdin table without these two lines is reported as "not needed".
+
+**Symptom.** In VR the cabinet has a backglass and a DMD. The backglass shows the pack's videos and the scores; the DMD stays black.
+
+**Cause.** The same as [City Hunter](#city-hunter-ultradmd), by the same author: every screen of the pack's layout is on the
+backglass, its DMD screen included (screen 5, "FullDMD", positioned on the whole of screen 2), and the scores are labels of it. The
+cabinet's DMD is a legacy DMD flasher (`DMDPUP`), which only shows what the script sends to the table's DMD, and the script ships
+with UltraDMD off:
+
+```vb
+Const UltraDMDUpdateTime	= 5000	'UltraDMD update time (msec).  Increase value if you encounter stutter with UltraDMD on
+Const UseUltraDMD = 0				'0 = Don't use UltraDMD, 1=Use it
+```
+
+Until 2026-11-02 the PUP plugin also drew screen 5 in the score view, because a screen (6, Off) is positioned on it: the DMD showed
+the labels of the backglass, and the labels changed size on the backglass from frame to frame (the score looked doubled and wobbled).
+The plugin now draws a screen positioned on the backglass on the backglass only ([PinUP Player on the Steam
+Frame](PinUP%20Player%20on%20the%20Steam%20Frame.md), section 9), and the DMD went black, as City Hunter's.
+
+**Fix.** As City Hunter's: `UseUltraDMD` is set to 1 and `UltraDMDUpdateTime` to 1000. The script then creates UltraDMD (the FlexDMD
+plugin), refreshes its scoreboard (`DisplayScoreboard00`: the players' scores, `Credits n`, `Ball n/3`) every second, and shows its
+messages (`UDMD "BALL SAVED"`, extra ball, ball locks, Jasmine bonuses). The backglass and the PuP labels are unchanged (`usePuPDMD`
+stays on).
+
+**Checked** on the Mac, 2026-11-02: both texts are found once in the script, CRLF kept; with them, the table starts without a script
+error, UltraDMD is created and loads its fonts, and the PUP plugin draws on the backglass only. **To check** on the Frame: the DMD in
+the headset.
+
+History: version 1, 2026-11-02.
+
 ### <a id="sonic-star-wars-dip-switches"></a>Star Wars (Sonic 1987): DIP switches of the game
 
 Applies to: the ROM `sonstwar` (checked with *Star Wars (Sonic 1987) mfuegemann DT-FS-VR-MR Ext2k Conversion v1.2*). Other tables of this
