@@ -66,6 +66,26 @@
       ]
     },
     {
+      "id": "aladdin-ultradmd",
+      "version": 1,
+      "title": "Aladdin: scores on the cabinet's DMD",
+      "symptom": "The DMD of the cabinet stays black. The scores only show on the backglass, with the videos of the PuP pack.",
+      "cause": "The pack puts all its screens on the backglass, its DMD screen included, and the table's DMD only shows what the script sends to it. The script can send a scoreboard to UltraDMD, but it ships with UseUltraDMD = 0.",
+      "change": "UseUltraDMD is set to 1: the DMD of the cabinet shows the UltraDMD scoreboard (players' scores, ball, credits) and the script's messages (ball saved, extra ball, ball locks). The scoreboard is refreshed every second instead of every 5 s. The backglass is unchanged.",
+      "doc": "aladdin-ultradmd",
+      "match": { "files": ["aladdin"] },
+      "script": [
+        {
+          "find": "Const UseUltraDMD = 0\t\t\t\t'0 = Don't use UltraDMD, 1=Use it\n",
+          "replace": "Const UseUltraDMD = 1\t\t\t\t'0 = Don't use UltraDMD, 1=Use it ' Set to 1 by the Steam Frame Edition (fix aladdin-ultradmd): the pack leaves the cabinet's DMD black\n"
+        },
+        {
+          "find": "Const UltraDMDUpdateTime\t= 5000\t",
+          "replace": "Const UltraDMDUpdateTime\t= 1000\t' 5000 before the Steam Frame Edition (fix aladdin-ultradmd): the plugin's UltraDMD does not stutter, and the score followed 5 s late\t"
+        }
+      ]
+    },
+    {
       "id": "sonic-star-wars-dip-switches",
       "version": 1,
       "title": "Star Wars (Sonic 1987): DIP switches of the game",
