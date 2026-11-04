@@ -325,7 +325,7 @@ setting.
 
 A reflection draws the scene again every frame, in a mirrored view, with its own draw calls. On the tables where it is expensive, what it costs is the parts it draws, on the GPU and on
 the render thread, far more than its size: on Darkest Dungeon its pass only goes from 1.39 to 1.79 ms between 1296² and 2160², and a reflection at half size saves about 0.5 to 0.8 ms ([section 13](#13-what-was-measured-and-not-done)). So
-two settings leave parts out rather than lower the quality of the rest. The playfield's reflection itself stays, with the table, the cabinet, the balls and a topper in it.
+two settings leave parts out rather than lower the quality of the rest, and a third, *Reflection size*, makes the reflection smaller where nothing can be left out. The playfield's reflection itself stays, with the table, the cabinet, the balls and a topper in it.
 
 **Extra mirrors.** A table can have planar reflections of its own besides the playfield's, usually on the walls of a cabinet, and each one is a whole further render of the scene. Robot Invasion has three, for three surfaces of a few triangles,
 two of them shown at only 5 % and 50 %: they draw 2,330 draws per frame instead of 990, and keep the render thread busy for 15 ms per frame instead of 7. With the setting off, a planar reflection other than the playfield's is not rendered, and
@@ -357,7 +357,9 @@ Most tables have nothing to leave out, and do not change: on Addams, Darkest Dun
 
 **What it changes on screen.** The wall surfaces of a table with extra mirrors look flatter, as they no longer reflect the table. A glossy playfield no longer shows the room, which may be noticed in a bright room. If a table looks better with them, set them to *On* or *Automatic* for that table: **Save** in this section stores them for the table being played or for all.
 
-**Settings** (Steam Frame screen, section *Reflections*; live, per table or for all): *Extra mirrors* and *Room reflection*, On / Off / Automatic, each with a status line that says what this table has and what was done with it.
+**Reflection size.** On tables where nothing can be left out, the reflection can still be made smaller: at *Half*, the playfield's reflection is rendered at half the size per axis (a quarter of the pixels) and stretched over the playfield. On Darkest Dungeon at 2160² it saves about 0.45 ms per frame and halves the frames over the whole period, so the table spends more time at full resolution (95.5 → 98.7 %) and misses fewer frames (0.22 → 0.035 per second, headless). The reflection is softer; the render thread's work does not change. *Half* is the default in the Frame build, for all tables (owner's choice, 2026-11-02); its look in the headset was not reviewed table by table, so set *Full* for a table whose glossy playfield matters more than the time.
+
+**Settings** (Steam Frame screen, section *Reflections*; live, per table or for all): *Extra mirrors* and *Room reflection*, On / Off / Automatic, each with a status line that says what this table has and what was done with it, and *Reflection size*, Full / Half.
 
 ## 8. Fewer bytes
 
@@ -607,7 +609,7 @@ Other ways of lightening the reflection, tried and set aside, on Darkest Dungeon
 | Parts over 100 units above the playfield out | 1.65 ms | 1.66 ms | Nothing to speak of |
 | Heavy parts out (over 10,000 triangles) | 1.30 ms, the statues gone | 1.67 ms | Not worth it |
 | Coarser meshes (8 times the error) | 1.91 ms | 1.62 ms | Depends on the table |
-| Half size | 2.04 ms | 1.24 ms | 0.5–0.8 ms of GPU, softer reflections, nothing on the render thread: a possible further step |
+| Half size | 2.04 ms | 1.24 ms | 0.5–0.8 ms of GPU, softer reflections, nothing on the render thread: made the setting *Reflection size*, Half by default ([section 7.5](#75-what-the-reflections-leave-out)) |
 
 The "group elements" of a table's collections were also suspected, as 47 tables of 95 use them and these parts escape the simplified meshes: clearing the flag gave WildWest 0.6 ms, with no gain in resolution, and nothing on Addams or Lord of the Rings.
 

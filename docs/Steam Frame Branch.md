@@ -450,7 +450,7 @@ Ghostbusters 8.23 → 6.71 ms (−1.52 ms); details and checks in `docs/Performa
 
 ## 22. Reflections (2026-11-01)
 
-Files: `src/steamframe/Reflections.h/.cpp` (new), `src/renderer/RenderProbe.cpp`, `src/parts/primitive.cpp`, `src/renderer/Renderer.cpp`, `src/renderer/VRDevice.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`.
+Files: `src/steamframe/Reflections.h/.cpp` (new), `src/renderer/RenderProbe.h/.cpp`, `src/parts/primitive.cpp`, `src/renderer/Renderer.cpp`, `src/renderer/VRDevice.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`.
 
 A reflection draws the scene again every frame, and what it costs is the parts it draws, on the GPU and on the render thread: a lower resolution saves little, leaving parts out saves a lot on the tables where they are heavy. `Player.ExtraMirrors` and
 `Player.RoomReflection` hold On, Off or Automatic, Off by default in the Frame build and On in the others, and apply at once (the page is `ReflectionsPage`, in the Steam Frame screen).
@@ -469,6 +469,12 @@ Files: `src/steamframe/ThreadPlacement.h/.cpp` (new), `src/core/player.cpp`, `sr
 
 Steam starts a game with cores 3 to 7, and the scheduler moves its threads between these and shares them with SteamVR. VPX cannot raise its priority on the Frame, but it can choose its cores. `Player.ThreadPlacement`, on in the Frame build only and without a menu entry, starts a thread when the table is loaded (`Player`, end of the session's setup, not for the lobby) that gives the threads of the process their cores by name, 4 times per second: the logic thread on cores 5 and 6, `RenderThread` on core 7, the others on cores 2 to 4. It stops when the table closes and puts back what the threads had, so that the workers of the next load have all the cores. It does nothing unless `cpu_capacity` shows the Frame's layout. Measurements, and why headless runs must now start with `taskset -c 3-7`: `docs/Performance on the Steam Frame.md`, section 8.10.
 
+## 24. Log written by a thread of its own (2026-11-02)
+
+Files: `src/utils/Logger.cpp` (CRLF), under `VPX_STEAM_FRAME && __STANDALONE__ && !__ANDROID__`.
+
+The log file and the console were written by the thread that logs, so a line logged by the logic thread while it prepared a frame (a table's script prints, PuP's errors, the "Controller models" line every 5 s) could wait for the disk for several milliseconds: caught 4 times in 90 s on Darkest Dungeon. Lines are now formatted at once, with their time and thread (`PreformattedFormatter`), and queued to an `AsyncAppender`, whose `LogWriter` thread writes them to the 5 MB rolling file and the console. The queue holds 100,000 lines at most; past that, lines are dropped and a warning says how many. Its destructor drains the queue at exit, but the lines of the last moment may be lost if the process crashes. The debugger window keeps its synchronous appender, and `Logger::Truncate` truncates the asynchronous file as well. Checked: logs complete and in order over 8 headless runs on the Frame; its effect on the dips is not measured on its own (`docs/Performance on the Steam Frame.md`, section 8.12).
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -482,6 +488,7 @@ Steam starts a game with cores 3 to 7, and the scheduler moves its threads betwe
 - Standalone desktop builds record the scores of the library tables they play (`profiles.json`, `scores.json` in the preferences folder) and their PinMAME plugin falls back to the bundled memory maps (section 14); the table picker gets a Scores tab and a player item.
 - Standalone desktop builds get a "Tables" entry at the top of the in-game menu. When a table starts they create `VPinballX/Tables/pinmame/roms` in the documents folder, unless a PinMAME folder is already defined or `~/.pinmame/roms` exists (section 6).
 - iOS/Android library builds: uploads are staged in `.upload`; `InGameUIPage` has the tile code; the home page of the web server stays the file manager, the tables routes answer 404 and `/info` reports `tableLibrary: false`, so the file manager hides its link to the tables page; no other intended change.
+- Standalone desktop builds write their log file and console from a `LogWriter` thread (section 24): the same lines, in the same order; those of the last moment may be missing after a crash.
 - Standalone desktop builds have the PinMAME plugin's `Cheat` setting on by default (section 6): WPC machines skip the checksum of their ROMs at power-on.
 - The Visual Studio project files (`make/*.vcxproj`) were not updated. None of the new files is needed by a non-standalone build; the CMake build lists them.
 
@@ -592,6 +599,8 @@ src/renderer/RenderFrame.h, .cpp        scale of the frame for the presentation
 src/renderer/RenderDevice.h, .cpp       Begin/EndScaledRendering, scaled full-screen quad
 src/renderer/Renderer.cpp               scaled frame, flagged targets, scale uniforms, depth copy
 src/renderer/RenderProbe.cpp, Sampler.cpp   flagged probe targets, re-activation with the scale
+src/renderer/RenderProbe.h, .cpp        plane reflection targets at the Reflection size, released when it changes (section 22)
+src/utils/Logger.cpp                    log file and console written by a thread of their own (section 24)
 src/ui/live/ingameui/VRSettingsPage.cpp foveation and dynamic resolution items
 src/input/XRInputHandler.h              eye gaze pose action and interaction profile (foveated rendering)
 src/core/player.h, player.cpp           table image on close, score tracker
