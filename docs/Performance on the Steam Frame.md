@@ -496,7 +496,7 @@ exports), and nothing on light tables. Points of design, with a proposal for eac
   Meshes that coincide (a part and its "off" or light map layer, as Addams' GI pairs and LOTR's `wireramps`) are simplified once and
   share the index list, so the layers stay exactly on top of each other. Since 2026-11-02, light maps made of some of their part's
   triangles (tables baked with VLM) are simplified with the part, from the same collapses, the edges of the light maps and the seams of
-  their textures locked (`docs/Steam Frame Branch.md`, section 19).
+  their textures kept as seams that may only get shorter (locked until 2026-11-03, see section 8.13; `docs/Steam Frame Branch.md`, section 19).
 - **Settings.** On by default in the Frame build with a per-table switch (as texture compression has), off by default elsewhere; an
   upstream pull request later, as an option.
 - **Validation.** The Mac captures of Table Geometry, section 6 (wire guides, printed artwork), the owner's check in the headset with
@@ -1171,6 +1171,39 @@ At Medium the deep dips are gone (lowest line 2074², against 1740², 1904² and
 No difference beyond the noise headless, where Darkest Dungeon hardly misses a frame: the change is for the late frames of worn play, not measured yet. These runs show another cost: at the 90 % target, Robot Invasion with its mirrors misses about one frame per second (98.5–98.7 % on time), against 0.14 per second at 85 % (the runs above): on a table that cannot hold its full size, 90 % runs the GPU at its limit. The default went back to 85 % after them.
 
 **Not settled.** One worn play per level. One run per level per table, two on Darkest Dungeon: the two runs at Medium differ by 7 points. Robot Invasion's missed frames at Medium and High come from one run each. The target of 90 % with Medium gains most on Darkest Dungeon and misses a frame every 5 seconds headless; worn, two plays on that table only (87.7 and 90.3 %), none on other tables. Missed frames under the sensitivity with the 85 % default (fork master 57f88f23d) are on the dev slot since 2026-11-03, not played yet.
+
+### 8.13 What the lights cost on a table baked with light maps (2026-11-03)
+
+Medieval Madness (VPW 1.0.1) holds its full size in attract mode (2160², GPU 10.4–11.3 ms worn) and drops to 75–92 % as soon as a game starts and
+its lights turn on (GPU held at about 11.5 ms, roughly 3–4 ms more at full size). A light map whose light is off is not drawn at all
+(`Primitive::Render` skips an additive part with nothing to add), so the cost follows the lights.
+
+Headless series on the Frame (fixed 2160², bgfx's GPU time per target, cores 3–7, `Doc/test-hooks/lightcost-*`; temporary switches that leave
+out each kind of part, or force each family of light maps on at full brightness):
+
+| Run (game window) | GPU (bgfx) | Light-map triangles drawn |
+| --- | --- | --- |
+| As it is (about 320 maps lit in an autoplayed game) | 8.2–8.5 ms | 520 k |
+| No additive part drawn | 6.05 ms | 0 |
+| All 726 maps of the view forced on | 11.2 ms | 1.1 M |
+| All on, at 70 % of the size (1512²) | +3.7 ms over none at that size | 1.1 M |
+
+- The light maps cost up to 5.2 ms, and half of that does not follow the pixels: halving the pixels removed only 1.3 ms of it. Dynamic
+  resolution only scales the pixels, which is why it has to drop far to make up for the lights. By family at full brightness: flashers
+  (`LM_FL`, 166 draws, 405 k triangles) 1.65 ms, general illumination 1.4 ms, inserts 1.0 ms, bumpers 0.46 ms: about 4 µs per thousand
+  light-map triangles, the number of draws itself negligible. The `Light` and `Flasher` parts, the ball-shadow technique (0.2 ms) and the
+  reflection (no light map is reflected) are not the cost; light maps under 2 % of their strength are too few to matter.
+- The simplified levels stopped at a floor (1.27 M triangles at 1 VPU, still 779 k at 16 VPU): the places where the light maps on a part
+  differ were locked, and `BM_Parts` alone carries 84 light maps. 90 % of the 44 k locked places were edges of light maps, not seams of their
+  textures. Seams that may get shorter (`meshopt_SimplifyVertex_Protect` on welded meshes, plain seams otherwise) keep every light map
+  consistent with its part and give 1.18 M at 1 VPU and 463 k at 16 VPU; all maps on: 11.31 → 10.21 ms (light-map triangles at the lockbar
+  1,107 k → 1,021 k), an autoplayed game about −0.3 ms. On the Mac, all maps on at 4 px of allowed error, against the full meshes: 2,390
+  pixels off by more than 32 levels, against 1,985 with the locks.
+- Light maps that fade out past their own triangles, their edges free and their coverage an attribute of the simplifier, were built and
+  measured too (kept aside, not merged): they did not draw fewer light-map triangles near the lockbar without leaking light (1,156 k
+  at the weight that kept the image, 965 k with twice the strong differences, 861 k with light visibly leaking). The rest of the cost is
+  the light maps themselves: about a million triangles and their pixels when the table is fully lit.
+- Allowed error 2 px: no change; 4 px: −1 ms.
 
 ## 9. Reproduction
 

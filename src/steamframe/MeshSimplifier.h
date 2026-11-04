@@ -19,7 +19,8 @@
 // levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
 // Additive parts and light maps (layers) are drawn on the very surface of the part under them, without writing depth: a layer made of
 // triangles of its part (tables baked with light maps trim them to the lit triangles) is simplified with that part, from the same collapses,
-// and draws the level the part draws. The edges of the layers on the part and the seams of their textures do not move. A part under a layer
+// and draws the level the part draws. The edges of the layers on the part and the seams of their textures stay edges: they only get shorter,
+// collapsing along themselves, so that each simplified triangle still has the same layers at its three corners. A part under a layer
 // that is not made of its triangles is not simplified.
 
 #include "math/Mesh.h"

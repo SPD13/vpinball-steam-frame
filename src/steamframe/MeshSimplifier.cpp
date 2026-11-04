@@ -278,8 +278,11 @@ static bool CoverOfLayers(const Primitive* part, const Matrix3D& matrix, const v
 
 // The vertices given to the simplifier for a part with layers: a copy of a vertex for each set of layer vertices it meets (the layers on the triangle
 // and their texture coordinates at the corner), so that a simplified triangle tells which layers draw it and with which of their vertices. The
-// places where the triangles do not all meet the same set (the edges of a layer on the part, the seams of a layer's texture) are locked: the
-// simplifier only collapses a vertex whose triangles all have the same layers, continuous in their textures.
+// places where the triangles do not all meet the same set (the edges of a layer on the part, the seams of a layer's texture) are seams for the
+// simplifier: their copies stay apart, so that a simplified triangle never mixes two sets, but a seam may get shorter, collapsing along itself.
+// meshoptimizer keeps the seams of a mesh by itself; a welded mesh, simplified with the Permissive option that crosses the seams of its own
+// texture, gets meshopt_SimplifyVertex_Protect there. Locking those places instead kept most of the triangles of parts with many light maps
+// (Medieval Madness, 2026-11-03: 1.27 M triangles left at 1 VPU against 1.18 M, and 779 k against 463 k at 16 VPU).
 struct LayerSplit
 {
    vector<unsigned int> source; // Vertex of the simplifier's input that each copy repeats
@@ -350,7 +353,7 @@ static void SplitForLayers(const LayerCover& cover, const vector<Primitive*>& la
    }
    split.lock.resize(split.source.size());
    for (size_t s = 0; s < split.source.size(); s++)
-      split.lock[s] = placeLocked[place[split.source[s]]] ? meshopt_SimplifyVertex_Lock : 0;
+      split.lock[s] = placeLocked[place[split.source[s]]] && triangles ? meshopt_SimplifyVertex_Protect : 0;
 }
 
 // The parts are placed the same way and their vertices (scaled by their size) are at the same places
@@ -750,7 +753,7 @@ void MeshSimplifier::Simplify(const Group& group)
    if (welded)
       weights[3] = weights[4] = uvWeight;
 
-   // Layers on the part: the simplifier gets a copy of a vertex per set of layer vertices it meets, and the edges of the layers are locked
+   // Layers on the part: the simplifier gets a copy of a vertex per set of layer vertices it meets, and the edges of the layers are seams
    const auto leaveOut = [this, &group, tris, t0]()
    {
       const std::lock_guard<std::mutex> lock(m_statsMutex);
