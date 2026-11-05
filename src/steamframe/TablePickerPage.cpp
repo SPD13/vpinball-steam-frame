@@ -20,6 +20,7 @@
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
 #include "steamframe/vrui/Keyboard.h"
+#include "steamframe/vrui/PageView.h"
 #include "steamframe/vrui/VRUI.h"
 #include "steamframe/vrui/Theme.h"
 #include "steamframe/vrui/Widgets.h"
@@ -281,22 +282,58 @@ void TablePickerPage::StepTab(int direction)
       SetTab(static_cast<int>(s_tab) + direction);
       return;
    }
-   // The tabs, then the icon buttons, then back to the first tab
+   // First level of the buttons: the tabs, the icon buttons, the search field and the button clearing it (when there is a search), then back
+   // to the first tab. Start gets to the tables (see ActivateItem).
    const int nTabs = static_cast<int>(std::size(NEW_VIEW_TABS));
-   const int nStops = nTabs + TAB_ICON_COUNT;
+   const int searchStop = nTabs + TAB_ICON_COUNT;
+   const int nStops = searchStop + (s_search.empty() ? 1 : 2);
+   const InGameUIItem* const item = GetSelectedItem();
    int index = nTabs + m_tabIcon;
-   if (m_tabIcon < 0)
+   if (item && item->m_label == SEARCH_ITEM)
+      index = searchStop + (m_clearFocus ? 1 : 0);
+   else if (m_tabIcon < 0)
       for (int i = 0; i < nTabs; i++)
          if (NEW_VIEW_TABS[i] == s_tab)
             index = i;
    index = (index + direction + nStops) % nStops;
+   if (index >= searchStop)
+   {
+      SelectItem(SEARCH_ITEM);
+      m_clearFocus = index > searchStop;
+      return;
+   }
+   SelectItem(TABS_ITEM);
    if (index >= nTabs)
    {
       m_tabIcon = index - nTabs;
       return;
    }
    m_tabIcon = -1;
-   SetTab(static_cast<int>(NEW_VIEW_TABS[index]));
+   if (NEW_VIEW_TABS[index] != s_tab)
+      SetTab(static_cast<int>(NEW_VIEW_TABS[index]));
+}
+
+bool TablePickerPage::SelectFirstTable()
+{
+   const auto& items = InGameUIPageView::GetItems(*this);
+   for (int i = 0; i < static_cast<int>(items.size()); i++)
+      if (items[i]->m_type == InGameUIItem::Type::Navigation && items[i]->m_path.starts_with("tables/"))
+      {
+         InGameUIPageView::SetSelectedIndex(*this, i);
+         return true;
+      }
+   return false;
+}
+
+void TablePickerPage::SelectItem(const char* label)
+{
+   const auto& items = InGameUIPageView::GetItems(*this);
+   for (int i = 0; i < static_cast<int>(items.size()); i++)
+      if (items[i]->m_label == label)
+      {
+         InGameUIPageView::SetSelectedIndex(*this, i);
+         return;
+      }
 }
 
 void TablePickerPage::ActivateTabIcon(int icon)
@@ -376,8 +413,32 @@ void TablePickerPage::ActivateItem()
    }
    else if (item && item->m_label == TABS_ITEM && m_newView && m_tabIcon >= 0)
       ActivateTabIcon(m_tabIcon);
+   else if (item && item->m_label == TABS_ITEM && m_newView)
+   {
+      // Two levels with the buttons: OK on a tab gets to its first table (Back gets back to the tabs, see HandleBack)
+      m_tablesFromSearch = false;
+      SelectFirstTable();
+   }
    else
       AdjustItem(1.f, true);
+}
+
+// New VR menu, with the buttons: Back from the tables gets back to the first level (the tab row, or the search field when the tables were
+// reached from it), then from there to the rail of the menu
+bool TablePickerPage::HandleBack(bool wasButtonNav)
+{
+   if (!m_newView || !wasButtonNav)
+      return false;
+   if (const InGameUIItem* item = GetSelectedItem(); item && (item->m_label == TABS_ITEM || item->m_label == SEARCH_ITEM))
+   {
+      if (VPX::VRUI::Keyboard::IsEditing("tables/search"s))
+         VPX::VRUI::Keyboard::Close();
+      return false;
+   }
+   SelectItem(m_tablesFromSearch ? SEARCH_ITEM : TABS_ITEM);
+   m_tabIcon = -1;
+   m_clearFocus = false;
+   return true;
 }
 
 void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
@@ -406,15 +467,18 @@ void TablePickerPage::AdjustItem(float direction, bool isInitialPress)
 #endif
       if (item->m_label == SEARCH_ITEM)
       {
+         // New view: the field and the button clearing it are stops of the first level (StepTab), with the tabs
+         if (m_newView && VPX::VRUI::Keyboard::IsUsed())
+         {
+            StepTab(direction < 0.f ? -1 : 1);
+            return;
+         }
          // New view: right gets to the button clearing the search, left back to the field
          if (m_newView && (m_clearFocus || (direction > 0.f && !s_search.empty())))
          {
             m_clearFocus = direction > 0.f;
             return;
          }
-         // The keyboard of the new VR menu opens with the field
-         if (m_newView && VPX::VRUI::Keyboard::IsUsed())
-            return;
          // Without a keyboard, the search text is entered with the navigation buttons
          m_player->m_liveUI->m_inGameUI.AddPage("tables/search"s,
             []() { return std::make_unique<TextEntryPage>("Search tables"s, s_search, [](const string& search) { s_search = search; }, true); });
@@ -633,7 +697,7 @@ void TablePickerPage::BuildPage()
    // All the tables are listed: the views only draw the ones on screen, and the images are loaded as they get displayed (see GetThumbnail)
    const size_t matchCount = tables.size();
 
-   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, m_newView ? "Left/Right: previous/next list, then the buttons to rescan the tables folder, change the view and the sort order (OK)"s : "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
+   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, m_newView ? "Left/Right: previous/next list, then the buttons to rescan the tables folder, change the view and the sort order, then the search. OK: the tables of the list, or the button"s : "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
       .m_customHighlight = true;
    if (s_tab == PickerTab::Menu)
    {
@@ -650,7 +714,7 @@ void TablePickerPage::BuildPage()
       BuildLeaderboardList(*this);
       return;
    }
-   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, m_newView && VPX::VRUI::Keyboard::IsUsed() ? "Type a few letters of the name of a table. OK: type with the buttons, Right: the button clearing the search."s : "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
+   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, m_newView && VPX::VRUI::Keyboard::IsUsed() ? "Type a few letters of the name of a table. OK: type with the buttons, Done: the tables found. Left/Right: the button clearing the search, the tabs."s : "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header,
       m_scanning                   ? "Scanning tables folder..."s
@@ -1005,17 +1069,13 @@ void TablePickerPage::RenderSearchNewView()
    {
       static const string owner = "tables/search"s;
       Keyboard::KeepOpen(owner, pos, pos + ImVec2(width - clearWidth, height));
-      // Buttons: the keyboard opens when the field gets the focus, and closes when it loses it (not when the pointer is used)
+      // Buttons, two levels: the field is only highlighted when selected, OK opens the keyboard with the focus on it (see ActivateItem); it
+      // closes when the field loses the selection (not when the pointer is used)
       if (selected != m_searchSelected)
       {
          m_searchSelected = selected;
-         if (m_player->m_liveUI->m_inGameUI.IsFlipperNav())
-         {
-            if (selected && !Keyboard::IsEditing(owner))
-               OpenSearchKeyboard();
-            else if (!selected && Keyboard::IsEditing(owner))
-               Keyboard::Close();
-         }
+         if (!selected && m_player->m_liveUI->m_inGameUI.IsFlipperNav() && Keyboard::IsEditing(owner))
+            Keyboard::Close();
       }
       const bool editing = Keyboard::IsEditing(owner);
       const ImVec2 fieldSize(width - clearWidth, height);
@@ -1055,7 +1115,9 @@ void TablePickerPage::RenderSearchNewView()
 
 void TablePickerPage::OpenSearchKeyboard()
 {
-   VPX::VRUI::Keyboard::Open("tables/search"s, "Search"s, s_search, 64, [this](const string& search) { SetSearch(search); });
+   // Done, or Back while typing, closes the keyboard and gets to the first table found (Back from the tables gets back to the field)
+   const auto toTables = [this]() { m_tablesFromSearch = SelectFirstTable(); };
+   VPX::VRUI::Keyboard::Open("tables/search"s, "Search"s, s_search, 64, [this](const string& search) { SetSearch(search); }, toTables, toTables);
 }
 
 #ifdef VPX_TABLE_WEBSERVER

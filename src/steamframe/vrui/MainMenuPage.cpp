@@ -29,6 +29,8 @@ MainMenuPage::MainMenuPage(std::optional<Screen> screen)
       initial = Screen::Tables;
    m_screen = initial;
    s_lastScreen = initial;
+   // Two levels with the buttons: the rail first, OK entering the screen; back from a sub-page, on the content it was opened from
+   m_railFocus = !Shell::WasShownLastFrame();
 }
 
 InGameUIPage* MainMenuPage::GetContent()
@@ -104,9 +106,9 @@ void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
 {
    if (m_railFocus)
    {
-      // Right enters the screen
-      if (direction > 0.f && isInitialPress)
-         m_railFocus = false;
+      // The flippers go through the screens (OK enters the selected one)
+      if (isInitialPress)
+         StepScreen(direction < 0.f ? -1 : 1);
       return;
    }
    InGameUIPage* const content = GetContent();
@@ -115,7 +117,7 @@ void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
       m_railFocus = true;
       return;
    }
-   // Tiles move in their grid, left from its first column getting back to the rail
+   // Tiles move in their grid (in reading order, staying in it)
    if (isInitialPress && content->StepTileGrid(direction < 0.f ? -1 : 1, 0))
       return;
    // Left gets back to the rail, except on the items which use it (values, input mappings, and the custom items of the pages, like tabs)
@@ -140,6 +142,20 @@ void MainMenuPage::ActivateItem()
       content->ActivateItem();
    else
       m_railFocus = true;
+}
+
+// Button navigation (a cabinet, a pinball controller in VR, the sticks of the VR controllers): left is used by the values and the input
+// mappings, so most screens have no item from which it gets back to the rail. Back does it from the content, and leaves the menu from the
+// rail. While pointing (VR controllers, mouse), Back leaves the menu at once, as before.
+bool MainMenuPage::HandleBack(bool wasButtonNav)
+{
+   if (!wasButtonNav || m_railFocus)
+      return false;
+   // The screen first, for its own levels (the tables of the Tables screen get back to its tabs)
+   if (InGameUIPage* const content = GetContent(); content && content->HandleBack(wasButtonNav))
+      return true;
+   m_railFocus = true;
+   return true;
 }
 
 bool MainMenuPage::IsDefaults() const

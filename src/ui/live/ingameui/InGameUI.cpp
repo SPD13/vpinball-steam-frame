@@ -351,8 +351,8 @@ void InGameUI::OnUINavigateBack()
 #if defined(VPX_STEAM_FRAME)
    if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Back))
       return;
-   UseButtonNav();
-   if (GetActivePage() && GetActivePage()->HandleBack())
+   const bool wasButtonNav = UseButtonNav();
+   if (GetActivePage() && GetActivePage()->HandleBack(wasButtonNav))
       return;
 #endif
    NavigateBack();
