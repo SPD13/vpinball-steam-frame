@@ -236,6 +236,7 @@ private:
    void CaptureTableImageBeforeClosing();
    void UpdateTableImageReplacement();
    void CaptureTableImage(const std::filesystem::path& imagePath, const std::function<void(bool)>& onCaptured);
+   void CaptureTableImages(const vector<VPX::Window*>& windows, const vector<std::filesystem::path>& imagePaths, const std::function<void(bool)>& onCaptured);
    bool IsInGameUIClosed() const;
    bool m_tableImageCaptureStarted = false;
    bool m_tableImageMenuHidden = false;

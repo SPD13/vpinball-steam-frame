@@ -420,6 +420,7 @@ enum option_names
    OPTION_PLAY,
 #ifdef VPX_STEAM_FRAME
    OPTION_LAUNCHER,
+   OPTION_CABINET,
 #endif
    OPTION_POVEDIT,
    OPTION_POV,
@@ -471,6 +472,7 @@ static const CommandLineOption options[] = {
    { OPTION_PLAY, "Play"s, "[filename]  Load and play file"s },
 #ifdef VPX_STEAM_FRAME
    { OPTION_LAUNCHER, "Launcher"s, "Start with the table picker, to select and play tables without leaving the application"s },
+   { OPTION_CABINET, "Cabinet"s, "Start with the cabinet launcher: a reel of the tables driven by the buttons of a pinball cabinet"s },
 #endif
    { OPTION_POVEDIT, "PovEdit"s, "[filename]  Load and run file in live editing mode, then export new pov on exit"s },
    { OPTION_POV, "Pov"s, "[filename]  Load, export pov and close"s },
@@ -714,6 +716,10 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
 #ifdef VPX_STEAM_FRAME
       case OPTION_LAUNCHER:
          commands.push_back(std::make_unique<LauncherCommand>());
+         break;
+
+      case OPTION_CABINET:
+         commands.push_back(std::make_unique<LauncherCommand>(true));
          break;
 #endif
 

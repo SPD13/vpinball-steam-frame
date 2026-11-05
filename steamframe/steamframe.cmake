@@ -11,8 +11,12 @@ target_sources(vpinball PRIVATE
    # Table library, lobby and launcher mode, scores and leaderboards
    src/steamframe/Backup.h
    src/steamframe/Backup.cpp
+   src/steamframe/CabinetBackglass.h
+   src/steamframe/CabinetBackglass.cpp
    src/steamframe/CabinetDisplays.h
    src/steamframe/CabinetDisplays.cpp
+   src/steamframe/CabinetLauncherPage.h
+   src/steamframe/CabinetLauncherPage.cpp
    src/steamframe/Launcher.h
    src/steamframe/Launcher.cpp
    src/steamframe/PlayerTableImage.cpp
@@ -32,6 +36,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/TableFixes.cpp
    src/steamframe/TableLibrary.h
    src/steamframe/TableLibrary.cpp
+   src/steamframe/TableImageCache.h
+   src/steamframe/TableImageCache.cpp
    src/steamframe/TablePickerPage.h
    src/steamframe/TablePickerPage.cpp
    src/steamframe/WebServerBackup.cpp

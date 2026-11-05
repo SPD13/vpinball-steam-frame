@@ -68,6 +68,18 @@ public:
    // and gets back to it when a table is closed, until the user quits from the lobby or the picker
    bool m_launcherMode = false;
    std::filesystem::path GetLobbyTablePath() const;
+
+   // Cabinet launcher ('-Cabinet' command line option): launcher mode where the lobby shows the cabinet launcher (CabinetLauncherPage) instead
+   // of the table picker, over an empty room, the UI turned with the playfield like a table on a cabinet screen
+   bool m_cabinetMode = false;
+   string m_cabinetSelectedUuid; // The table selected in its reel, which it shows again when a table is closed
+   // Leaves the application (as 'Quit Visual Pinball'), from the lobby or a table
+   static void QuitApplication(Player* player);
+   // The computer is turned off once the application has closed everything (the Shutdown option of the cabinet launcher)
+   void RequestShutdown() { m_shutdownRequested = true; }
+   void ShutdownIfRequested();
+   // Called each frame of the lobby: in cabinet mode, opens the launcher again if the in-game UI was closed
+   void OnLobbyFrame(Player* player);
    // The rooms shipped for the lobby (tables holding only a room, made in Blender, see steamframe/lobby-room) and the empty room, chosen with
    // Standalone.LobbyRoom (remembered: saved as soon as it is chosen)
    struct LobbyRoomChoice
@@ -132,6 +144,7 @@ private:
    std::unique_ptr<VPinballLib::ScoreStore> m_scoreStore;
    bool m_isSharedPinMAMEFolderApplied = false;
    bool m_isSharedPupFolderApplied = false;
+   bool m_shutdownRequested = false;
 #ifdef VPX_TABLE_WEBSERVER
    std::unique_ptr<WebServer> m_webServer;
 #endif
@@ -143,7 +156,10 @@ extern Launcher* g_launcher;
 class LauncherCommand : public AppCommand
 {
 public:
-   LauncherCommand();
+   explicit LauncherCommand(bool cabinet = false); // 'cabinet': the cabinet launcher instead of the table picker ('-Cabinet')
    ~LauncherCommand() override = default;
    void Execute() override;
+
+private:
+   const bool m_cabinet;
 };
