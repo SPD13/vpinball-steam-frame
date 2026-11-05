@@ -50,6 +50,11 @@ public:
    // Moves the selection in the grid of tiles it is in (src/steamframe/vrui/LegacyTiles.cpp)
    bool StepTileGrid(int dx, int dy);
    int m_tileColumns = 1; // Columns of the grid of tiles, as last drawn by the view
+   // Back button (Credit, Exit) on this page: true when the page used it, otherwise the menu goes back to the previous page (the cabinet
+   // launcher, src/steamframe/CabinetLauncherPage.cpp, is never closed with Back)
+   virtual bool HandleBack() { return false; }
+   // Moves the open/close animation forward, for pages drawing themselves without calling InGameUIPage::Render (CabinetLauncherPage.cpp)
+   void UpdateOpenAnimation(float elapsedS);
 #endif
 
    InGameUIItem* GetItem(const string& label) const;
