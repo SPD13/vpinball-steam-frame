@@ -78,6 +78,7 @@ public:
 private:
    int GetRoughnessDownscale(const int roughness) const;
    void ApplyRoughness(RenderTarget* probe, const int roughness);
+   void LimitCopyToAreaOfInterest(RenderPass* copyPass) const;
 
    void RenderScreenSpaceTransparency();
 

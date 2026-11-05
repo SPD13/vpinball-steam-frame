@@ -21,6 +21,9 @@ public:
    bool IsTransparent() const { return m_isTransparent; }
    bool IsDrawCommand() const { return m_command == RC_DRAW_MESH || m_command == RC_DRAW_QUAD_PT || m_command == RC_DRAW_QUAD_PNT; }
    bool IsDrawMeshCommand() const { return m_command == RC_DRAW_MESH; }
+   bool IsCopyCommand() const { return m_command == RC_COPY; }
+   // Limits a copy to a region, the same in the source and the destination (pixels from the first row of the textures)
+   void SetCopyRegion(const int x, const int y, const int w, const int h) { m_copySrcRect = m_copyDstRect = vec4((float)x, (float)y, (float)w, (float)h); }
    RenderState GetRenderState() const { return m_renderState; }
    ShaderState* GetShaderState() const { return m_shaderState; }
    void* GetQuadVertices() { return m_vertices; }
