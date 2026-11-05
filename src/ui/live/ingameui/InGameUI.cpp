@@ -350,6 +350,8 @@ void InGameUI::OnUINavigateBack()
    if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Back))
       return;
    UseButtonNav();
+   if (GetActivePage() && GetActivePage()->HandleBack())
+      return;
 #endif
    NavigateBack();
 }
