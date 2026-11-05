@@ -31,9 +31,30 @@ library can be copied from a Frame, or restored from one of its backups, as it i
 |---|---|---|---|
 | Left / right flipper (UI Left / UI Right) | Left / right Shift | Previous / next table; held, faster and faster | Previous / next option |
 | Start | 1 | Play the table | Select the option |
-| Launch Ball | Enter | To the options band | Back to the reel |
 | Left / right magna-save (UI Up / UI Down) | Left / right Ctrl | Down: to the options band; Up: back to the keyboard while searching | Up: back to the reel |
-| Credit / Exit (Back) | 5 / Escape | Closes the keyboard, then clears the search | Back to the reel |
+| Credit / Exit (Back) | 5 / Escape | To the options band; while searching, closes the keyboard, then clears the search first | Back to the reel |
+| Launch Ball | Enter | Nothing | Nothing |
+
+In the menu opened by Options, the buttons navigate on two levels. The menu opens with the focus on the left menu (one icon per screen);
+Start enters the selected screen, Back gets back to the left menu:
+
+| Button | In the left menu | In a screen |
+|---|---|---|
+| Left / right flipper (UI Left / UI Right) | Previous / next screen | Previous / next value or tab; left flipper: back to the left menu from a link or a button |
+| UI Up / UI Down | Previous / next screen | Previous / next item |
+| Start | Enters the screen | Selects the item |
+| Credit / Exit (Back) | Back to the reel | Back to the left menu |
+| Launch Ball | | Resets the screen to its defaults |
+
+The Tables screen adds a level: the flippers go through its tab row (All, Recent, Favorites...), the icon buttons at its end, the search
+field and the button clearing the search, and Start gets to the first table of the list (on an icon button, Start uses it; on the search
+field, Start opens the keyboard of the menu to type, and Done or Back closes it and gets to the first table found). In the grid, the flippers go from table to table in
+reading order: right from the end of a row to the start of the next one, left from the start of a row to the end of the previous one.
+Back gets from the tables to the tab row (or to the search field, when they were reached from it), then to the left menu. On a cabinet the
+menu's on-screen keyboard is used, as in VR.
+
+The same applies in VR when the buttons navigate (a pinball controller, the sticks of the VR controllers). While pointing, Back closes
+the menu at once, and a click in a screen or on an icon moves the buttons' focus there.
 
 The launcher is never closed with Back: it is the start screen. A mouse works too (click a table to select it, click it again to play
 it; the wheel scrolls the reel).

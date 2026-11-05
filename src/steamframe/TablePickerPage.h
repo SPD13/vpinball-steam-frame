@@ -46,6 +46,7 @@ public:
    void SelectPrevItem() override;
    void AdjustItem(float direction, bool isInitialPress) override;
    void ActivateItem() override;
+   bool HandleBack(bool wasButtonNav) override;
 
    // New VR menu: opens its keyboard on the search field (as clicking it does)
    void OpenSearchKeyboard();
@@ -74,6 +75,8 @@ private:
 
    void SetTab(int tab);
    void StepTab(int direction);
+   void SelectItem(const char* label); // New view: selects the item with this label (the tab row, the search field)
+   bool SelectFirstTable(); // Selects the first table listed, false when there is none
    void ActivateTabIcon(int icon);
    void StepFilter(int direction);
    void SetSearch(const string& search);
@@ -86,9 +89,10 @@ private:
    void RenderSearch();
    bool m_virtualKeyboard = false; // Shown under the search field in VR, where there is no keyboard, from its activation until 'Done'
    const bool m_newView;
-   bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard opens when the buttons select it)
+   bool m_searchSelected = false; // New view: the search field is the selected item (its keyboard closes when the buttons select another one)
    bool m_clearFocus = false; // New view: the button clearing the search is focused with the buttons, not the field
    int m_tabIcon = -1; // New view: the icon button of the tab row focused with the buttons (TabIcon), -1 when on the tabs
+   bool m_tablesFromSearch = false; // New view: the buttons got to the tables from the search (Done), Back gets back to it, not to the tabs
 
    uint64_t m_revision = 0;
    uint64_t m_scoresRevision = 0; // Of the profiles and scores, shown by the player item and the Scores tab

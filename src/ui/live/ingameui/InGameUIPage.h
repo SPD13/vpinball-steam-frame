@@ -51,8 +51,9 @@ public:
    bool StepTileGrid(int dx, int dy);
    int m_tileColumns = 1; // Columns of the grid of tiles, as last drawn by the view
    // Back button (Credit, Exit) on this page: true when the page used it, otherwise the menu goes back to the previous page (the cabinet
-   // launcher, src/steamframe/CabinetLauncherPage.cpp, is never closed with Back)
-   virtual bool HandleBack() { return false; }
+   // launcher, src/steamframe/CabinetLauncherPage.cpp, is never closed with Back). wasButtonNav: the buttons were already navigating
+   // (not a pointer), as in the main menu of the VR UI where Back gets from a screen to its rail
+   virtual bool HandleBack(bool wasButtonNav) { return false; }
    // Moves the open/close animation forward, for pages drawing themselves without calling InGameUIPage::Render (CabinetLauncherPage.cpp)
    void UpdateOpenAnimation(float elapsedS);
 #endif

@@ -344,13 +344,6 @@ void CabinetLauncherPage::SelectPrevItem()
       Keyboard::Focus(); // Back to typing
 }
 
-void CabinetLauncherPage::ResetToDefaults()
-{
-   if (m_confirmShutdown)
-      return;
-   m_band = m_band == Band::Reel ? Band::Options : Band::Reel;
-}
-
 void CabinetLauncherPage::ActivateItem()
 {
    if (m_confirmShutdown)
@@ -369,7 +362,7 @@ void CabinetLauncherPage::ActivateItem()
       Activate(static_cast<Option>(m_option));
 }
 
-bool CabinetLauncherPage::HandleBack()
+bool CabinetLauncherPage::HandleBack(bool)
 {
    if (m_confirmShutdown)
       m_confirmShutdown = false;
@@ -379,6 +372,8 @@ bool CabinetLauncherPage::HandleBack()
       m_band = Band::Reel;
    else if (!s_search.empty())
       SetSearch(""s);
+   else
+      m_band = Band::Options;
    // The launcher is the start screen: it is never closed with Back
    return true;
 }
@@ -787,9 +782,10 @@ void CabinetLauncherPage::RenderOptions(ImDrawList* drawList, const ImVec2& size
 
    // What the buttons do
    const char* const hint = m_confirmShutdown ? "Flippers: choose     Start: confirm     Back: cancel"
-      : focused ? "Flippers: choose     Start: select     Launch ball: back to the tables"
+      : focused ? "Flippers: choose     Start: select     Back: back to the tables"
       : Keyboard::IsEditing(kSearchOwner) ? "Flippers: browse the results     Up: type     Back: close the keyboard"
-      : "Flippers: browse     Start: play     Launch ball: options";
+      : !s_search.empty() ? "Flippers: browse the results     Start: play     Back: clear the search"
+      : "Flippers: browse     Start: play     Back: options";
    CenteredText(drawList, font, 1.9f * layout.unit, ImVec2(0.5f * size.x, size.y - 2.2f * layout.unit), WithAlpha(Theme::kTextMuted, alpha * 0.9f), hint);
 }
 

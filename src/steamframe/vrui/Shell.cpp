@@ -239,7 +239,10 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
          if (Widgets::RailButton("##rail", GetScreenIcon(screen), ImVec2(button, button), screen == current, focused, hovered))
          {
             if (menu)
+            {
                menu->SetScreen(screen);
+               menu->SetRailFocus(true); // The buttons go on from where the pointer clicked
+            }
             else
             {
                // From a sub-page, the menu opens on the screen as the root of the navigation
@@ -311,6 +314,9 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
          content->Render(elapsedS);
          g_embedding = false;
          hoveredItem = g_embeddedHovered;
+         // A click of the pointer in the screen: the buttons go on from there, not from the rail
+         if (!flipperNav && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+            menu->SetRailFocus(false);
       }
       else
       {

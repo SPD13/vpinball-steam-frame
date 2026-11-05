@@ -33,8 +33,8 @@ public:
    void AdjustItem(float direction, bool isInitialPress) override; // Left/right, called each frame while held
    void ReleaseAdjustedItem() override { }
    void ActivateItem() override; // Start
-   void ResetToDefaults() override; // Launch Ball: the other band
-   bool HandleBack() override;
+   void ResetToDefaults() override { } // Launch Ball: unused (Back switches the bands), not to reset anything by mistake
+   bool HandleBack(bool wasButtonNav) override;
    bool IsFlipperNavNeeded() const override { return true; } // Buttons only: moving the mouse does not switch to pointer navigation
    bool IsPlayerPauseAllowed() const override { return false; } // The lobby keeps running (no pause sign)
 
