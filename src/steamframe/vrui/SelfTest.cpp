@@ -149,6 +149,7 @@ void Update(InGameUIPage& page, float renderMs)
       if (menu->GetScreen() != screen)
       {
          menu->SetScreen(screen);
+         menu->SetRailFocus(false); // The selection of the content shown
          g_stepStart = now;
          return;
       }
@@ -181,8 +182,8 @@ void Update(InGameUIPage& page, float renderMs)
       }
       if (g_dpadStep >= 102 && g_dpadStep < 200)
       {
-         // The icon buttons of the tab row, reached with the buttons: left from the first tab wraps to the sort order, OK changes it,
-         // OK again restores it, and right gets back to the first tab
+         // The icon buttons of the tab row, reached with the buttons: left from the first tab wraps to the search field (no search typed),
+         // left again to the sort order, OK changes it, OK again restores it, and right twice (the search field) gets back to the first tab
          MainMenuPage* const tablesMenu = dynamic_cast<MainMenuPage*>(ui.GetActivePage());
          if (tablesMenu == nullptr || now - g_stepStart < 800)
             return;
@@ -200,6 +201,7 @@ void Update(InGameUIPage& page, float renderMs)
                      InGameUIPageView::SetSelectedIndex(*tables, i);
                ui.UseButtonNav();
                ui.OnUILeftAction();
+               ui.OnUILeftAction();
             }
             break;
          case 103: Capture(player, "tab-icon-focused"s, Step::DPad); break;
@@ -214,7 +216,8 @@ void Update(InGameUIPage& page, float renderMs)
          case 106:
             ui.OnUIConfirm();
             ui.OnUIRightAction();
-            PLOGI << "VRUI self-test: OK again then right, sort ascending " << sortAscending();
+            ui.OnUIRightAction();
+            PLOGI << "VRUI self-test: OK again then right twice, sort ascending " << sortAscending();
             break;
          case 107: Capture(player, "tab-icon-back-to-tabs"s, Step::DPad); break;
          // The button clearing the search, reached with right from the field (its keyboard opened, not focused), used with OK
@@ -250,16 +253,16 @@ void Update(InGameUIPage& page, float renderMs)
       g_stepStart = now;
       switch (g_dpadStep++)
       {
-      case 0: menu->SetScreen(Screen::System); break;
+      case 0: menu->SetScreen(Screen::System); menu->SetRailFocus(false); break;
       case 1: ui.OnUIDownAction(); break;
       case 2: Capture(player, "dpad-content"s, Step::DPad); break;
       case 3: ui.OnUILeftAction(); break;
       case 4: Capture(player, "dpad-rail"s, Step::DPad); break;
       case 5: ui.OnUIDownAction(); break;
       case 6: Capture(player, "dpad-rail-down"s, Step::DPad); break;
-      case 7: ui.OnUIRightAction(); break;
+      case 7: ui.OnUIConfirm(); break; // Enters the screen
       // Search of the Tables screen, typed with the keyboard of the menu
-      case 8: menu->SetScreen(Screen::Tables); break;
+      case 8: menu->SetScreen(Screen::Tables); menu->SetRailFocus(false); break;
       case 9:
          if (auto* picker = dynamic_cast<TablePickerPage*>(menu->GetContent()); picker && Keyboard::IsUsed())
          {
@@ -269,7 +272,7 @@ void Update(InGameUIPage& page, float renderMs)
          break;
       case 10: Capture(player, "keyboard-search"s, Step::DPad); break;
       case 11: Keyboard::Close(); break;
-      // Search field reached with the buttons: its keyboard opens
+      // Search field reached with the buttons: highlighted, its keyboard opening with OK only
       case 12:
          for (int i = 0; i < 10; i++)
             if (const InGameUIItem* selected = menu->GetContent() ? menu->GetContent()->GetSelectedItem() : nullptr; selected && selected->m_label == "##search"s)
@@ -280,7 +283,7 @@ void Update(InGameUIPage& page, float renderMs)
       case 13: Capture(player, "search-focused"s, Step::DPad); break;
       case 14: Keyboard::Close(); break;
       // A value of a composed screen changed with the buttons, then undone (the footer follows)
-      case 15: menu->SetScreen(Screen::Sound); break;
+      case 15: menu->SetScreen(Screen::Sound); menu->SetRailFocus(false); break;
       case 16: ui.OnUIDownAction(); break;
       case 17: ui.OnUILeftAction(); ui.OnUILeftAction(); break;
       case 18: Capture(player, "composed-modified"s, Step::DPad); break;
@@ -289,6 +292,7 @@ void Update(InGameUIPage& page, float renderMs)
       // The end of the list of tables (all the tables of the library are listed), selected with the buttons as a player would scroll down
       case 21:
          menu->SetScreen(Screen::Tables);
+         menu->SetRailFocus(false);
          if (auto* picker = dynamic_cast<TablePickerPage*>(menu->GetContent()); picker && Keyboard::IsUsed())
          {
             // Without the search typed above

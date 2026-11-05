@@ -125,9 +125,11 @@ void InGameUIPage::RenderTile(int index, const ImVec2& pos, const ImVec2& size, 
    ImGui::SetCursorScreenPos(nextRowPos);
 }
 
-// Consecutive tiles are laid out by the views as a grid of m_tileColumns columns, from the first tile. Returns false when the selected item
-// is not a tile, or when the move leaves the grid: left from the first column, up from the first row and down from the last one (the
-// selection is then put on the first or last tile, for the list navigation to go on from there). Right never leaves it.
+// Consecutive tiles are laid out by the views as a grid of m_tileColumns columns, from the first tile. Left/right go through the tiles in
+// reading order: right from the end of a row gets to the start of the next one, left from the start of a row to the end of the previous
+// one, and both stop at the first and last tiles (Back leaves the grid). Returns false when the selected item is not a tile, or when the
+// move leaves the grid: up from the first row and down from the last one (the selection is then put on the first or last tile, for the
+// list navigation to go on from there).
 bool InGameUIPage::StepTileGrid(int dx, int dy)
 {
    const auto isTile = [this](int index)
@@ -147,13 +149,12 @@ bool InGameUIPage::StepTileGrid(int dx, int dy)
    const int position = m_selectedItem - first;
    if (dx < 0)
    {
-      if (position % columns == 0)
-         return false;
-      m_selectedItem--;
+      if (m_selectedItem > first)
+         m_selectedItem--;
    }
    else if (dx > 0)
    {
-      if (position % columns < columns - 1 && m_selectedItem < last)
+      if (m_selectedItem < last)
          m_selectedItem++;
    }
    else if (dy < 0)
