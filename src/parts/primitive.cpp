@@ -17,6 +17,7 @@
 #include "utils/color.h"
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/LightMapPruning.h"
 #include "steamframe/Reflections.h"
 #endif
 
@@ -1004,6 +1005,9 @@ void Primitive::Render(const unsigned int renderMask)
       VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, leader->m_mesh, leader->m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass,
          leader->m_meshLevel, drawFirst, drawCount);
    }
+   // A light map draws only its triangles adding enough light (Steam Frame screen, Light maps)
+   if (!isUIPass && !m_groupdRendering && m_d.m_addBlend)
+      VPX::LightMapPruning::Get().Trim(this, drawFirst, drawCount);
 #endif
 
    if (isUIPass)
