@@ -11,6 +11,7 @@
 #include "renderer/Shader.h"
 #include "renderer/VertexBuffer.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/LightMapPruning.h"
 #include "steamframe/vrui/Theme.h"
 #include "imgui/imgui.h"
 #include "implot/implot.h"
@@ -707,6 +708,16 @@ ImDrawList* PerfPanel::BuildWindow()
          : std::isnan(saved)                                        ? "Meshes: measuring"s
                                                                     : std::format("Meshes -{:.0f} % triangles", saved * 100.f);
       rightAligned(meshes, simplifier.IsEnabled() && simplifier.GetSimplifiedPartCount() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
+      // Lighting: the light-map pruning level (Steam Frame screen, Light maps) and the share of the light maps' triangles it leaves out
+      const LightMapPruning& lightMaps = LightMapPruning::Get();
+      const string lighting = lightMaps.WasOffAtLoad()         ? "Lighting: light map pruning Off when the table loaded"s
+         : lightMaps.GetLightMapCount() == 0                    ? "Lighting: no light map on this table"s
+         : lightMaps.GetLevel() == 0                            ? "Lighting: light map pruning Off, all their triangles drawn"s
+                                                                : std::format("Lighting: light map pruning {}, -{:.0f} % of their triangles",
+                                                                     LightMapPruning::GetLevelName(lightMaps.GetLevel()), lightMaps.GetLeftOutShare() * 100.f);
+      ImGui::PushStyleColor(ImGuiCol_Text, lightMaps.GetLightMapCount() > 0 && lightMaps.GetLevel() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
+      ImGui::TextUnformatted(lighting.c_str());
+      ImGui::PopStyleColor();
       ImGui::PopFont();
    }
 
@@ -762,7 +773,7 @@ ImDrawList* PerfPanel::BuildWindow()
       ImPlot::EndPlot();
       ImGui::PopFont();
    };
-   constexpr float kPlotHeight = 136.f;
+   constexpr float kPlotHeight = 130.f; // 136 before the lighting line above the graphs
 
    const float refreshHz = target.budgetMs > 0.f ? 1000.f / target.budgetMs : 72.f;
    const float fps = last(FPS);

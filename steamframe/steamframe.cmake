@@ -46,6 +46,10 @@ target_sources(vpinball PRIVATE
    src/steamframe/MeshSimplifier.h
    src/steamframe/MeshSimplifier.cpp
 
+   # Light maps without their dimmest triangles, switched live
+   src/steamframe/LightMapPruning.h
+   src/steamframe/LightMapPruning.cpp
+
    # Scene buffers in RG11B10F, switched live
    src/steamframe/SceneBufferFormat.h
    src/steamframe/SceneBufferFormat.cpp
