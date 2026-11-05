@@ -11,6 +11,7 @@
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/LightMapPruning.h"
 #include "steamframe/Reflections.h"
 #include "steamframe/SceneBufferFormat.h"
 #include "steamframe/PerfPanel.h"
@@ -220,6 +221,31 @@ private:
    }
 };
 
+// The light maps without their dimmest triangles (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
+class LightMapsPage final : public InGameUIPage
+{
+public:
+   LightMapsPage()
+      : InGameUIPage("Light maps"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_LightMapPruning, //
+         []() { return LightMapPruning::Get().GetLevel(); }, //
+         [](int, int v) { LightMapPruning::Get().SetLevel(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Light map pruning status"s, "Light maps of this table, and the share of their triangles left out"s,
+         [](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(LightMapPruning::Get().GetStatus().c_str());
+         }));
+   }
+};
+
 // The format of the scene buffers (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
 class SceneBufferPage final : public InGameUIPage
 {
@@ -345,6 +371,7 @@ constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
 constexpr const char* kSceneBuffer = "vrui/scene-buffer";
+constexpr const char* kLightMaps = "vrui/light-maps";
 constexpr const char* kReflections = "vrui/reflections";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
@@ -362,9 +389,13 @@ static vector<Section> GetSections(Screen screen)
    case Screen::Room:
       return {
          Section { "Menu and lobby"s, kMenuAndLobby, {}, true },
-         Section { "Position"s, kVR, { Prop(Settings::m_propPlayerVR_Orientation), Prop(Settings::m_propPlayerVR_TableX), Prop(Settings::m_propPlayerVR_TableY), Prop(Settings::m_propPlayerVR_TableZ) } },
+         // Upstream 64a480a96 (2026-11-01): the headset's place is the same for all tables, the table offsets are this table's
+         Section { "Position"s, kVR,
+            { Prop(Settings::m_propPlayerVR_HeadSetOrientation), Prop(Settings::m_propPlayerVR_HeadSetX), Prop(Settings::m_propPlayerVR_HeadSetY),
+               Prop(Settings::m_propPlayerVR_TableOffsetY), Prop(Settings::m_propPlayerVR_TableOffsetZ) } },
          Section { "Cabinet"s, kVR,
-            { Prop(Settings::m_propPlayer_LockbarWidth), Prop(Settings::m_propPlayer_LockbarHeight), Prop(Settings::m_propPlayer_ScreenPlayerX), Prop(Settings::m_propPlayer_ScreenPlayerY),
+            { Prop(Settings::m_propPlayerVR_ScaleToLockbar), Prop(Settings::m_propPlayer_LockbarWidth), Prop(Settings::m_propPlayerVR_MatchLockbarHeight),
+               Prop(Settings::m_propPlayer_LockbarHeight), Prop(Settings::m_propPlayer_ScreenPlayerX), Prop(Settings::m_propPlayer_ScreenPlayerY),
                Prop(Settings::m_propPlayerVR_ControllerCabYOffset), Prop(Settings::m_propPlayerVR_ControllerLockbarScale) } },
          Section { "Room"s, kVR,
             { Prop(Settings::m_propPlayerVR_UsePassthroughColor), Prop(Settings::m_propPlayerVR_LockFeetToGround), Prop(Settings::m_propPlayerVR_AddBackglass),
@@ -392,6 +423,7 @@ static vector<Section> GetSections(Screen screen)
                Prop(Settings::m_propPlayerVR_FoveateAntialiasing), Label("Foveation status"s),
                Label("Foveated anti-aliasing status"s) }, false, false },
          Section { "Simplified meshes"s, kSimplifiedMeshes, {}, true },
+         Section { "Light maps"s, kLightMaps, {}, true },
          Section { "Scene buffer"s, kSceneBuffer, {}, true },
          Section { "Reflections"s, kReflections, {}, true },
       };
@@ -531,6 +563,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       if (vr)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
+      sources.push_back(source(kLightMaps, std::make_unique<LightMapsPage>()));
       sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
       sources.push_back(source(kReflections, std::make_unique<ReflectionsPage>()));
       return CreateComposed(screen, "Steam Frame"s, "What the Steam Frame Edition adds to keep heavy tables at the headset's full resolution"s, std::move(sources));

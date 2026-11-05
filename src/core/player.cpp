@@ -19,6 +19,7 @@
 #include "steamframe/CabinetDisplays.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/LightMapPruning.h"
 #include "steamframe/ScoreTracker.h"
 #include "steamframe/ThreadPlacement.h"
 #include "steamframe/TableLibrary.h"
@@ -1026,6 +1027,7 @@ void Player::InitTableSession(const bool isInitial)
       pool.wait_until_nothing_in_flight();
 #if defined(VPX_STEAM_FRAME)
       VPX::MeshSimplifier::Get().LogStats();
+      VPX::LightMapPruning::Get().Prepare(m_ptable); // Light maps sorted by light, before their index buffers are made
 #endif
 
       // Due to multithreaded loading and pre-allocation, check if some images could not be loaded, and perform a retry since more memory is available now
