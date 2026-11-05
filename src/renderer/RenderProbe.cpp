@@ -253,7 +253,10 @@ void RenderProbe::ApplyAreaOfInterest()
          // Since we don't know where the sampling will occur, we only apply AOI to the blur passes,
          // with a small arbitrary margin to account for IOR shift
          if (pass == vs.copyPass)
+         {
+            LimitCopyToAreaOfInterest(pass, vs.reflection_clip_bounds);
             continue;
+         }
          constexpr float margin = 0.05f;
          pass->m_areaOfInterest.x = vs.reflection_clip_bounds.x - margin;
          pass->m_areaOfInterest.y = vs.reflection_clip_bounds.y - margin;
@@ -312,6 +315,36 @@ void RenderProbe::ApplyRoughness(RenderTarget* probe, const int roughness)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Screen copy
 
+// The parts using a screen space transparency probe only sample its copy of the scene around themselves: copy their area of interest,
+// with a margin for the refraction offset and the blur kernel (up to 39 pixels), instead of the whole render target. The rest of the copy
+// keeps an earlier frame, which nothing samples. A whole copy, color and depth, costs about 1.1 ms on a Steam Frame (2160 x 2160, 2 eyes)
+// and Medieval Madness makes 3 of them per frame, for parts covering 1 to 8 % of the view.
+void RenderProbe::LimitCopyToAreaOfInterest(RenderPass* copyPass, const vec4& clipBounds) const
+{
+#if defined(ENABLE_BGFX)
+   if (clipBounds.x == FLT_MAX)
+      return;
+   constexpr float margin = 0.1f; // In clip space: 5 % of the width and of the height on each side
+   const float x0 = max(clipBounds.x - margin, -1.f), x1 = min(clipBounds.z + margin, 1.f);
+   const float y0 = max(clipBounds.y - margin, -1.f), y1 = min(clipBounds.w + margin, 1.f);
+   if (x0 >= x1 || y0 >= y1)
+      return; // Not on screen: the parts are not drawn either
+   // Size of the rendered part of the target (dynamic resolution: its top left part, see RenderTarget::Activate)
+   const int w = copyPass->m_rt->GetScaledWidth(copyPass->m_renderScale), h = copyPass->m_rt->GetScaledHeight(copyPass->m_renderScale);
+   const int left = clamp(static_cast<int>(floorf((x0 + 1.f) * 0.5f * static_cast<float>(w))), 0, w);
+   const int right = clamp(static_cast<int>(ceilf((x1 + 1.f) * 0.5f * static_cast<float>(w))), 0, w);
+   // Rows from the first one of the textures: the top, except on the backends whose origin is at the bottom left (OpenGL)
+   const bool bottomLeft = bgfx::getCaps()->originBottomLeft;
+   const float r0 = bottomLeft ? (y0 + 1.f) * 0.5f : (1.f - y1) * 0.5f, r1 = bottomLeft ? (y1 + 1.f) * 0.5f : (1.f - y0) * 0.5f;
+   const int first = clamp(static_cast<int>(floorf(r0 * static_cast<float>(h))), 0, h), last = clamp(static_cast<int>(ceilf(r1 * static_cast<float>(h))), 0, h);
+   if (left >= right || first >= last)
+      return;
+   for (RenderCommand* cmd : copyPass->m_commands)
+      if (cmd->IsCopyCommand())
+         cmd->SetCopyRegion(left, first, right - left, last - first);
+#endif
+}
+
 void RenderProbe::RenderScreenSpaceTransparency()
 {
    ViewState& vs = State();
@@ -327,7 +360,7 @@ void RenderProbe::RenderScreenSpaceTransparency()
       const int w = renderedPass->m_rt->GetWidth() / downscale, h = renderedPass->m_rt->GetHeight() / downscale;
       vs.dynamicRT = new RenderTarget(
          m_renderer->m_renderDevice, renderedPass->m_rt->m_type, m_name, w, h, renderedPass->m_rt->GetColorFormat(), true, 1, "Failed to create refraction render target", nullptr);
-      m_dynamicRT->m_dynamicResolution = true; // Copy of the scene buffer, sampled at screen coordinates
+      vs.dynamicRT->m_dynamicResolution = true; // Copy of the scene buffer, sampled at screen coordinates
    }
    m_renderer->m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_refraction);
    m_renderer->m_renderDevice->SetRenderTarget(m_name, vs.dynamicRT, false);
