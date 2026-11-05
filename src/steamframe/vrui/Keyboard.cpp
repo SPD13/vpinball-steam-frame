@@ -6,6 +6,7 @@
 #include "Theme.h"
 #include "Widgets.h"
 
+#include "steamframe/Launcher.h"
 #include "ui/live/LiveUI.h"
 
 #include "fonts/IconsForkAwesome.h"
@@ -24,6 +25,7 @@ namespace
    bool g_shift = false;
    std::function<void(const string&)> g_onChange;
    std::function<void()> g_onDone;
+   std::function<void()> g_onBack;
 
    constexpr const char* kRows[] = { "1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-.&" };
    constexpr int kColumns = 10;
@@ -58,10 +60,12 @@ namespace
 bool IsUsed()
 {
    static const bool forced = getenv("VPX_VRUI_KEYBOARD") != nullptr && string(getenv("VPX_VRUI_KEYBOARD")) == "1"s;
-   return forced || (g_pplayer && g_pplayer->m_vrDevice);
+   // In VR, and on a cabinet (buttons only)
+   return forced || (g_pplayer && g_pplayer->m_vrDevice) || (g_launcher && g_launcher->m_cabinetMode);
 }
 
-void Open(const string& owner, const string& title, const string& text, size_t maxLength, const std::function<void(const string&)>& onChange, const std::function<void()>& onDone)
+void Open(const string& owner, const string& title, const string& text, size_t maxLength, const std::function<void(const string&)>& onChange, const std::function<void()>& onDone,
+   const std::function<void()>& onBack)
 {
    g_owner = owner;
    g_ownerShown = true;
@@ -71,6 +75,7 @@ void Open(const string& owner, const string& title, const string& text, size_t m
    g_shift = false;
    g_onChange = onChange;
    g_onDone = onDone;
+   g_onBack = onBack;
    g_focused = false;
    g_focusRow = 1;
    g_focusColumn = 0;
@@ -84,6 +89,7 @@ void Close()
    g_pressFocused = false;
    g_onChange = nullptr;
    g_onDone = nullptr;
+   g_onBack = nullptr;
 }
 
 bool IsOpen() { return !g_owner.empty(); }
@@ -113,19 +119,37 @@ bool HandleButton(Button button)
    case Button::Left:
    case Button::Right:
    {
+      // In reading order: right from the end of a row gets to the start of the next one (the last row of characters to the keys of the
+      // bottom row), left from the start of a row to the end of the previous one, and Done wraps to the first key
       const int step = button == Button::Left ? -1 : 1;
-      if (g_focusRow == kBottomRow)
+      constexpr int nKeys = kBottomRow * kColumns + kBottomKeys;
+      int index = g_focusRow == kBottomRow ? kBottomRow * kColumns + g_focusBottomKey : g_focusRow * kColumns + g_focusColumn;
+      index = (index + step + nKeys) % nKeys;
+      if (index >= kBottomRow * kColumns)
       {
+         g_focusRow = kBottomRow;
+         g_focusBottomKey = index - kBottomRow * kColumns;
          // Going up then reaches the column above the middle of the key
-         g_focusBottomKey = (g_focusBottomKey + step + kBottomKeys) % kBottomKeys;
          g_focusColumn = static_cast<int>(0.5f * (kBottomKeyStart[g_focusBottomKey] + kBottomKeyStart[g_focusBottomKey + 1]));
       }
       else
-         g_focusColumn = (g_focusColumn + step + kColumns) % kColumns;
+      {
+         g_focusRow = index / kColumns;
+         g_focusColumn = index % kColumns;
+      }
       break;
    }
    case Button::Confirm: g_pressFocused = true; break;
-   case Button::Back: g_focused = false; break;
+   case Button::Back:
+      if (g_onBack)
+      {
+         const std::function<void()> onBack = g_onBack;
+         Close();
+         onBack();
+      }
+      else
+         g_focused = false;
+      break;
    }
    return true;
 }

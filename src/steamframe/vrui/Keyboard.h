@@ -16,9 +16,10 @@ namespace VPX::VRUI::Keyboard
 bool IsUsed();
 
 // Starts editing a text. 'owner' identifies what is edited (to know if a field is the one being edited, and to close the keyboard when it
-// is no longer shown), 'onChange' gets the text after each key, 'onDone' is called when Done is pressed.
+// is no longer shown), 'onChange' gets the text after each key, 'onDone' is called when Done is pressed. 'onBack': Back pressed while the
+// keyboard has the focus closes it and calls this, instead of giving the focus back to the menu with the keyboard staying opened.
 void Open(const string& owner, const string& title, const string& text, size_t maxLength, const std::function<void(const string&)>& onChange,
-   const std::function<void()>& onDone = nullptr);
+   const std::function<void()>& onDone = nullptr, const std::function<void()>& onBack = nullptr);
 void Close();
 bool IsOpen();
 bool IsEditing(const string& owner);
