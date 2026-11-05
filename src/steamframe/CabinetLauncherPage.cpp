@@ -43,6 +43,22 @@ namespace
    constexpr int kMinWrapCount = 7; // Fewer tables: the reel stops at its ends instead of looping, which would make tiles jump from one side to the other
 
    constexpr const char* kSearchOwner = "cabinet/search";
+
+   // ImTextureID is a std::shared_ptr<Sampler> (imconfig.h), but ImGui copies draw commands with memcpy: when an image is drawn while the
+   // current draw command is still empty, ImGui assigns the texture into that command, which takes a reference that is never released, so
+   // the sampler and its GPU texture outlive the cache (measured: 38 images kept after browsing 40 tables, about 0.5 GB of GPU memory, until the lobby closes). Giving the current
+   // command an element first (an empty triangle pair with the font texture, nothing drawn) makes ImGui open a new command for the image, the
+   // path where references are balanced. Call before each AddImage*.
+   void PrepareImageCommand(ImDrawList* drawList)
+   {
+      drawList->PrimReserve(6, 4);
+      const ImVec2 uv = drawList->_Data->TexUvWhitePixel;
+      for (int i = 0; i < 4; i++)
+         drawList->PrimWriteVtx(ImVec2(0.f, 0.f), uv, 0);
+      for (const int i : { 0, 1, 2, 0, 2, 3 })
+         drawList->PrimWriteIdx(static_cast<ImDrawIdx>(drawList->_VtxCurrentIdx - 4 + i));
+   }
+
    constexpr const char* kOptionIcons[] = { ICON_FK_SEARCH, ICON_FK_SLIDERS, ICON_FK_SIGN_OUT, ICON_FK_POWER_OFF };
    constexpr const char* kOptionLabels[] = { "Search", "Options", "Quit", "Shutdown" };
 
@@ -543,6 +559,7 @@ void CabinetLauncherPage::RenderBackground(ImDrawList* drawList, const ImVec2& s
          return;
       if (backdrop.isPlayfield)
       {
+         PrepareImageCommand(drawList);
          drawList->AddImageQuad(texture, ImVec2(0.f, 0.f), ImVec2(size.x, 0.f), size, ImVec2(0.f, size.y), WindowUV(rotation, 0.f, 0.f), WindowUV(rotation, 1.f, 0.f),
             WindowUV(rotation, 1.f, 1.f), WindowUV(rotation, 0.f, 1.f), Gray(1.f, opacity));
          return;
@@ -565,6 +582,7 @@ void CabinetLauncherPage::RenderBackground(ImDrawList* drawList, const ImVec2& s
          uv0.y = 0.5f - 0.5f * h;
          uv1.y = 0.5f + 0.5f * h;
       }
+      PrepareImageCommand(drawList);
       drawList->AddImage(texture, ImVec2(0.f, 0.f), size, uv0, uv1, Gray(0.45f, opacity));
    };
    draw(m_previousBackdrop, alpha * (1.f - m_backdropFade));
@@ -648,6 +666,7 @@ void CabinetLauncherPage::RenderReel(ImDrawList* drawList, const ImVec2& size, f
          const float fit = min(boxSize.x / imageSize.x, boxSize.y / imageSize.y);
          const ImVec2 drawSize = imageSize * fit;
          const ImVec2 imageMin = center - drawSize * 0.5f;
+         PrepareImageCommand(drawList);
          drawList->AddImageRounded(texture, imageMin, imageMin + drawSize, ImVec2(0.f, 0.f), ImVec2(1.f, 1.f), Gray(brightness, alpha), rounding);
       }
       else if (m_thumbnails.IsLoading(imagePath))
