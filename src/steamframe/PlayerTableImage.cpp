@@ -11,6 +11,7 @@
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "renderer/VRDevice.h"
+#include "steamframe/CabinetBackglass.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/TableLibrary.h"
 #include "ui/live/LiveUI.h"
@@ -32,7 +33,32 @@ void Player::CaptureTableImageBeforeClosing()
    imagePath.replace_extension(".jpg");
    std::filesystem::path pngPath = m_ptable->m_filename;
    pngPath.replace_extension(".png");
-   if (!CanReplaceTableImage() || FileExists(imagePath) || FileExists(pngPath))
+   const bool needsLibraryImage = CanReplaceTableImage() && !FileExists(imagePath) && !FileExists(pngPath);
+   // Cabinet launcher: also its pictures of the table (see CabinetBackglass.h), the playfield and, for the tables without a .directb2s, the
+   // backglass window when something is drawn on it. The image of the library is then a copy of the playfield.
+   vector<VPX::Window*> windows;
+   vector<std::filesystem::path> paths;
+   if (g_launcher->m_cabinetMode && CanReplaceTableImage())
+   {
+      if (const std::filesystem::path playfield = VPX::Cabinet::GetPlayfieldImagePath(m_ptable->m_filename); !FileExists(playfield))
+      {
+         windows.push_back(m_playfieldWnd);
+         paths.push_back(playfield);
+      }
+      VPX::Window* const backglass = m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW ? m_backglassOutput.GetWindow() : nullptr;
+      if (backglass && backglass->IsVisible() && VPX::Cabinet::FindBackglassImage(m_ptable->m_filename).empty() && VPX::Cabinet::FindDirectB2S(m_ptable->m_filename).empty())
+      {
+         windows.push_back(backglass);
+         paths.push_back(VPX::Cabinet::GetBackglassCapturePath(m_ptable->m_filename));
+      }
+   }
+   const bool copyPlayfield = needsLibraryImage && !windows.empty() && windows[0] == m_playfieldWnd;
+   if (needsLibraryImage && !copyPlayfield)
+   {
+      windows.insert(windows.begin(), m_playfieldWnd);
+      paths.insert(paths.begin(), imagePath);
+   }
+   if (windows.empty())
    {
       m_tableImageCaptureStarted = true;
       m_tableImageCaptureDone = true;
@@ -50,13 +76,20 @@ void Player::CaptureTableImageBeforeClosing()
       return;
 
    m_tableImageCaptureStarted = true;
-   CaptureTableImage(imagePath,
-      [this, imagePath](bool success)
+   const int rotation = m_liveUI->GetUIOrientation();
+   CaptureTableImages(windows, paths,
+      [this, paths, imagePath, copyPlayfield, rotation](bool success)
       {
          if (success)
-            PLOGI << "Table image saved: " << imagePath;
+         {
+            for (const std::filesystem::path& path : paths)
+               PLOGI << "Table image saved: " << path;
+            // The picker and the reel show the image of the library upright
+            if (copyPlayfield && !VPX::Cabinet::SaveUpright(paths[0], imagePath, rotation))
+               PLOGE << "Failed to save table image: " << imagePath;
+         }
          else
-            PLOGE << "Failed to save table image: " << imagePath;
+            PLOGE << "Failed to save table image: " << paths[0];
          m_tableImageCaptureDone = true;
       });
 }
@@ -120,6 +153,11 @@ static vector<std::pair<int, vec3>> GetBackglassBounds(PinTable* table)
 // (its backglass by default, its playfield seen from above, or its whole cabinet)
 void Player::CaptureTableImage(const std::filesystem::path& imagePath, const std::function<void(bool)>& onCaptured)
 {
+   CaptureTableImages({ m_playfieldWnd }, { imagePath }, onCaptured);
+}
+
+void Player::CaptureTableImages(const vector<VPX::Window*>& windows, const vector<std::filesystem::path>& imagePaths, const std::function<void(bool)>& onCaptured)
+{
    SetTableImageLighting(true);
    #ifdef ENABLE_XR
    if (m_vrDevice)
@@ -129,7 +167,7 @@ void Player::CaptureTableImage(const std::filesystem::path& imagePath, const std
       m_vrDevice->SetTableCaptureView(view, view == VRDevice::TableCaptureView::Backglass ? GetBackglassBounds(m_ptable) : vector<std::pair<int, vec3>>());
    }
    #endif
-   m_renderer->m_renderDevice->CaptureScreenshot({ m_playfieldWnd }, { imagePath },
+   m_renderer->m_renderDevice->CaptureScreenshot(windows, imagePaths,
       [this, onCaptured](bool success)
       {
          #ifdef ENABLE_XR
@@ -191,6 +229,8 @@ void Player::ReplaceTableImage()
 
 void Player::UpdateTableImageReplacement()
 {
+   if (m_isLobby)
+      g_launcher->OnLobbyFrame(this);
    if (m_tableImageLightingDone.exchange(false))
       SetTableImageLighting(false);
    if (!m_tableImageReplacePath.empty() && IsInGameUIClosed())

@@ -5,6 +5,8 @@
 
 #include "core/editablereg.h"
 #include "steamframe/Backup.h"
+#include "steamframe/CabinetBackglass.h"
+#include "steamframe/CabinetLauncherPage.h"
 #include "steamframe/CabinetDisplays.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/PupPacks.h"
@@ -848,7 +850,7 @@ static Primitive* CreateQuad(PinTable* table, const string& name, float left, fl
 // room made in Blender (see steamframe/lobby-room), whose parts are kept as they are. For the empty room, the lobby is made from the blank
 // table shipped with the application, by removing everything it contains (parts, script, playfield) and adding a floor. The room of a
 // table can be used instead (see Launcher::GetLobbyRoom): then the lobby is made from that table, keeping only the parts of its room.
-static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool isLobbyRoom)
+static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool isLobbyRoom, bool cabinet)
 {
    // Displayed by the home page of the in-game menu
    table->m_tableName = "Visual Pinball"s;
@@ -894,6 +896,13 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
    for (ViewSetup& viewSetup : table->mViewSetups)
    {
       viewSetup = ViewSetup();
+      if (cabinet)
+      {
+         // Cabinet launcher: nothing of the room is seen. The window layout turns the view (and the UI with it) like the tables on a cabinet
+         // screen lying flat, as the settings of the cabinet view do (their global overrides apply to the lobby too).
+         viewSetup.mMode = VLM_WINDOW;
+         continue;
+      }
       viewSetup.mMode = VLM_CAMERA;
       // In percent of the table length: look a few meters ahead instead of down at a playfield, to see the floor up to its far edge, or
       // the far wall of the lobby room at eye level, with a wider view
@@ -912,8 +921,8 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
    table->AddPart(playfield);
    playfield->Release();
 
-   // The room of a table, and the lobby room, have their own floor
-   if (room || isLobbyRoom)
+   // The room of a table, and the lobby room, have their own floor; the cabinet launcher covers the screen
+   if (room || isLobbyRoom || cabinet)
       return;
 
    // The floor lies in the room space, which in VR is the real world: z = 0 is the ground, without the playfield inclination
@@ -988,8 +997,8 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
    {
       // The room of a table, if the lobby was loaded from that table (see LauncherCommand)
       const std::optional<LobbyRoom> room = GetLobbyRoom();
-      const bool isRoomOfTable = room && room->tablePath == tableFilename;
-      BuildLobby(table, isRoomOfTable ? &*room : nullptr, !isRoomOfTable && IsLobbyRoomFile(tableFilename));
+      const bool isRoomOfTable = !m_cabinetMode && room && room->tablePath == tableFilename;
+      BuildLobby(table, isRoomOfTable ? &*room : nullptr, !isRoomOfTable && IsLobbyRoomFile(tableFilename), m_cabinetMode);
    }
    else
       GetTableLibrary().RecordPlay(tableFilename); // For the 'Recent' and 'Most played' lists of the table picker
@@ -999,6 +1008,7 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
 
 void Launcher::OnTableClosed(const Player* player)
 {
+   VPX::Cabinet::BackglassRenderer::Get().Detach(player);
    if (player->m_isLobby || player->m_vrDevice == nullptr || player->m_playMode != Player::PlayMode::Play)
       return;
    const VPX::PerfPanel::RatingResult result = VPX::PerfPanel::Get().GetRunRating();
@@ -1029,7 +1039,14 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
             "Look for a version of this table named 'VR' or 'VR Room'."s);
       return;
    }
-   player->m_liveUI->OpenInGameUI("tables/picker"s);
+   if (m_cabinetMode)
+   {
+      player->m_liveUI->m_inGameUI.AddPage("cabinet/launcher"s, []() { return std::make_unique<VPX::InGameUI::CabinetLauncherPage>(); });
+      player->m_liveUI->OpenInGameUI("cabinet/launcher"s);
+      VPX::Cabinet::BackglassRenderer::Get().Attach(player);
+   }
+   else
+      player->m_liveUI->OpenInGameUI("tables/picker"s);
    if (!m_refusedTableMessage.empty())
       player->m_liveUI->ShowMessage("Table cannot be played"s, std::exchange(m_refusedTableMessage, string()));
    // Back from a table: the scores of its games and their rank. Without any profile, nothing is asked: the scores stay unassigned, and can
@@ -1056,7 +1073,8 @@ void Launcher::PlaySelectedTables()
    }
 }
 
-LauncherCommand::LauncherCommand()
+LauncherCommand::LauncherCommand(bool cabinet)
+   : m_cabinet(cabinet)
 {
 }
 
@@ -1064,13 +1082,17 @@ void LauncherCommand::Execute()
 {
    // Closing a table gets back to the lobby, closing the lobby without selecting a table quits
    g_launcher->m_launcherMode = true;
+   g_launcher->m_cabinetMode = m_cabinet;
    // Switching between the lobby and the tables keeps the window and the VR device (see VPApp::m_keepDisplayBetweenTables)
    g_app->m_keepDisplayBetweenTables = true;
    while (g_launcher->m_launcherMode)
    {
       // The room of a table replaces the default lobby room while that table is available
       const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom();
-      PlayTableCommand lobby(room ? room->tablePath : g_launcher->GetLobbyTablePath());
+      // The cabinet launcher covers the screen: the empty room, the lightest
+      PlayTableCommand lobby(m_cabinet ? g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpz")
+            : room                     ? room->tablePath
+                                       : g_launcher->GetLobbyTablePath());
       lobby.Play(true);
       if (g_launcher->m_nextTableFilename.empty())
       {
@@ -1080,4 +1102,57 @@ void LauncherCommand::Execute()
       }
       g_launcher->PlaySelectedTables();
    }
+   g_launcher->ShutdownIfRequested();
+}
+
+void Launcher::QuitApplication(Player* player)
+{
+   // Same as 'Quit Visual Pinball' in the menus: leave the launcher instead of getting back to the lobby
+   g_launcher->m_launcherMode = false;
+   player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
+}
+
+void Launcher::OnLobbyFrame(Player* player)
+{
+   // The cabinet launcher is the start screen: never left without a menu (another page may close the in-game UI)
+   if (m_cabinetMode && player->m_isLobby && player->GetCloseState() == Player::CS_PLAYING && player->m_liveUI->m_inGameUI.GetActivePage() == nullptr)
+      player->m_liveUI->OpenInGameUI("cabinet/launcher"s);
+}
+
+void Launcher::ShutdownIfRequested()
+{
+   if (!m_shutdownRequested)
+      return;
+   // A few seconds later, once the application has saved its settings and closed
+#if defined(_WIN32)
+   const char* const command = "shutdown.exe /s /t 5";
+#elif defined(__APPLE__)
+   const char* const command = "(sleep 5; osascript -e 'tell application \"System Events\" to shut down') >/dev/null 2>&1 &";
+#else
+   const char* const command = "(sleep 5; systemctl poweroff) >/dev/null 2>&1 &";
+#endif
+   if (const char* dryRun = getenv("VPX_CABINET_SHUTDOWN_DRYRUN"); dryRun && dryRun[0] == '1')
+   {
+      PLOGI << "Shutdown requested (dry run, not executed): " << command;
+      return;
+   }
+   PLOGI << "Shutdown requested: " << command;
+#if defined(_WIN32)
+   STARTUPINFOA startupInfo {};
+   startupInfo.cb = sizeof(startupInfo);
+   PROCESS_INFORMATION processInfo {};
+   char commandLine[64];
+   strncpy(commandLine, command, sizeof(commandLine) - 1);
+   commandLine[sizeof(commandLine) - 1] = '\0';
+   if (CreateProcessA(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startupInfo, &processInfo))
+   {
+      CloseHandle(processInfo.hThread);
+      CloseHandle(processInfo.hProcess);
+   }
+   else
+      PLOGE << "Shutdown failed to start, error " << GetLastError();
+#else
+   if (std::system(command) != 0)
+      PLOGE << "Shutdown failed to start";
+#endif
 }
