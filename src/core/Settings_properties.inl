@@ -149,32 +149,18 @@ PropBool(Player, ForceMotionBlurOff, "Disable Motion Blur"s, "Disable ball motio
 PropBool(Player, ForceAnisotropicFiltering, "Force Anisotropic Filtering"s, "Force anisotropic filtering for better rendering quality/texture clarity at the cost of a bit of performance"s, true);
 PropBool(Player, CompressTextures, "Compress Textures"s, "Compress textures to GPU formats to reduce memory use (slow on first load, cached afterwards)"s, true);
 #ifdef VPX_STEAM_FRAME // Simplified render meshes of heavy tables, see src/steamframe/MeshSimplifier.h
-#ifdef VPX_STEAM_FRAME_HEADSET
 PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, true);
-#else
-PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, false);
-#endif
 PropFloat(Player, SimplifyMeshesError, "Allowed error"s, "Largest deviation of a simplified part from its mesh, in pixels of the view at its full render resolution"s, 0.25f, 4.f, 1.f);
-// Scene buffers in RG11B10F instead of RGBA16F, see src/steamframe/SceneBufferFormat.h; on in the build of the Steam Frame (checked in the headset)
-#ifdef VPX_STEAM_FRAME_HEADSET
+// Scene buffers in RG11B10F instead of RGBA16F, see src/steamframe/SceneBufferFormat.h; on by default (Medium performance profile, checked in the headset)
 PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, true);
-#else
-PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, false);
-#endif
 #ifdef VPX_STEAM_FRAME_HEADSET
 // Which cores the threads run on while a table is played, see src/steamframe/ThreadPlacement.h; no menu entry
 PropBool(Player, ThreadPlacement, "Thread placement"s, "Run the render thread, the logic thread and the others on cores of their own while a table is played"s, true);
 #endif
-// What the reflections leave out and their size, see src/steamframe/Reflections.h; off and half in the build of the Steam Frame
-#ifdef VPX_STEAM_FRAME_HEADSET
+// What the reflections leave out and their size, see src/steamframe/Reflections.h; off and half by default (Medium performance profile)
 PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
 PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);
 PropEnum(Player, ReflectionSize, "Reflection size"s, "Size of the reflections, the playfield's and the other mirrors', per axis. Half renders them with a quarter of the pixels: softer reflections, for less GPU time per frame (0.45 ms on Darkest Dungeon at 2160 x 2160, where it halves the frames over the period)"s, int, 1, "Full"s, "Half"s);
-#else
-PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
-PropEnum(Player, RoomReflection, "Room reflection"s, "The parts of the VR room in the reflections. On tables with a large room they can be most of what a reflection draws. Off leaves them out of the reflections, not of the room around you. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 0, "On"s, "Off"s, "Automatic"s);
-PropEnum(Player, ReflectionSize, "Reflection size"s, "Size of the reflections, the playfield's and the other mirrors', per axis. Half renders them with a quarter of the pixels: softer reflections, for less GPU time per frame (0.45 ms on Darkest Dungeon at 2160 x 2160, where it halves the frames over the period)"s, int, 0, "Full"s, "Half"s);
-#endif
 #endif
 PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to manage Depth Buffer on a DirectX 9 build. May solve some rendering issues"s, false);
 PropBool(Player, SoftwareVertexProcessing, "Software Vertex Processing"s, "Activate this on a DirectX 9 build, if you have issues using an old Intel graphics chip"s, false);
@@ -280,8 +266,8 @@ PropEnum(PlayerVR, AskToTurnOn, "Enable VR"s, "Ask to turn on VR"s, int, 2, "Ena
 // On the Steam Frame the scene is foveated through a fragment shading rate image that follows the gaze, which the driver applies in its direct render
 // path (density maps force its tiled path, where a heavy table's scene pass is geometry-bound and the gain is lost): Medium by default there, 2-4 ms
 // per frame on heavy tables at native resolution (docs/Steam Frame Branch.md, section 9). Without a valid gaze the wide Low profile is used at the
-// center of the view. Off elsewhere; inert where the runtime lacks the extension
-#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+// center of the view. Off elsewhere; inert where the runtime lacks the extension. Medium in every build of the fork (Medium performance profile)
+#if defined(VPX_STEAM_FRAME)
 PropEnum(PlayerVR, Foveation, "Foveated rendering"s, "Reduce the shading quality away from the point the eyes look at, to render at a higher resolution or with heavier settings. Needs runtime support (Steam Frame); eye-tracked when the headset allows it, otherwise fixed at the center"s, int, 2, "Off"s, "Low"s, "Medium"s, "High"s);
 #else
 PropEnum(PlayerVR, Foveation, "Foveated rendering"s, "Reduce the shading quality away from the point the eyes look at, to render at a higher resolution or with heavier settings. Needs runtime support (Steam Frame); eye-tracked when the headset allows it, otherwise fixed at the center"s, int, 0, "Off"s, "Low"s, "Medium"s, "High"s);
@@ -295,8 +281,8 @@ PropBool(PlayerVR, FoveationFlipY, "Foveation offset: flip Y"s, "Mirror the vert
 // periphery become as coarse as the shading already is there. The anti-aliasing switch covers the passes after it too (sharpening, upscaling)
 PropBool(PlayerVR, FoveateTonemapping, "Foveated tone mapping"s, "Also apply the foveated rendering to the tone mapping pass: faster, with coarser edges away from the point looked at. Only where the scene is foveated with a shading rate image (Steam Frame)"s, true);
 // Foveated anti-aliasing shows most: Automatic keeps it off while the table holds its full resolution, and turns it on for the rest of the table when
-// the resolution was below it for 10 of the last 60 seconds, the first minute of the table not counted (see VRDevice::UpdateAutoFoveatedAntialiasing)
-PropEnum(PlayerVR, FoveateAntialiasing, "Foveated anti-aliasing"s, "Also apply the foveated rendering to the anti-aliasing pass (and to the sharpening and upscaling passes after it): faster, with coarser edges away from the point looked at. Automatic turns it on only for the tables that cannot hold their full resolution without it. Only where the scene is foveated with a shading rate image (Steam Frame)"s, int, 2, "Always Off"s, "Always On"s, "Automatic"s);
+// the resolution was below it for 10 of the last 60 seconds, the first minute of the table not counted (see VRDevice::UpdateAutoFoveatedAntialiasing). Always Off by default (Medium performance profile, see PerfProfilePage in src/steamframe/vrui/Screens.cpp)
+PropEnum(PlayerVR, FoveateAntialiasing, "Foveated anti-aliasing"s, "Also apply the foveated rendering to the anti-aliasing pass (and to the sharpening and upscaling passes after it): faster, with coarser edges away from the point looked at. Automatic turns it on only for the tables that cannot hold their full resolution without it. Only where the scene is foveated with a shading rate image (Steam Frame)"s, int, 0, "Always Off"s, "Always On"s, "Automatic"s);
 PropBool(PlayerVR, FoveationEyeTracked, "Eye-tracked foveation"s, "Follow the eyes with the foveated rendering when the runtime supports it (XR_META_foveation_eye_tracked) and eye tracking is enabled in the headset settings; otherwise the full quality area is fixed at the center of the view"s, true);
 PropEnum(PlayerVR, DisplayRefreshRate, "Headset Refresh Rate"s, "Refresh rate requested from the headset when supported. Lower rates give the renderer more time per frame and avoid reprojected frames on standalone headsets"s, int, 0, "Runtime default"s, "72 Hz"s, "80 Hz"s, "90 Hz"s, "120 Hz"s);
 PropFloatDyn(PlayerVR, Orientation, "View orientation"s, "VR view orientation"s, -180.f, 180.f, 0.f);
@@ -321,8 +307,9 @@ PropFloatDyn(PlayerVR, ControllerLockbarScale, "Lockbar size ratio"s, "Lockbar s
 PropFloatUnbounded(PlayerVR, ResFactor, "ResFactor"s, ""s, -1.f);
 // Dynamic resolution: the render scale follows the GPU time of the frames reported by the runtime (XR_META_performance_metrics), between the
 // headset's recommended size and the size chosen with ResFactor, so heavy tables keep their frame rate instead of judder on head movements and
-// light tables keep the full sharpness (see VRDevice::UpdateDynamicResolution). On by default where the counters exist (Steam Frame build).
-#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+// light tables keep the full sharpness (see VRDevice::UpdateDynamicResolution). On by default in the builds of the fork (Medium performance profile, see
+// PerfProfilePage in src/steamframe/vrui/Screens.cpp), inert where the runtime lacks the counters.
+#if defined(VPX_STEAM_FRAME)
 PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, up to the headset's recommended resolution, and raise it back when there is room. Needs runtime support (XR_META_performance_metrics)"s, true);
 #else
 PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, up to the headset's recommended resolution, and raise it back when there is room. Needs runtime support (XR_META_performance_metrics)"s, false);

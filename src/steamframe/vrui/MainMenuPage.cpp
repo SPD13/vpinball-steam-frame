@@ -4,6 +4,7 @@
 #include "MainMenuPage.h"
 
 #include "ComposedPage.h"
+#include "PageView.h"
 #include "Shell.h"
 #include "VRUI.h"
 
@@ -15,6 +16,7 @@ namespace VPX::VRUI
 using namespace VPX::InGameUI;
 
 static Screen s_lastScreen = Screen::Tables;
+static int s_lastPosition = -1; // The selected item of the screen shown last, when it opened a page
 
 Screen MainMenuPage::GetLastScreen() { return s_lastScreen; }
 
@@ -23,8 +25,11 @@ void MainMenuPage::SetLastScreen(Screen screen) { s_lastScreen = screen; }
 MainMenuPage::MainMenuPage(std::optional<Screen> screen)
    : InGameUIPage("Menu"s, ""s, SaveMode::None)
 {
-   // Getting back to the menu from one of its sub-pages shows the screen it was on, opening it shows the default one
-   Screen initial = screen.value_or(Shell::WasShownLastFrame() ? s_lastScreen : GetDefaultScreen());
+   // Getting back to the menu from one of its sub-pages shows the screen it was on, on the item which opened the page (whatever the route of
+   // the menu: the cabinet launcher opens it on the Tables screen); opening it shows the given or default one
+   const bool isBack = m_player->m_liveUI->m_inGameUI.IsNavigatingBack();
+   Screen initial = isBack ? s_lastScreen : screen.value_or(Shell::WasShownLastFrame() ? s_lastScreen : GetDefaultScreen());
+   m_restorePosition = isBack && s_lastPosition >= 0;
    if (!IsScreenAvailable(initial))
       initial = Screen::Tables;
    m_screen = initial;
@@ -41,6 +46,8 @@ InGameUIPage* MainMenuPage::GetContent()
       content = CreateScreenContent(m_screen);
       if (content)
          content->Open(false);
+      if (content && std::exchange(m_restorePosition, false))
+         content->SetNavPosition(s_lastPosition);
    }
    return content.get();
 }
@@ -61,6 +68,9 @@ void MainMenuPage::SetScreen(Screen screen)
 
 void MainMenuPage::Close(bool isBackwardAnimation)
 {
+   // Kept to get back to the item when a page it opened is left (see the constructor)
+   const auto& current = m_contents[static_cast<int>(m_screen)];
+   s_lastPosition = current ? current->GetNavPosition() : -1;
    InGameUIPage::Close(isBackwardAnimation);
    if (auto& content = m_contents[static_cast<int>(m_screen)]; content && content->IsActive())
       content->Close(isBackwardAnimation);
@@ -68,11 +78,12 @@ void MainMenuPage::Close(bool isBackwardAnimation)
 
 void MainMenuPage::StepScreen(int direction)
 {
-   int screen = static_cast<int>(m_screen);
+   // The screens of the rail (from one opened by another, the one of the rail it was opened from)
+   int screen = static_cast<int>(GetRailScreen(m_screen));
    for (int i = 0; i < kScreenCount; i++)
    {
       screen = (screen + direction + kScreenCount) % kScreenCount;
-      if (IsScreenAvailable(static_cast<Screen>(screen)))
+      if (IsScreenOnRail(static_cast<Screen>(screen)))
          break;
    }
    SetScreen(static_cast<Screen>(screen));
@@ -102,36 +113,52 @@ void MainMenuPage::SelectPrevItem()
       content->SelectPrevItem();
 }
 
+// Values edited with the buttons (see InGameUI::OnUIConfirm), and clicks on the items
 void MainMenuPage::AdjustItem(float direction, bool isInitialPress)
 {
    if (m_railFocus)
-   {
-      // The flippers go through the screens (OK enters the selected one)
-      if (isInitialPress)
-         StepScreen(direction < 0.f ? -1 : 1);
       return;
-   }
-   InGameUIPage* const content = GetContent();
-   if (content == nullptr)
-   {
+   if (InGameUIPage* const content = GetContent(); content)
+      content->AdjustItem(direction, isInitialPress);
+   else
       m_railFocus = true;
-      return;
-   }
-   // Tiles move in their grid (in reading order, staying in it)
-   if (isInitialPress && content->StepTileGrid(direction < 0.f ? -1 : 1, 0))
-      return;
-   // Left gets back to the rail, except on the items which use it (values, input mappings, and the custom items of the pages, like tabs)
-   if (direction < 0.f && isInitialPress)
+}
+
+void MainMenuPage::ReleaseAdjustedItem()
+{
+   if (InGameUIPage* const content = GetContent(); content && !m_railFocus)
+      content->ReleaseAdjustedItem();
+}
+
+// Next/Previous: the screens on the rail, the stops of the screen once entered with Confirm (Cancel gets back to the rail, see HandleBack)
+void MainMenuPage::StepItem(int direction, StepPhase phase)
+{
+   if (m_railFocus)
    {
-      const auto* composed = dynamic_cast<const ComposedPage*>(content);
-      const InGameUIItem* const item = composed ? composed->GetSelectedSectionItem() : content->GetSelectedItem();
-      if (item == nullptr || item->m_type == InGameUIItem::Type::Navigation || item->m_type == InGameUIItem::Type::Runnable || item->m_type == InGameUIItem::Type::Label)
-      {
-         m_railFocus = true;
-         return;
-      }
+      if (phase != StepPhase::Held)
+         StepScreen(direction);
+      return;
    }
-   content->AdjustItem(direction, isInitialPress);
+   if (InGameUIPage* const content = GetContent(); content)
+      content->StepItem(direction, phase);
+   else
+      m_railFocus = true;
+}
+
+// Up/Down: the screens on the rail (as Previous/Next), the rows of the screen
+void MainMenuPage::StepRow(int direction, StepPhase phase)
+{
+   InGameUIPage* const content = m_railFocus ? nullptr : GetContent();
+   if (content)
+      content->StepRow(direction, phase);
+   else
+      StepItem(direction, phase);
+}
+
+InGameUIPage* MainMenuPage::GetButtonTarget()
+{
+   InGameUIPage* const content = m_railFocus ? nullptr : GetContent();
+   return content ? content->GetButtonTarget() : this;
 }
 
 void MainMenuPage::ActivateItem()
@@ -144,9 +171,8 @@ void MainMenuPage::ActivateItem()
       m_railFocus = true;
 }
 
-// Button navigation (a cabinet, a pinball controller in VR, the sticks of the VR controllers): left is used by the values and the input
-// mappings, so most screens have no item from which it gets back to the rail. Back does it from the content, and leaves the menu from the
-// rail. While pointing (VR controllers, mouse), Back leaves the menu at once, as before.
+// Button navigation (a cabinet, a pinball controller in VR, the sticks of the VR controllers): Cancel gets back to the rail from the content,
+// and leaves the menu from the rail. While pointing (VR controllers, mouse), Back leaves the menu at once, as before.
 bool MainMenuPage::HandleBack(bool wasButtonNav)
 {
    if (!wasButtonNav || m_railFocus)
@@ -154,8 +180,22 @@ bool MainMenuPage::HandleBack(bool wasButtonNav)
    // The screen first, for its own levels (the tables of the Tables screen get back to its tabs)
    if (InGameUIPage* const content = GetContent(); content && content->HandleBack(wasButtonNav))
       return true;
+   // A screen opened from another (VPX Performance, Device Performance): back to that one, on the item which opened it
+   if (const Screen parent = GetRailScreen(m_screen); parent != m_screen)
+   {
+      BackToRailScreen();
+      return true;
+   }
    m_railFocus = true;
    return true;
+}
+
+void MainMenuPage::BackToRailScreen()
+{
+   const Screen from = m_screen;
+   SetScreen(GetRailScreen(from));
+   if (InGameUIPage* const content = GetContent(); content)
+      InGameUIPageView::SetSelectedIndex(*content, from == Screen::Display ? 1 : 0); // Device Performance first, VPX Performance second
 }
 
 bool MainMenuPage::IsDefaults() const

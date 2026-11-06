@@ -4,7 +4,10 @@
 #include "Screens.h"
 
 #include "ComposedPage.h"
+#include "MainMenuPage.h"
+#include "Theme.h"
 #include "VRUI.h"
+#include "Widgets.h"
 
 #include "core/TournamentFile.h"
 #include "fonts/IconsForkAwesome.h"
@@ -160,7 +163,181 @@ private:
    }
 };
 
-// The performance panel left of the cabinet (Display & Performance screen): a tool to tune the tables, on or off for all of them, saved at once
+// Performance profile (top of the Device Performance screen): Low, Medium and High set the performance settings of the screen at once, any
+// other combination of them is Custom. Medium is the defaults, in every build (Settings_properties.inl). The values are set as the items of
+// the screen would set them: live, and saved with its Save button (for the table or for all of them), undone with Undo.
+enum class PerfProfile { Low, Medium, High, Custom };
+
+struct ProfileSetting
+{
+   const VPX::Properties::PropertyRegistry::PropId* id;
+   int values[3]; // Low, Medium, High (a switch: 0 or 1; a choice: the index of its value)
+};
+
+static const vector<ProfileSetting>& GetProfileSettings()
+{
+   static const vector<ProfileSetting> settings = {
+      { &Settings::m_propPlayerVR_DynamicResolution, { 1, 1, 0 } },
+      { &Settings::m_propPlayerVR_Foveation, { 3, 2, 0 } }, // High, Medium, Off
+      { &Settings::m_propPlayerVR_FoveateTonemapping, { 1, 1, 0 } },
+      { &Settings::m_propPlayerVR_FoveateAntialiasing, { 1, 0, 0 } }, // Always On, Always Off, Always Off
+      { &Settings::m_propPlayer_SimplifyMeshes, { 1, 1, 0 } },
+      { &Settings::m_propPlayer_CompactSceneBuffer, { 1, 1, 0 } },
+      { &Settings::m_propPlayer_ExtraMirrors, { 1, 1, 0 } }, // Off, Off, On
+      { &Settings::m_propPlayer_RoomReflection, { 1, 1, 0 } }, // Off, Off, On
+      { &Settings::m_propPlayer_ReflectionSize, { 1, 1, 0 } }, // Half, Half, Full
+   };
+   return settings;
+}
+
+static const ProfileSetting* FindProfileSetting(const InGameUIItem& item)
+{
+   if (item.m_type != InGameUIItem::Type::Property || item.m_property == nullptr)
+      return nullptr;
+   const auto id = Settings::GetRegistry().GetPropertyId(item.m_property->m_groupId, item.m_property->m_propId);
+   if (!id.has_value())
+      return nullptr;
+   for (const ProfileSetting& setting : GetProfileSettings())
+      if (setting.id->index == id.value().index)
+         return &setting;
+   return nullptr;
+}
+
+class PerfProfilePage final : public InGameUIPage
+{
+public:
+   PerfProfilePage()
+      : InGameUIPage("Performance profile"s, ""s, SaveMode::None)
+   {
+   }
+
+   void SetScreen(const ComposedPage* screen) { m_screen = screen; }
+
+   // The row is edited with the buttons: UI: Confirm, then Next/Previous change the profile (Custom is not one to choose), Confirm or Cancel
+   // leave it
+   bool IsEditableItem(const InGameUIItem& item) const override { return item.m_label == kRow || InGameUIPage::IsEditableItem(item); }
+
+   void AdjustItem(float direction, bool isInitialPress) override
+   {
+      if (const InGameUIItem* const item = GetSelectedItem(); item && item->m_label == kRow)
+      {
+         if (isInitialPress)
+         {
+            const PerfProfile current = GetProfile();
+            const int index = current == PerfProfile::Custom ? (direction > 0.f ? -1 : 3) : static_cast<int>(current);
+            Apply(static_cast<PerfProfile>((index + (direction > 0.f ? 1 : 2)) % 3));
+         }
+         return;
+      }
+      InGameUIPage::AdjustItem(direction, isInitialPress);
+   }
+
+private:
+   static constexpr const char* kRow = "##profile";
+
+   // The profile the shown settings match (the ones of VR only in VR). Outside VR, Low and Medium set the same settings: the one chosen last
+   // is shown, Medium otherwise (the default).
+   PerfProfile GetProfile() const
+   {
+      bool matches[3] = { true, true, true };
+      if (m_screen)
+         m_screen->ForEachShownItem(
+            [&matches](InGameUIPage&, InGameUIItem& item)
+            {
+               if (const ProfileSetting* setting = FindProfileSetting(item); setting)
+               {
+                  const int value = item.m_property->m_type == VPX::Properties::PropertyDef::Type::Bool ? (item.GetBoolValue() ? 1 : 0) : item.GetIntValue();
+                  for (int p = 0; p < 3; p++)
+                     matches[p] &= value == setting->values[p];
+               }
+            });
+      if (m_chosen != PerfProfile::Custom && matches[static_cast<int>(m_chosen)])
+         return m_chosen;
+      return matches[1] ? PerfProfile::Medium : matches[0] ? PerfProfile::Low : matches[2] ? PerfProfile::High : PerfProfile::Custom;
+   }
+
+   void Apply(PerfProfile profile) const
+   {
+      if (m_screen == nullptr || profile == PerfProfile::Custom)
+         return;
+      m_chosen = profile;
+      const int p = static_cast<int>(profile);
+      m_screen->ForEachShownItem(
+         [p](InGameUIPage&, InGameUIItem& item)
+         {
+            if (const ProfileSetting* setting = FindProfileSetting(item); setting)
+            {
+               if (item.m_property->m_type == VPX::Properties::PropertyDef::Type::Bool)
+                  item.SetValue(setting->values[p] != 0);
+               else
+                  item.SetValue(setting->values[p]);
+            }
+         });
+   }
+
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>(kRow, "Confirm, then Next/Previous: choose the profile, Confirm or Cancel when done. Changing one of the settings below makes it Custom"s,
+         [this](int, const InGameUIItem*)
+         {
+            const float height = ImGui::GetFrameHeight();
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x, pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f), Theme::kText, "Performance profile");
+            const PerfProfile current = GetProfile();
+            static constexpr const char* names[] = { "Low", "Medium", "High", "Custom" };
+            const float gap = Theme::Px(0.4f);
+            float x = pos.x + width * 0.42f;
+            for (int p = 0; p < 4; p++)
+            {
+               ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
+               // Custom is only shown, highlighted while the settings match no profile
+               if (Widgets::Pill(names[p], nullptr, names[p], height, true, false, p == static_cast<int>(current)) && p != static_cast<int>(PerfProfile::Custom))
+                  Apply(static_cast<PerfProfile>(p));
+               x += Widgets::PillWidth(nullptr, names[p], height) + gap;
+            }
+            ImGui::SetCursorScreenPos(pos);
+            ImGui::Dummy(ImVec2(width, height));
+         }));
+      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+         "Low is for low performance devices: it sets the settings that maximize the performance, with visual tradeoffs. Medium is the balanced "
+         "option, where the visual tradeoff is minimal. High has no performance optimization and offers the best visual quality."s));
+   }
+
+   const ComposedPage* m_screen = nullptr;
+   mutable PerfProfile m_chosen = PerfProfile::Custom; // The profile chosen last, shown when the settings match it and another one
+};
+
+// Performance screen: Device Performance (what the Steam Frame Edition adds) or VPX Performance (the graphics of Visual Pinball), each shown
+// in place of this screen (Cancel gets back here)
+class PerformanceChoicePage final : public InGameUIPage
+{
+public:
+   PerformanceChoicePage()
+      : InGameUIPage("Performance"s, ""s, SaveMode::None)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      const auto open = [](Screen screen)
+      {
+         if (auto* const menu = dynamic_cast<MainMenuPage*>(g_pplayer->m_liveUI->m_inGameUI.GetActivePage()); menu)
+         {
+            menu->SetScreen(screen);
+            menu->SetRailFocus(false);
+         }
+      };
+      AddItem(std::make_unique<InGameUIItem>("Device Performance"s,
+         "What the Steam Frame Edition adds to keep heavy tables smooth: dynamic resolution and foveated rendering in VR, simplified meshes, compact scene buffer, reflections"s,
+         [open]() { open(Screen::SteamFrame); }));
+      AddItem(std::make_unique<InGameUIItem>("VPX Performance"s, "The graphics options of Visual Pinball (and, in VR, the performance panel and the VR rendering)"s,
+         [open]() { open(Screen::Display); }));
+   }
+};
+
+// The performance panel left of the cabinet (VPX Performance screen): a tool to tune the tables, on or off for all of them, saved at once
 class PerformancePanelPage final : public InGameUIPage
 {
 public:
@@ -185,7 +362,7 @@ private:
    }
 };
 
-// The simplified meshes (Steam Frame screen), switched and tuned live, saved for the table or for all of them like the settings pages
+// The simplified meshes (Device Performance screen), switched and tuned live, saved for the table or for all of them like the settings pages
 class SimplifiedMeshesPage final : public InGameUIPage
 {
 public:
@@ -220,7 +397,7 @@ private:
    }
 };
 
-// The format of the scene buffers (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
+// The format of the scene buffers (Device Performance screen), switched live, saved for the table or for all of them like the settings pages
 class SceneBufferPage final : public InGameUIPage
 {
 public:
@@ -245,7 +422,7 @@ private:
    }
 };
 
-// What the reflections leave out (Steam Frame screen), switched live, saved for the table or for all of them like the settings pages
+// What the reflections leave out (Device Performance screen), switched live, saved for the table or for all of them like the settings pages
 class ReflectionsPage final : public InGameUIPage
 {
 public:
@@ -346,6 +523,7 @@ constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
 constexpr const char* kSceneBuffer = "vrui/scene-buffer";
 constexpr const char* kReflections = "vrui/reflections";
+constexpr const char* kPerfProfile = "vrui/perf-profile";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
 // The items of a page which no section lists (an option added upstream) are shown by its 'rest' section.
@@ -382,6 +560,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::SteamFrame:
       return {
+         Section { ""s, kPerfProfile, {}, true },
          Section { "Dynamic resolution"s, kVR,
             { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
                Label("Dynamic resolution sensitivity help"s),
@@ -445,6 +624,7 @@ bool IsScreenAvailable(Screen screen)
    case Screen::Tables:
    case Screen::Scores:
    case Screen::Room:
+   case Screen::Performance:
    case Screen::Display:
    case Screen::SteamFrame:
    case Screen::Sound:
@@ -457,6 +637,18 @@ bool IsScreenAvailable(Screen screen)
    return false;
 }
 
+bool IsScreenOnRail(Screen screen) { return GetRailScreen(screen) == screen && IsScreenAvailable(screen); }
+
+Screen GetRailScreen(Screen screen)
+{
+   switch (screen)
+   {
+   case Screen::Display:
+   case Screen::SteamFrame: return Screen::Performance;
+   default: return screen;
+   }
+}
+
 const char* GetScreenIcon(Screen screen)
 {
    switch (screen)
@@ -465,6 +657,7 @@ const char* GetScreenIcon(Screen screen)
    case Screen::ThisTable: return ICON_FK_PLAY;
    case Screen::Scores: return ICON_FK_TROPHY;
    case Screen::Room: return ICON_FK_CUBE;
+   case Screen::Performance: return ICON_FK_TACHOMETER;
    case Screen::Display: return ICON_FK_TACHOMETER;
    case Screen::SteamFrame: return kSteamFrameLogo;
    case Screen::Sound: return ICON_FK_VOLUME_UP;
@@ -486,8 +679,9 @@ const char* GetScreenName(Screen screen)
    case Screen::ThisTable: return "This table";
    case Screen::Scores: return "Scores";
    case Screen::Room: return g_pplayer && g_pplayer->m_vrDevice ? "VR & Room" : "Point of view";
-   case Screen::Display: return "Display & Performance";
-   case Screen::SteamFrame: return "Steam Frame";
+   case Screen::Performance: return "Performance";
+   case Screen::Display: return "VPX Performance";
+   case Screen::SteamFrame: return "Device Performance";
    case Screen::Sound: return "Sound";
    case Screen::Controls: return "Controls";
    case Screen::Plugins: return "Plugins";
@@ -519,6 +713,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kMenuAndLobby, std::make_unique<MenuAndLobbyPage>()));
       return CreateComposed(screen, "VR & Room"s, "Where the table and the cabinet stand in the room"s, std::move(sources));
+   case Screen::Performance: return std::make_unique<PerformanceChoicePage>();
    case Screen::Display:
       if (vr)
       {
@@ -526,14 +721,21 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       }
       sources.push_back(source(kGraphics, std::make_unique<GraphicSettingsPage>()));
-      return CreateComposed(screen, "Display & Performance"s, ""s, std::move(sources));
+      return CreateComposed(screen, "VPX Performance"s, ""s, std::move(sources));
    case Screen::SteamFrame:
+   {
+      auto profile = std::make_unique<PerfProfilePage>();
+      PerfProfilePage* const profilePage = profile.get();
+      sources.push_back(source(kPerfProfile, std::move(profile)));
       if (vr)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
       sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
       sources.push_back(source(kReflections, std::make_unique<ReflectionsPage>()));
-      return CreateComposed(screen, "Steam Frame"s, "What the Steam Frame Edition adds to keep heavy tables at the headset's full resolution"s, std::move(sources));
+      std::unique_ptr<InGameUIPage> page = CreateComposed(screen, "Device Performance"s, "What the Steam Frame Edition adds to keep heavy tables smooth"s, std::move(sources));
+      profilePage->SetScreen(static_cast<const ComposedPage*>(page.get())); // The settings the profile sets are the items of the screen
+      return page;
+   }
    case Screen::Sound:
       sources.push_back(source(kAudio, std::make_unique<AudioSettingsPage>()));
       if (vr)

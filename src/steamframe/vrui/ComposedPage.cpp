@@ -251,6 +251,28 @@ void ComposedPage::AdjustItem(float direction, bool isInitialPress)
    page->AdjustItem(direction, isInitialPress);
 }
 
+// The page of the selected section tells which of its items are edited with the buttons (sliders, choices, rows of its own)
+bool ComposedPage::IsEditableItem(const InGameUIItem& item) const
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      return GetSource(m_sections[m_selected.section].source)->IsEditableItem(item);
+   return InGameUIPage::IsEditableItem(item);
+}
+
+string ComposedPage::GetEditKey(const InGameUIItem& item) const
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      return GetSource(m_sections[m_selected.section].source)->GetEditKey(item);
+   return InGameUIPage::GetEditKey(item);
+}
+
+// A float edited with the buttons is snapped to its steps by its page
+void ComposedPage::ReleaseAdjustedItem()
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      GetSource(m_sections[m_selected.section].source)->ReleaseAdjustedItem();
+}
+
 const InGameUIItem* ComposedPage::GetSelectedSectionItem() const
 {
    if (m_selected.section < 0 || m_selected.section >= static_cast<int>(m_sections.size()))

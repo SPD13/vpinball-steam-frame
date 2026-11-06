@@ -14,8 +14,9 @@ enum class Screen
    ThisTable, // Actions and options of the table being played (not in the lobby)
    Scores, // Who is playing, leaderboards
    Room, // VR placement and room (point of view on the desktop)
-   Display, // Graphics and performance
-   SteamFrame, // The performance features of the Steam Frame Edition: dynamic resolution, foveated rendering, simplified meshes
+   Performance, // The choice of the two next screens, which are not on the rail (they are shown in its place)
+   Display, // VPX Performance: graphics, and the performance panel and VR rendering in VR
+   SteamFrame, // Device Performance: the features of the Steam Frame Edition (dynamic resolution, foveated rendering, simplified meshes...)
    Sound,
    Controls,
    Plugins,
@@ -31,6 +32,8 @@ inline constexpr int kScreenCount = static_cast<int>(Screen::Count);
 inline constexpr const char* kSteamFrameLogo = "\x01SteamFrame";
 
 bool IsScreenAvailable(Screen screen);
+bool IsScreenOnRail(Screen screen); // Available and with an icon on the rail (the others are opened from a screen of the rail)
+Screen GetRailScreen(Screen screen); // The screen of the rail it is opened from (itself when on the rail)
 const char* GetScreenIcon(Screen screen);
 const char* GetScreenName(Screen screen);
 

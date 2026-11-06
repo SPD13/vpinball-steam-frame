@@ -47,6 +47,10 @@ public:
    void AdjustItem(float direction, bool isInitialPress) override;
    void ActivateItem() override;
    bool HandleBack(bool wasButtonNav) override;
+   void StepItem(int direction, StepPhase phase) override;
+   void StepRow(int direction, StepPhase phase) override;
+   bool IsEditableItem(const VPX::InGameUI::InGameUIItem& item) const override;
+   string GetEditKey(const VPX::InGameUI::InGameUIItem& item) const override;
 
    // New VR menu: opens its keyboard on the search field (as clicking it does)
    void OpenSearchKeyboard();
@@ -76,6 +80,7 @@ private:
    void SetTab(int tab);
    void StepTab(int direction);
    void SelectItem(const char* label); // New view: selects the item with this label (the tab row, the search field)
+   int FindFilterItem() const; // Index of the row of the letter filter, -1 when there is none
    bool SelectFirstTable(); // Selects the first table listed, false when there is none
    void ActivateTabIcon(int icon);
    void StepFilter(int direction);
@@ -108,6 +113,8 @@ public:
 
    void AdjustItem(float direction, bool isInitialPress) override;
    void ActivateItem() override;
+   bool IsEditableItem(const InGameUIItem& item) const override; // The character selector: Next/Previous change the character
+   string GetEditKey(const InGameUIItem& item) const override;
 
 private:
    void BuildPage() override;

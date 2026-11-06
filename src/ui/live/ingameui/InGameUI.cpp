@@ -88,7 +88,13 @@ void InGameUI::Navigate(const string &path, bool isBack)
       Close();
       return;
    }
+#if defined(VPX_STEAM_FRAME)
+   m_navigatingBack = isBack; // Steam Frame Edition: the main menu of the VR UI gets back to the screen and the item it opened a page from
    m_activePages.push_back(it->second());
+   m_navigatingBack = false;
+#else
+   m_activePages.push_back(it->second());
+#endif
    if (m_activePages.back())
    {
       m_navigationHistory.push_back(path);
@@ -230,8 +236,8 @@ void InGameUI::OnUIUpAction()
       return;
 
 #if defined(VPX_STEAM_FRAME)
-   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Up)) // The keyboard of the new VR UI has the focus (OK on a text field): the buttons select and press its keys
-      return;
+   OnUIStep(1); // Steam Frame Edition: UI: Next Item
+   return;
 #endif
 
    const bool wasFlipperNav = m_useFlipperNav;
@@ -250,8 +256,8 @@ void InGameUI::OnUIDownAction()
       return;
 
 #if defined(VPX_STEAM_FRAME)
-   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Down))
-      return;
+   OnUIStep(-1); // Steam Frame Edition: UI: Previous Item
+   return;
 #endif
 
    const bool wasFlipperNav = m_useFlipperNav;
@@ -270,10 +276,8 @@ void InGameUI::OnUILeftAction()
       return;
 
 #if defined(VPX_STEAM_FRAME)
-   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Left))
-      return;
-   if (!UseButtonNav()) // The first press only shows the selected item, as up and down do
-      return;
+   OnUINavigateBack(); // Steam Frame Edition: UI: Cancel
+   return;
 #endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(-1, true);
@@ -285,10 +289,8 @@ void InGameUI::OnUIRightAction()
       return;
 
 #if defined(VPX_STEAM_FRAME)
-   if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Right))
-      return;
-   if (!UseButtonNav())
-      return;
+   OnUIConfirm(); // Steam Frame Edition: UI: Confirm
+   return;
 #endif
    if (m_useFlipperNav)
       GetActivePage()->AdjustItem(1, true);
@@ -330,14 +332,118 @@ void InGameUI::OnUISaveChanges()
 #if defined(VPX_STEAM_FRAME)
 void InGameUI::OnUIConfirm()
 {
-   if (ImGui::IsAnyItemActive())
+   if (ImGui::IsAnyItemActive() || IsSameButtonPress(ButtonUse::Confirm))
       return;
 
    if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Confirm))
       return;
-   if (!UseButtonNav()) // The first press only shows the selected item, as the directions do
+   if (!UseButtonNav()) // The first press only shows the selected item, as Next and Previous do
       return;
+   // Editing a value: Confirm keeps it
+   if (GetEditedPage())
+   {
+      EndEdit(true);
+      return;
+   }
+   // A slider or a choice: Confirm starts editing it, Next/Previous change it
+   if (InGameUIPage* const target = GetActivePage()->GetButtonTarget(); target)
+      if (const InGameUIItem* const item = target->GetFocusedItem(); item && target->IsEditableItem(*item))
+      {
+         BeginEdit(*target, *item);
+         return;
+      }
    GetActivePage()->ActivateItem();
+}
+
+// UI: Next Item, UI: Previous Item: the next/previous stop of the page (StepItem), the value of the edited item, the key of the keyboard
+void InGameUI::OnUIStep(int direction)
+{
+   if (IsSameButtonPress(direction > 0 ? ButtonUse::Next : ButtonUse::Previous))
+      return;
+   if (VRUI::Keyboard::HandleButton(direction > 0 ? VRUI::Keyboard::Button::Right : VRUI::Keyboard::Button::Left)) // In reading order
+      return;
+   m_flipperNavStart = msec();
+   m_flipperNavRepeatCount = 0;
+   if (!UseButtonNav()) // The first press only shows the selected item
+      return;
+   if (InGameUIPage* const edited = GetEditedPage())
+      edited->AdjustItem(static_cast<float>(direction), true);
+   else
+      GetActivePage()->StepItem(direction, InGameUIPage::StepPhase::Press);
+}
+
+// A key mapped to two actions with the same use in the menus (Escape: Exit Game and UI: Cancel, Enter: Launch Ball and UI: Confirm in VR)
+// sends both on the same frame: only the first one is used
+bool InGameUI::IsSameButtonPress(ButtonUse use)
+{
+   const int frame = ImGui::GetFrameCount();
+   int& last = m_lastButtonFrame[static_cast<int>(use)];
+   const bool same = last == frame;
+   last = frame;
+   return same;
+}
+
+// UI: Up, UI: Down (a full D-pad): the row above/below in a grid of tiles and on the keyboard, otherwise as Previous/Next (StepRow). Up
+// increases an edited value, Down decreases it.
+void InGameUI::OnUIRow(int direction)
+{
+   if (ImGui::IsAnyItemActive() || IsSameButtonPress(direction < 0 ? ButtonUse::Up : ButtonUse::Down))
+      return;
+   if (VRUI::Keyboard::HandleButton(direction < 0 ? VRUI::Keyboard::Button::Up : VRUI::Keyboard::Button::Down))
+      return;
+   m_flipperNavStart = msec();
+   m_flipperNavRepeatCount = 0;
+   if (!UseButtonNav()) // The first press only shows the selected item
+      return;
+   if (InGameUIPage* const edited = GetEditedPage())
+      edited->AdjustItem(static_cast<float>(-direction), true);
+   else
+      GetActivePage()->StepRow(direction, InGameUIPage::StepPhase::Press);
+}
+
+// The edited value is still the focused item of the page the buttons act on (otherwise its editing ended: other page, pointer used)
+InGameUIPage* InGameUI::GetEditedPage()
+{
+   if (m_editedPage == nullptr)
+      return nullptr;
+   InGameUIPage* const target = GetActivePage() ? GetActivePage()->GetButtonTarget() : nullptr;
+   const InGameUIItem* const item = target == m_editedPage && m_useFlipperNav ? target->GetFocusedItem() : nullptr;
+   if (item == nullptr || target->GetEditKey(*item) != m_editedKey)
+      m_editedPage = nullptr;
+   return m_editedPage;
+}
+
+bool InGameUI::IsEditing(const InGameUIItem* item)
+{
+   InGameUIPage* const page = GetEditedPage();
+   return page && item && page->GetFocusedItem() == item;
+}
+
+void InGameUI::BeginEdit(InGameUIPage& page, const InGameUIItem& item)
+{
+   m_editedPage = &page;
+   m_editedKey = page.GetEditKey(item);
+   m_editedRestorable = item.m_type == InGameUIItem::Type::Property;
+   if (m_editedRestorable && item.m_property->m_type == VPX::Properties::PropertyDef::Type::Float)
+      m_editedFloat = item.GetFloatValue();
+   else if (m_editedRestorable)
+      m_editedInt = item.GetIntValue();
+}
+
+void InGameUI::EndEdit(bool keep)
+{
+   InGameUIPage* const page = GetEditedPage();
+   m_editedPage = nullptr;
+   if (page == nullptr)
+      return;
+   page->ReleaseAdjustedItem(); // Snaps a float to its steps
+   if (const InGameUIItem* const item = page->GetFocusedItem(); !keep && m_editedRestorable && item && item->m_type == InGameUIItem::Type::Property)
+   {
+      if (item->m_property->m_type == VPX::Properties::PropertyDef::Type::Float)
+         item->SetValue(m_editedFloat);
+      else
+         item->SetValue(m_editedInt);
+   }
 }
 #endif
 
@@ -347,8 +453,17 @@ void InGameUI::OnUINavigateBack()
       return;
 
 #if defined(VPX_STEAM_FRAME)
+   if (IsSameButtonPress(ButtonUse::Back))
+      return;
    if (VRUI::Keyboard::HandleButton(VRUI::Keyboard::Button::Back))
       return;
+   // Editing a value: Cancel restores it
+   if (GetEditedPage())
+   {
+      UseButtonNav();
+      EndEdit(false);
+      return;
+   }
    const bool wasButtonNav = UseButtonNav();
    if (GetActivePage() && GetActivePage()->HandleBack(wasButtonNav))
       return;
@@ -384,6 +499,47 @@ void InGameUI::HandlePageInput()
    // Handle continuous press navigation
    const uint32_t now = msec();
    const uint32_t flipperNavRepeat = m_flipperNavRepeatCount == 0 ? 500 : m_flipperNavRepeatCount == 1 ? 250 : 125;
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: Next/Previous and Up/Down held repeat their step, or change the edited value continuously (Confirm and Cancel do
+   // not repeat)
+   const InputManager& input = m_player->m_pininput;
+   const bool nextHeld = m_useFlipperNav && input.IsPressed(input.GetUIUpActionId());
+   const bool prevHeld = m_useFlipperNav && input.IsPressed(input.GetUIDownActionId());
+   const bool upHeld = m_useFlipperNav && input.IsPressed(input.GetUIRowUpActionId());
+   const bool downHeld = m_useFlipperNav && input.IsPressed(input.GetUIRowDownActionId());
+   const int stepDirection = nextHeld == prevHeld ? 0 : nextHeld ? 1 : -1;
+   const int rowDirection = upHeld == downHeld ? 0 : downHeld ? 1 : -1;
+   InGameUIPage* const edited = GetEditedPage();
+   const int valueDirection = stepDirection != 0 ? stepDirection : -rowDirection;
+   if (valueDirection != 0 && edited)
+      edited->AdjustItem(static_cast<float>(valueDirection), false);
+   else if (stepDirection != 0 || rowDirection != 0)
+   {
+      const bool repeat = now - m_flipperNavStart > flipperNavRepeat;
+      if (repeat)
+      {
+         m_flipperNavStart = now;
+         m_flipperNavRepeatCount++;
+      }
+      InGameUIPage* const page = GetActivePage();
+      if (stepDirection != 0)
+      {
+         if (repeat)
+            page->StepItem(stepDirection, InGameUIPage::StepPhase::Repeat);
+         page->StepItem(stepDirection, InGameUIPage::StepPhase::Held);
+      }
+      else
+      {
+         if (repeat)
+            page->StepRow(rowDirection, InGameUIPage::StepPhase::Repeat);
+         page->StepRow(rowDirection, InGameUIPage::StepPhase::Held);
+      }
+   }
+   else if (m_itemAdjustWasPressed && edited)
+      edited->ReleaseAdjustedItem();
+   m_itemAdjustWasPressed = valueDirection != 0;
+   return;
+#endif
    if (m_useFlipperNav && m_player->m_pininput.IsPressed(m_player->m_pininput.GetUIUpActionId()) && (now - m_flipperNavStart) > flipperNavRepeat)
    {
       m_flipperNavStart = now;
