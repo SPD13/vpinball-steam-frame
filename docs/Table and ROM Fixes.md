@@ -370,3 +370,35 @@ errors, which the Frame does not have).
 when the table starts.
 
 History: version 1, 2026-10-31.
+
+### <a id="aloha-coin-key"></a>Aloha (Gottlieb 1961): coins from the controllers
+
+Applies to: tables whose file name contains `Aloha` (checked with *Aloha (Gottlieb 1961) VRROOM Ext2k Conversion*, an EM table without a
+ROM). Another Aloha table without the line is reported as "not needed".
+
+**Symptom.** The table loads and asks for no ROM, but no game can be started: the coin button does nothing, the credits stay at 0, and
+Start needs a credit.
+
+**Cause.** The script adds a credit for a hard-coded key code:
+
+```vb
+	If Keycode= 6 then
+		playsound "coin3"
+		If credits<47 then Credits=Credits+1:DOF 119, DOFOn:end if
+```
+
+6 is the DirectInput code of the `5` key. VPX sends the DirectInput code of a key to `KeyDown` for the keys of a keyboard only
+(`InputManager`, `m_keyboardDeviceId`). An action sends `0x10000 | action id`, the value of `AddCreditKey`, whatever the device: the coin
+button of the VR controllers, or of a gamepad, never sends 6. Start uses `StartGameKey`, and works. Upstream VPX has the same behaviour
+with a gamepad. In the Frame library of 2026-11-05 (110 tables), only one other table tests `Keycode = 6` (*VR Room The Flintstones*, a
+PinMAME table whose coins go through `core.vbs` and `AddCreditKey`).
+
+**Fix.** The line tests `AddCreditKey` instead of 6. The `5` key of a keyboard sends both its code and the action, so it still adds one
+credit (testing both would add two).
+
+**Checked** on the Mac, 2026-11-05, with the table and an isolated preferences folder, by a line added at the end of `Aloha_Init` that
+calls `Aloha_KeyDown AddCreditKey` (what the coin action calls) then `Aloha_KeyDown StartGameKey`. Original script: no credit, no game.
+With the recipe (the text found once, CRLF kept): 1 credit, and the game starts (`GameinProgress` 1, 1 player). **To check** on the Frame:
+coin and Start with the controllers.
+
+History: version 1, 2026-11-05.

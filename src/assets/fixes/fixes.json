@@ -120,6 +120,22 @@
           "replace": "\t' EnableLUTSelector = Table1.Option(\"Cooperative Mode\", 1, 2, 1, 1, 0, Array(\"False (Default)\",\"True\")) ' Removed by the Steam Frame Edition (fix darkest-dungeon-coop-option): it read the option of the mode above, and never ran\n"
         }
       ]
+    },
+    {
+      "id": "aloha-coin-key",
+      "version": 1,
+      "title": "Aloha (Gottlieb 1961): coins from the controllers",
+      "symptom": "The table loads, but the credits stay at 0: the coin button does nothing, so Start does not start a game.",
+      "cause": "The script adds a credit only for the key code 6, the DirectInput code of the '5' key of a keyboard, instead of AddCreditKey. VPX sends the code 6 for a keyboard key only: the coin button of the VR controllers or of a gamepad sends AddCreditKey.",
+      "change": "The script adds a credit for AddCreditKey, which the coin button sends, and the '5' key of a keyboard too.",
+      "doc": "aloha-coin-key",
+      "match": { "files": ["aloha"] },
+      "script": [
+        {
+          "find": "\tIf Keycode= 6 then\n",
+          "replace": "\tIf Keycode = AddCreditKey then ' Keycode= 6 before the Steam Frame Edition (fix aloha-coin-key): 6 is the '5' key of a keyboard only, the coin button of the controllers sends AddCreditKey\n"
+        }
+      ]
     }
   ]
 }
