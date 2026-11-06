@@ -47,7 +47,7 @@ void LiveUI::UpdateVRPointer()
          constexpr float deadZone = 0.2f;
          const InputManager& input = m_player->m_pininput;
          if (input.IsPressed(input.GetUIUpActionId()) || input.IsPressed(input.GetUIDownActionId()) || input.IsPressed(input.GetUILeftActionId())
-            || input.IsPressed(input.GetUIRightActionId()))
+            || input.IsPressed(input.GetUIRightActionId()) || input.IsPressed(input.GetUIRowUpActionId()) || input.IsPressed(input.GetUIRowDownActionId()))
             m_vrPointerScrollBlocked = true;
          else if (fabsf(scroll) <= deadZone)
             m_vrPointerScrollBlocked = false;
@@ -93,7 +93,7 @@ void LiveUI::RenderVRPointerRay(bool onVRPanel, int depthSort)
       if (m_vrPointerRayMesh == nullptr)
       {
          auto ib = std::make_shared<IndexBuffer>(m_rd, nIndices, true, IndexBuffer::Format::FMT_INDEX32);
-         auto vb = std::make_shared<VertexBuffer>(m_rd, nVertices, nullptr, true);
+         auto vb = std::make_shared<VertexBuffer>(m_rd, nVertices, nullptr, true, VertexFormat::VF_IMGUI);
          m_vrPointerRayMesh = std::make_shared<MeshBuffer>("VRPointerRay"s, vb, ib, false);
          uint32_t* indices;
          m_vrPointerRayMesh->m_ib->Lock(indices);
@@ -108,7 +108,7 @@ void LiveUI::RenderVRPointerRay(bool onVRPanel, int depthSort)
          m_vrPointerRayMesh->m_ib->Unlock();
       }
       // The white pixel moves when the atlas is rebuilt, so the vertices are updated each frame
-      Vertex3D_NoTex2* vertices;
+      VertexUI* vertices;
       m_vrPointerRayMesh->m_vb->Lock(vertices);
       for (unsigned int c = 0; c <= segments; c++)
       {
@@ -120,8 +120,7 @@ void LiveUI::RenderVRPointerRay(bool onVRPanel, int depthSort)
             const float across = static_cast<float>(r) / static_cast<float>(rows - 1) - 0.5f; // -0.5 to 0.5
             vertices->x = t;
             vertices->y = 0.5f + across * width;
-            vertices->z = across == 0.f ? alpha : 0.f; // alpha
-            vertices->nx = vertices->ny = vertices->nz = 1.f; // white
+            vertices->color = IM_COL32(255, 255, 255, across == 0.f ? static_cast<int>(alpha * 255.f + 0.5f) : 0); // White, opaque on the middle line only
             vertices->tu = io.Fonts->TexUvWhitePixel.x;
             vertices->tv = io.Fonts->TexUvWhitePixel.y;
          }

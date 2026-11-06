@@ -11,7 +11,7 @@
 #include "UpdateCheck.h"
 #include "Widgets.h"
 
-#include "fonts/IconsForkAwesome.h"
+#include "steamframe/fonts/IconsForkAwesome.h"
 #include "imgui/imgui_internal.h"
 #include "renderer/Renderer.h"
 #include "steamframe/Launcher.h"
@@ -28,7 +28,14 @@ namespace VPX::InGameUI
 class VRUINavigation final
 {
 public:
-   static void ResetHistory(InGameUI& ui, const string& path) { ui.m_navigationHistory.assign(1, path); }
+   // The cabinet launcher stays the root: Back from the menu gets back to it
+   static void ResetHistory(InGameUI& ui, const string& path)
+   {
+      const bool fromLauncher = !ui.m_navigationHistory.empty() && ui.m_navigationHistory.front() == "cabinet/launcher"s;
+      ui.m_navigationHistory.assign(1, path);
+      if (fromLauncher)
+         ui.m_navigationHistory.insert(ui.m_navigationHistory.begin(), "cabinet/launcher"s);
+   }
 };
 
 }
@@ -218,11 +225,12 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
 
    // Rail: one icon button per screen, centered vertically, the name of the screen in a bubble when hovered or focused
    {
-      const Screen current = menu ? menu->GetScreen() : MainMenuPage::GetLastScreen();
+      // A screen opened from another one (VPX Performance, Device Performance) shows the icon of that one as current
+      const Screen current = GetRailScreen(menu ? menu->GetScreen() : MainMenuPage::GetLastScreen());
       const float gap = Theme::Px(Theme::kRailGap);
       int count = 0;
       for (int i = 0; i < kScreenCount; i++)
-         count += IsScreenAvailable(static_cast<Screen>(i)) ? 1 : 0;
+         count += IsScreenOnRail(static_cast<Screen>(i)) ? 1 : 0;
       const float button = min(Theme::Px(Theme::kRailButton),
          floorf((size.y - 2.f * Theme::Px(Theme::kRailMargin) - static_cast<float>(count - 1) * gap) / static_cast<float>(count)));
       float y = pos.y + (size.y - static_cast<float>(count) * (button + gap) + gap) * 0.5f;
@@ -230,7 +238,7 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
       for (int i = 0; i < kScreenCount; i++)
       {
          const Screen screen = static_cast<Screen>(i);
-         if (!IsScreenAvailable(screen))
+         if (!IsScreenOnRail(screen))
             continue;
          ImGui::SetCursorScreenPos(ImVec2(x, y));
          bool hovered = false;
@@ -275,6 +283,14 @@ bool RenderPage(InGameUIPage& page, float elapsedS)
          ImGui::SetCursorScreenPos(ImVec2(contentX, pillY));
          if (Widgets::Pill("##back", ICON_FK_ARROW_LEFT, "Back", pillHeight, true, InGameUIPageView::IsCoreItemSelected(page, InGameUIItem::Type::Back)))
             InGameUIPageView::Back(page);
+         titleX += Widgets::PillWidth(ICON_FK_ARROW_LEFT, "Back", pillHeight) + pad;
+      }
+      else if (menu && GetRailScreen(menu->GetScreen()) != menu->GetScreen())
+      {
+         // A screen opened from another one: back to that one (Cancel does the same)
+         ImGui::SetCursorScreenPos(ImVec2(contentX, pillY));
+         if (Widgets::Pill("##back", ICON_FK_ARROW_LEFT, "Back", pillHeight, true, false))
+            menu->BackToRailScreen();
          titleX += Widgets::PillWidth(ICON_FK_ARROW_LEFT, "Back", pillHeight) + pad;
       }
       const bool inTable = !player->m_isLobby && !player->m_isLoading;

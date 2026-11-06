@@ -572,6 +572,11 @@ void InputManager::PushButtonEvent(uint16_t deviceId, uint16_t buttonId, uint64_
       return;
 
    uint32_t id = deviceId << 16 | buttonId;
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: while a mapping is captured, any key or button can be chosen: their presses only go to the capture (Escape would
+   // otherwise leave the page, the UI buttons move in it). Releases still reach the actions, for the ones pressed before the capture.
+   if (m_buttonCaptureState != 1 || !isPressed)
+#endif
    if (auto it = m_buttonMappings.find(id); it != m_buttonMappings.end())
    {
       // A press completing a chord wins over shorter bindings it also completes (longest binding wins)
@@ -624,6 +629,10 @@ void InputManager::PushAxisEvent(uint16_t deviceId, uint16_t axisId, uint64_t ti
       for (auto mapping : it->second)
          mapping->SetAxisPosition(timestampNs, position);
 
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: as the buttons, the axes used as buttons (sticks, triggers) only go to the capture while a mapping is captured
+   if (m_buttonCaptureState != 1)
+#endif
    if (auto it = m_buttonMappings.find(id); it != m_buttonMappings.end())
    {
       // Same longest-binding-wins priority as PushButtonEvent, with the per-mapping threshold state
@@ -730,16 +739,17 @@ void InputManager::CreateInputActions()
                      m_player->m_liveUI->m_inGameUI.OnUILeftAction();
                   else if (action.GetActionId() == m_uiRightActionId)
                      m_player->m_liveUI->m_inGameUI.OnUIRightAction();
+#if defined(VPX_STEAM_FRAME)
+                  else if (action.GetActionId() == m_uiRowUpActionId)
+                     m_player->m_liveUI->m_inGameUI.OnUIRow(-1);
+                  else if (action.GetActionId() == m_uiRowDownActionId)
+                     m_player->m_liveUI->m_inGameUI.OnUIRow(1);
+                  // Steam Frame Edition: the menus only use the four UI actions (Next Item, Previous Item, Confirm, Cancel), the other buttons
+                  // (Start, Credit, Launch Ball, Exit Game, Toggle InGame UI) doing nothing in them
+#else
                   // Somewhat hacky direct UI action mapping (inherited from legacy POV adjustment mode, could benefit from some additional cleanups)
                   else if (action.GetActionId() == m_launchBallActionId)
                      m_player->m_liveUI->m_inGameUI.OnUIResetToDefaults();
-#if defined(VPX_STEAM_FRAME)
-                  // Steam Frame Edition: OK and Back, as on a gamepad (A and B of a VR controller), Save and Undo being buttons of the page
-                  else if (action.GetActionId() == m_addCreditActionId[0])
-                     m_player->m_liveUI->m_inGameUI.OnUINavigateBack();
-                  else if (action.GetActionId() == m_startActionId)
-                     m_player->m_liveUI->m_inGameUI.OnUIConfirm();
-#else
                   else if (action.GetActionId() == m_addCreditActionId[0])
                      m_player->m_liveUI->m_inGameUI.OnUICancelChanges();
                   else if (action.GetActionId() == m_startActionId)
@@ -816,8 +826,17 @@ void InputManager::CreateInputActions()
    m_rightMagnaActionId = addKeyAction("RightMagna"s, "Right Magna"s, SDL_SCANCODE_RCTRL);
    m_uiUpActionId = addKeyAction("UIUp"s, "UI: Next Item"s, SDL_SCANCODE_LCTRL);
    m_uiDownActionId = addKeyAction("UIDown"s, "UI: Previous Item"s, SDL_SCANCODE_RCTRL);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: values are edited once confirmed, Next and Previous changing them (see InGameUI::OnUIConfirm)
+   m_uiLeftActionId = addKeyAction("UILeft"s, "UI: Cancel"s, SDL_SCANCODE_LSHIFT);
+   m_uiRightActionId = addKeyAction("UIRight"s, "UI: Confirm"s, SDL_SCANCODE_RSHIFT);
+   // For a full D-pad: the row above/below in a grid (tiles, keyboard), otherwise the previous/next item (see InGameUI::OnUIRow)
+   m_uiRowUpActionId = addKeyAction("UIRowUp"s, "UI: Up"s, SDL_SCANCODE_UP);
+   m_uiRowDownActionId = addKeyAction("UIRowDown"s, "UI: Down"s, SDL_SCANCODE_DOWN);
+#else
    m_uiLeftActionId = addKeyAction("UILeft"s, "UI: Decrease/Cancel"s, SDL_SCANCODE_LSHIFT);
    m_uiRightActionId = addKeyAction("UIRight"s, "UI: Increase/Confirm"s, SDL_SCANCODE_RSHIFT);
+#endif
    m_launchBallActionId = addKeyAction("LaunchBall"s, "Launch Ball"s, SDL_SCANCODE_RETURN);
    m_leftNudgeActionId = addNudgeKeyAction("LeftNudge"s, "Left Nudge"s, SDL_SCANCODE_Z);
    m_rightNudgeActionId = addNudgeKeyAction("RightNudge"s, "Right Nudge"s, SDL_SCANCODE_SLASH);
@@ -863,10 +882,12 @@ void InputManager::CreateInputActions()
                m_player->SetCloseState(m_player->HasStackedTableSession() ? Player::CS_STOP_PLAY : g_isMobile ? Player::CS_CLOSE_CAPTURE_SCREENSHOT : g_isStandalone ? Player::CS_CLOSE_APP : Player::CS_STOP_PLAY);
 #endif
             }
+#if !defined(VPX_STEAM_FRAME) // Steam Frame Edition: in the menus, only UI: Cancel goes back (Escape does when mapped to it)
             else if (isPressed && m_player->m_liveUI->IsInGameUIOpened())
             {
                m_player->m_liveUI->m_inGameUI.OnUINavigateBack();
             }
+#endif
          }))->GetActionId();
 
    m_openInGameUIActionId = AddAction(
@@ -877,10 +898,12 @@ void InputManager::CreateInputActions()
             {
                m_player->m_liveUI->OpenInGameUI();
             }
+#if !defined(VPX_STEAM_FRAME) // Steam Frame Edition: opens the menu, in which only UI: Cancel goes back
             else if (isPressed && m_player->m_liveUI->IsInGameUIOpened())
             {
                m_player->m_liveUI->m_inGameUI.OnUINavigateBack();
             }
+#endif
          }))->GetActionId();
 
    auto volumeDown = AddAction(std::make_unique<InputAction>(this, "VolumeDown"s, "Volume Down"s, keyMapping(SDL_SCANCODE_MINUS),

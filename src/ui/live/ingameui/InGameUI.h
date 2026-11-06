@@ -33,7 +33,10 @@ public:
    void UsePointerNav() { m_useFlipperNav = false; } // For pointers which can not be detected from mouse moves, like VR controllers
 #if defined(VPX_STEAM_FRAME)
    bool UseButtonNav(); // Steam Frame Edition: any button of the UI switches to button navigation. Returns whether it was already used.
-   void OnUIConfirm(); // Steam Frame Edition: the OK button (Start, A on a VR controller) activates the selected item
+   void OnUIConfirm(); // Steam Frame Edition: UI: Confirm (and A of a VR controller) activates the selected item, or starts/ends editing it
+   bool IsEditing(const InGameUIItem* item); // Steam Frame Edition: the item is being edited with the buttons (see OnUIConfirm)
+   void OnUIRow(int direction); // Steam Frame Edition: UI: Up (-1), UI: Down (1)
+   bool IsNavigatingBack() const { return m_navigatingBack; } // Steam Frame Edition: the page being created is the one gone back to
 #endif
    void OnUIUpAction();
    void OnUIDownAction();
@@ -52,6 +55,23 @@ private:
 #endif
    void HandlePageInput();
    void HandleLegacyFlyOver();
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: UI: Next Item and UI: Previous Item (src/ui/live/ingameui/InGameUIPage.h, StepItem)
+   void OnUIStep(int direction);
+   enum class ButtonUse { Confirm, Back, Next, Previous, Up, Down, Count };
+   bool IsSameButtonPress(ButtonUse use);
+   int m_lastButtonFrame[static_cast<int>(ButtonUse::Count)] = { -1, -1, -1, -1, -1, -1 };
+   // The value edited with the buttons: its page (the one its AdjustItem changes it), the key identifying it, its value before editing
+   InGameUIPage* GetEditedPage();
+   void BeginEdit(InGameUIPage& page, const InGameUIItem& item);
+   void EndEdit(bool keep);
+   bool m_navigatingBack = false;
+   InGameUIPage* m_editedPage = nullptr;
+   string m_editedKey;
+   bool m_editedRestorable = false;
+   float m_editedFloat = 0.f;
+   int m_editedInt = 0;
+#endif
 
    Player *m_player;
    ImVec2 m_prevMousePos;
