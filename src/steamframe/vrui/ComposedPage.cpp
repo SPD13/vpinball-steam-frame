@@ -122,6 +122,10 @@ void ComposedPage::ForEachShownItem(const std::function<void(InGameUIPage&, InGa
    for (const Section& section : m_sections)
    {
       InGameUIPage* const page = GetSource(section.source);
+      // A page waiting for its rebuild (a change made while it was drawn) is left out until it is drawn again: its items may query what the
+      // change removed (switching a window output away from Window destroys the window the items of its size read: a crash on the cabinet)
+      if (InGameUIPageView::NeedsRebuild(*page))
+         continue;
       // Index based, as a change may rebuild the page (the rebuild happens when the page is drawn, so the items stay valid until then)
       for (int i = 0; i < static_cast<int>(InGameUIPageView::GetItems(*page).size()); i++)
          if (IsShown(section, *page, i) && !IsHeader(*InGameUIPageView::GetItems(*page)[i]))
@@ -249,6 +253,28 @@ void ComposedPage::AdjustItem(float direction, bool isInitialPress)
    InGameUIPage* const page = GetSource(m_sections[m_selected.section].source);
    InGameUIPageView::SetSelectedIndex(*page, m_selected.index);
    page->AdjustItem(direction, isInitialPress);
+}
+
+// The page of the selected section tells which of its items are edited with the buttons (sliders, choices, rows of its own)
+bool ComposedPage::IsEditableItem(const InGameUIItem& item) const
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      return GetSource(m_sections[m_selected.section].source)->IsEditableItem(item);
+   return InGameUIPage::IsEditableItem(item);
+}
+
+string ComposedPage::GetEditKey(const InGameUIItem& item) const
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      return GetSource(m_sections[m_selected.section].source)->GetEditKey(item);
+   return InGameUIPage::GetEditKey(item);
+}
+
+// A float edited with the buttons is snapped to its steps by its page
+void ComposedPage::ReleaseAdjustedItem()
+{
+   if (m_selected.section >= 0 && m_selected.section < static_cast<int>(m_sections.size()))
+      GetSource(m_sections[m_selected.section].source)->ReleaseAdjustedItem();
 }
 
 const InGameUIItem* ComposedPage::GetSelectedSectionItem() const

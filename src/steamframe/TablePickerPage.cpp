@@ -282,20 +282,31 @@ void TablePickerPage::StepTab(int direction)
       SetTab(static_cast<int>(s_tab) + direction);
       return;
    }
-   // First level of the buttons: the tabs, the icon buttons, the search field and the button clearing it (when there is a search), then back
-   // to the first tab. Start gets to the tables (see ActivateItem).
+   // First level of the buttons: the tabs, the icon buttons, the search field and the button clearing it (when there is a search), the letter
+   // filter (when shown), then back to the first tab. Confirm gets to the tables (see ActivateItem), or edits the letter.
    const int nTabs = static_cast<int>(std::size(NEW_VIEW_TABS));
    const int searchStop = nTabs + TAB_ICON_COUNT;
-   const int nStops = searchStop + (s_search.empty() ? 1 : 2);
+   const int filterStop = searchStop + (s_search.empty() ? 1 : 2);
+   const int filterItem = FindFilterItem();
+   const int nStops = filterStop + (filterItem >= 0 ? 1 : 0);
    const InGameUIItem* const item = GetSelectedItem();
    int index = nTabs + m_tabIcon;
    if (item && item->m_label == SEARCH_ITEM)
       index = searchStop + (m_clearFocus ? 1 : 0);
+   else if (item && item->m_label.starts_with(FILTER_LABEL))
+      index = filterStop;
    else if (m_tabIcon < 0)
       for (int i = 0; i < nTabs; i++)
          if (NEW_VIEW_TABS[i] == s_tab)
             index = i;
    index = (index + direction + nStops) % nStops;
+   if (index == filterStop)
+   {
+      InGameUIPageView::SetSelectedIndex(*this, filterItem);
+      m_tabIcon = -1;
+      m_clearFocus = false;
+      return;
+   }
    if (index >= searchStop)
    {
       SelectItem(SEARCH_ITEM);
@@ -334,6 +345,15 @@ void TablePickerPage::SelectItem(const char* label)
          InGameUIPageView::SetSelectedIndex(*this, i);
          return;
       }
+}
+
+int TablePickerPage::FindFilterItem() const
+{
+   const auto& items = InGameUIPageView::GetItems(*this);
+   for (int i = 0; i < static_cast<int>(items.size()); i++)
+      if (items[i]->m_label.starts_with(FILTER_LABEL))
+         return i;
+   return -1;
 }
 
 void TablePickerPage::ActivateTabIcon(int icon)
@@ -423,13 +443,51 @@ void TablePickerPage::ActivateItem()
       AdjustItem(1.f, true);
 }
 
+// UI: Next Item, UI: Previous Item. New view: the stops of the first level (tabs, icon buttons, search, letter filter: StepTab), the tables in
+// reading order once Confirm got to them (they stay in the grid: Cancel gets back to the first level)
+void TablePickerPage::StepItem(int direction, StepPhase phase)
+{
+   if (phase == StepPhase::Held)
+      return;
+   const InGameUIItem* const item = GetSelectedItem();
+   if (item && item->m_tileImage)
+   {
+      StepTileGrid(direction, 0);
+      return;
+   }
+   if (m_newView && item && (item->m_label == TABS_ITEM || item->m_label.starts_with(FILTER_LABEL) || (item->m_label == SEARCH_ITEM && VPX::VRUI::Keyboard::IsUsed())))
+   {
+      if (phase == StepPhase::Press)
+         StepTab(direction);
+      return;
+   }
+   InGameUIPage::StepItem(direction, phase);
+}
+
+// Up/Down: the rows of the tables (staying in the grid), the first level as Previous/Next
+void TablePickerPage::StepRow(int direction, StepPhase phase)
+{
+   if (const InGameUIItem* const item = GetSelectedItem(); item && item->m_tileImage)
+   {
+      if (phase != StepPhase::Held)
+         StepTileGrid(0, direction);
+      return;
+   }
+   StepItem(direction, phase);
+}
+
+// The letter filter is edited as a value: Next/Previous change the letter (its label changes with it)
+bool TablePickerPage::IsEditableItem(const InGameUIItem& item) const { return item.m_label.starts_with(FILTER_LABEL) || InGameUIPage::IsEditableItem(item); }
+
+string TablePickerPage::GetEditKey(const InGameUIItem& item) const { return item.m_label.starts_with(FILTER_LABEL) ? string(FILTER_LABEL) : InGameUIPage::GetEditKey(item); }
+
 // New VR menu, with the buttons: Back from the tables gets back to the first level (the tab row, or the search field when the tables were
 // reached from it), then from there to the rail of the menu
 bool TablePickerPage::HandleBack(bool wasButtonNav)
 {
    if (!m_newView || !wasButtonNav)
       return false;
-   if (const InGameUIItem* item = GetSelectedItem(); item && (item->m_label == TABS_ITEM || item->m_label == SEARCH_ITEM))
+   if (const InGameUIItem* item = GetSelectedItem(); item && (item->m_label == TABS_ITEM || item->m_label == SEARCH_ITEM || item->m_label.starts_with(FILTER_LABEL)))
    {
       if (VPX::VRUI::Keyboard::IsEditing("tables/search"s))
          VPX::VRUI::Keyboard::Close();
@@ -697,7 +755,7 @@ void TablePickerPage::BuildPage()
    // All the tables are listed: the views only draw the ones on screen, and the images are loaded as they get displayed (see GetThumbnail)
    const size_t matchCount = tables.size();
 
-   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, m_newView ? "Left/Right: previous/next list, then the buttons to rescan the tables folder, change the view and the sort order, then the search. OK: the tables of the list, or the button"s : "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
+   AddItem(std::make_unique<InGameUIItem>(TABS_ITEM, m_newView ? "Next/Previous: the lists, then the buttons to rescan the tables folder, change the view and the sort order, then the search and the letter. Confirm: the tables of the list, or the button"s : "Left/Right: previous/next list"s, [this](int, const InGameUIItem*) { m_newView ? RenderTabsNewView() : RenderTabs(); }))
       .m_customHighlight = true;
    if (s_tab == PickerTab::Menu)
    {
@@ -714,7 +772,7 @@ void TablePickerPage::BuildPage()
       BuildLeaderboardList(*this);
       return;
    }
-   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, m_newView && VPX::VRUI::Keyboard::IsUsed() ? "Type a few letters of the name of a table. OK: type with the buttons, Done: the tables found. Left/Right: the button clearing the search, the tabs."s : "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
+   AddItem(std::make_unique<InGameUIItem>(SEARCH_ITEM, m_newView && VPX::VRUI::Keyboard::IsUsed() ? "Type a few letters of the name of a table. Confirm: type with the buttons, Done: the tables found. Next/Previous: the button clearing the search, the tabs."s : "Type a few letters of the name of a table. Without a keyboard, Left/Right open a text entry page."s, [this](int, const InGameUIItem*) { m_newView ? RenderSearchNewView() : RenderSearch(); }));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header,
       m_scanning                   ? "Scanning tables folder..."s
@@ -727,7 +785,7 @@ void TablePickerPage::BuildPage()
       if (m_newView)
       {
          // A row with previous/next arrows: left/right change the letter (an action row would get back to the rail of the menu)
-         AddItem(std::make_unique<InGameUIItem>(FILTER_LABEL + filter, "Left/Right: only show the tables starting with the previous/next letter"s,
+         AddItem(std::make_unique<InGameUIItem>(FILTER_LABEL + filter, "Confirm, then Next/Previous: only show the tables starting with the next/previous letter"s,
             [this, filter](int, const InGameUIItem*)
             {
                namespace Theme = VPX::VRUI::Theme;
@@ -1235,6 +1293,10 @@ void TextEntryPage::AdjustItem(float direction, bool isInitialPress)
       InGameUIPage::AdjustItem(direction, isInitialPress);
 }
 
+bool TextEntryPage::IsEditableItem(const InGameUIItem& item) const { return item.m_label.starts_with(CHARACTER_LABEL) || InGameUIPage::IsEditableItem(item); }
+
+string TextEntryPage::GetEditKey(const InGameUIItem& item) const { return item.m_label.starts_with(CHARACTER_LABEL) ? string(CHARACTER_LABEL) : InGameUIPage::GetEditKey(item); }
+
 // New VR menu: OK on the field gives the focus to the keyboard, to type with the buttons
 void TextEntryPage::ActivateItem()
 {
@@ -1326,7 +1388,7 @@ void TextEntryPage::BuildPage()
       return;
    }
 
-   AddItem(std::make_unique<InGameUIItem>(CHARACTER_LABEL + "< "s + displayedChar + " >", "Left/Right: previous/next character"s, []() { /* Handled by AdjustItem as it depends on the direction */ }));
+   AddItem(std::make_unique<InGameUIItem>(CHARACTER_LABEL + "< "s + displayedChar + " >", "Confirm, then Next/Previous: the next/previous character, then Confirm and the Add item below"s, []() { /* Handled by AdjustItem as it depends on the direction */ }));
    AddItem(std::make_unique<InGameUIItem>("Add '" + displayedChar + '\'', ""s,
       [this, c]()
       {

@@ -47,6 +47,10 @@ public:
    unsigned int GetUIDownActionId() const { return m_uiDownActionId; }
    unsigned int GetUILeftActionId() const { return m_uiLeftActionId; }
    unsigned int GetUIRightActionId() const { return m_uiRightActionId; }
+#if defined(VPX_STEAM_FRAME)
+   unsigned int GetUIRowUpActionId() const { return m_uiRowUpActionId; } // Steam Frame Edition: UI: Up and UI: Down, for a full D-pad
+   unsigned int GetUIRowDownActionId() const { return m_uiRowDownActionId; }
+#endif
    unsigned int GetExitGameActionId() const { return m_exitGameActionId; }
    unsigned int GetOpenInGameUIActionId() const { return m_openInGameUIActionId; }
    unsigned int GetLockbarActionId() const { return m_lockbarActionId; }
@@ -232,6 +236,10 @@ private:
    unsigned int m_uiDownActionId;
    unsigned int m_uiLeftActionId;
    unsigned int m_uiRightActionId;
+#if defined(VPX_STEAM_FRAME)
+   unsigned int m_uiRowUpActionId;
+   unsigned int m_uiRowDownActionId;
+#endif
    unsigned int m_exitGameActionId;
    unsigned int m_openInGameUIActionId;
    unsigned int m_lockbarActionId;

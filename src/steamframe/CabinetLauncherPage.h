@@ -28,20 +28,26 @@ public:
 
    void Open(bool isBackwardAnimation) override;
    void Render(float elapsedS) override;
-   void SelectNextItem() override; // Down: to the options
-   void SelectPrevItem() override; // Up: to the reel
-   void AdjustItem(float direction, bool isInitialPress) override; // Left/right, called each frame while held
+   void SelectNextItem() override; // To the options
+   void SelectPrevItem() override; // To the reel
+   void AdjustItem(float direction, bool isInitialPress) override; // A step in the reel, called each frame while held (repeating)
    void ReleaseAdjustedItem() override { }
-   void ActivateItem() override; // Start
-   void ResetToDefaults() override { } // Launch Ball: unused (Back switches the bands), not to reset anything by mistake
-   bool HandleBack(bool wasButtonNav) override;
+   void StepItem(int direction, StepPhase phase) override; // UI: Next Item, UI: Previous Item
+   void StepRow(int direction, StepPhase phase) override; // UI: Up, UI: Down: between the reel and the options band
+   void ActivateItem() override; // UI: Confirm
+   void ResetToDefaults() override { } // Nothing to reset
+   bool HandleBack(bool wasButtonNav) override; // UI: Cancel
    bool IsFlipperNavNeeded() const override { return true; } // Buttons only: moving the mouse does not switch to pointer navigation
    bool IsPlayerPauseAllowed() const override { return false; } // The lobby keeps running (no pause sign)
 
 private:
    void BuildPage() override { }
 
+#ifdef VPX_TABLE_WEBSERVER
+   enum class Option { Search, Options, WiFi, Quit, Shutdown, Count };
+#else
    enum class Option { Search, Options, Quit, Shutdown, Count };
+#endif
    enum class Band { Reel, Options };
 
    void RefreshList(bool force);

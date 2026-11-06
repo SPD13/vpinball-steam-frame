@@ -7,11 +7,14 @@
 #include "renderer/Renderer.h"
 #include "steamframe/CabinetBackglass.h"
 #include "steamframe/Launcher.h"
+#ifdef VPX_TABLE_WEBSERVER
+#include "lib/src/WebServer.h"
+#endif
 #include "steamframe/vrui/Keyboard.h"
 #include "steamframe/vrui/Theme.h"
 #include "ui/live/LiveUI.h"
 
-#include "fonts/IconsForkAwesome.h"
+#include "steamframe/fonts/IconsForkAwesome.h"
 
 using LibraryTable = VPinballLib::Table; // 'Table' alone is ambiguous with VPX parts
 using VPinballLib::TableLibrary;
@@ -59,8 +62,13 @@ namespace
          drawList->PrimWriteIdx(static_cast<ImDrawIdx>(drawList->_VtxCurrentIdx - 4 + i));
    }
 
+#ifdef VPX_TABLE_WEBSERVER
+   constexpr const char* kOptionIcons[] = { ICON_FK_SEARCH, ICON_FK_SLIDERS, ICON_FK_WIFI, ICON_FK_SIGN_OUT, ICON_FK_POWER_OFF };
+   constexpr const char* kOptionLabels[] = { "Search", "Options", "Wi-Fi", "Quit", "Shutdown" };
+#else
    constexpr const char* kOptionIcons[] = { ICON_FK_SEARCH, ICON_FK_SLIDERS, ICON_FK_SIGN_OUT, ICON_FK_POWER_OFF };
    constexpr const char* kOptionLabels[] = { "Search", "Options", "Quit", "Shutdown" };
+#endif
 
    string s_search; // Kept while the application runs, across the tables played
 
@@ -276,6 +284,24 @@ void CabinetLauncherPage::Activate(Option option)
          Keyboard::Close();
       m_player->m_liveUI->m_inGameUI.Navigate("tables/picker"s);
       break;
+#ifdef VPX_TABLE_WEBSERVER
+   case Option::WiFi:
+   {
+      // On until the application is closed ('ask every time' of the Wi-Fi upload screen), or off; started always on, it shows On
+      WebServer& webServer = g_launcher->GetWebServer();
+      if (webServer.IsRunning())
+         webServer.Stop();
+      else
+         webServer.Start();
+      Settings& settings = g_settingsService.GetAppSettings();
+      if (settings.GetStandalone_WebServerAlwaysOn())
+      {
+         settings.SetStandalone_WebServerAlwaysOn(false, false);
+         settings.Save();
+      }
+      break;
+   }
+#endif
    case Option::Quit: g_launcher->QuitApplication(m_player); break;
    case Option::Shutdown:
       m_confirmShutdown = true;
@@ -287,9 +313,10 @@ void CabinetLauncherPage::Activate(Option option)
 
 void CabinetLauncherPage::OpenSearch()
 {
-   Keyboard::Open(kSearchOwner, "Search tables"s, s_search, 64, [this](const string& text) { SetSearch(text); }, []() { Keyboard::Close(); });
+   // Done and Cancel close the keyboard, the reel showing the tables found (Cancel again clears the search)
+   Keyboard::Open(kSearchOwner, "Search tables"s, s_search, 64, [this](const string& text) { SetSearch(text); }, []() { Keyboard::Close(); }, []() { Keyboard::Close(); });
    Keyboard::Focus();
-   m_band = Band::Reel; // Left/right browse the results once the keyboard is left with Back
+   m_band = Band::Reel;
 }
 
 
@@ -325,6 +352,30 @@ void CabinetLauncherPage::AdjustItem(float direction, bool isInitialPress)
       const uint32_t held = now - m_holdStartMs;
       m_nextRepeatMs = now + (held > 2500 ? 45 : held > 1200 ? 80 : 140);
    }
+}
+
+// The reel moves while the button is held, faster and faster (AdjustItem), the options and the shutdown choice once per press
+void CabinetLauncherPage::StepItem(int direction, StepPhase phase)
+{
+   if (m_confirmShutdown || m_band == Band::Options)
+   {
+      if (phase == StepPhase::Press)
+         AdjustItem(static_cast<float>(direction), true);
+      return;
+   }
+   if (phase != StepPhase::Repeat)
+      AdjustItem(static_cast<float>(direction), phase == StepPhase::Press);
+}
+
+// Up: to the reel, Down: to the options band (the shutdown choice is a row: as Previous/Next)
+void CabinetLauncherPage::StepRow(int direction, StepPhase phase)
+{
+   if (m_confirmShutdown)
+      StepItem(direction, phase);
+   else if (phase == StepPhase::Press && direction > 0)
+      SelectNextItem();
+   else if (phase == StepPhase::Press)
+      SelectPrevItem();
 }
 
 void CabinetLauncherPage::SelectNextItem()
@@ -723,7 +774,7 @@ void CabinetLauncherPage::RenderInfo(ImDrawList* drawList, const ImVec2& size, f
    drawList->AddText(font, smallSize, ImVec2(size.x - margin - TextSize(font, smallSize, position.c_str()).x, rowY), WithAlpha(Theme::kTextMuted, alpha), position.c_str());
    if (!s_search.empty())
    {
-      const string chip = string(ICON_FK_SEARCH) + "  " + s_search + "   (Back: clear)";
+      const string chip = string(ICON_FK_SEARCH) + "  " + s_search + "   (Cancel: clear)";
       const ImVec2 chipSize = TextSize(font, smallSize, chip.c_str());
       const ImVec2 chipPos(margin, rowY);
       drawList->AddRectFilled(chipPos - ImVec2(layout.unit, 0.5f * layout.unit), chipPos + chipSize + ImVec2(layout.unit, 0.5f * layout.unit), WithAlpha(Theme::kSurface, alpha * 0.9f),
@@ -774,18 +825,39 @@ void CabinetLauncherPage::RenderOptions(ImDrawList* drawList, const ImVec2& size
       const ImVec2 pillMin = center - pillSize * 0.5f, pillMax = center + pillSize * 0.5f;
       const ImU32 background = isFocused ? Theme::kAccent : Theme::kSurface;
       drawList->AddRectFilled(pillMin, pillMax, WithAlpha(background, alpha * (isFocused ? 1.f : focused ? 0.9f : 0.7f)), 0.5f * pillSize.y);
-      const string label = string(kOptionIcons[i]) + "  " + kOptionLabels[i];
+      string label = string(kOptionIcons[i]) + "  " + kOptionLabels[i];
+#ifdef VPX_TABLE_WEBSERVER
+      if (i == static_cast<int>(Option::WiFi))
+         label += g_launcher->GetWebServer().IsRunning() ? ": On" : ": Off";
+#endif
       const ImU32 color = isFocused ? IM_COL32(8, 18, 34, 255) : focused ? Theme::kText : Theme::kTextMuted;
       CenteredText(drawList, font, textSize * scale, center, WithAlpha(color, alpha), label.c_str());
       m_optionAreas.push_back({ pillMin, pillMax, i });
    }
 
+#ifdef VPX_TABLE_WEBSERVER
+   // While Wi-Fi upload is on: the address to open in a browser, and the pairing code it asks for
+   if (WebServer& webServer = g_launcher->GetWebServer(); webServer.IsRunning())
+   {
+      const string url = webServer.GetUrl();
+      const string code = webServer.GetPairingCode();
+      string status = string(ICON_FK_WIFI) + "  " + (url.empty() ? "Wi-Fi upload on: no network address found"s : "Wi-Fi upload: " + url);
+      if (!url.empty() && !code.empty())
+         status += "     Code: " + code;
+      const float statusSize = 2.f * layout.unit;
+      const ImVec2 statusExtent = TextSize(font, statusSize, status.c_str());
+      const ImVec2 statusPos(size.x - 3.f * layout.unit - statusExtent.x, 2.f * layout.unit);
+      drawList->AddRectFilled(statusPos - ImVec2(layout.unit, 0.5f * layout.unit), statusPos + statusExtent + ImVec2(layout.unit, 0.5f * layout.unit),
+         WithAlpha(Theme::kSurface, alpha * 0.9f), layout.unit);
+      drawList->AddText(font, statusSize, statusPos, WithAlpha(Theme::kAccent, alpha), status.c_str());
+   }
+#endif
+
    // What the buttons do
-   const char* const hint = m_confirmShutdown ? "Flippers: choose     Start: confirm     Back: cancel"
-      : focused ? "Flippers: choose     Start: select     Back: back to the tables"
-      : Keyboard::IsEditing(kSearchOwner) ? "Flippers: browse the results     Up: type     Back: close the keyboard"
-      : !s_search.empty() ? "Flippers: browse the results     Start: play     Back: clear the search"
-      : "Flippers: browse     Start: play     Back: options";
+   const char* const hint = m_confirmShutdown ? "Next/Previous: choose     Confirm: confirm     Cancel: cancel"
+      : focused ? "Next/Previous: choose     Confirm: select     Cancel: back to the tables"
+      : !s_search.empty() ? "Next/Previous: browse the results     Confirm: play     Cancel: clear the search"
+      : "Next/Previous: browse     Confirm: play     Cancel: options";
    CenteredText(drawList, font, 1.9f * layout.unit, ImVec2(0.5f * size.x, size.y - 2.2f * layout.unit), WithAlpha(Theme::kTextMuted, alpha * 0.9f), hint);
 }
 
