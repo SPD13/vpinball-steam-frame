@@ -11,6 +11,13 @@ echo "  LIBLZMA_SHA: ${LIBLZMA_SHA}"
 echo "  LIBARCHIVE_SHA: ${LIBARCHIVE_SHA}"
 
 LIBARCHIVE_EXPECTED_SHA="${LIBLZMA_SHA}-${LIBARCHIVE_SHA}"
+# MinGW: the static zlib built by external.sh (the one VPX links), not MSYS2's DLL one, whose import symbols (__imp_inflate...) VPX
+# cannot resolve
+LIBARCHIVE_ZLIB_ARGS=()
+if [ "$STEAMFRAME_PLATFORM" = windows-mingw-x64 ]; then
+   LIBARCHIVE_EXPECTED_SHA="${LIBARCHIVE_EXPECTED_SHA}-${ZLIB_SHA}-002"
+   LIBARCHIVE_ZLIB_ARGS=(-DZLIB_INCLUDE_DIR="$(pwd)/zlib/zlib" -DZLIB_LIBRARY="$(pwd)/zlib/zlib/build/libzlibstatic.a")
+fi
 LIBARCHIVE_FOUND_SHA="$([ -f libarchive/cache.txt ] && cat libarchive/cache.txt || echo "")"
 
 if [ "${LIBARCHIVE_EXPECTED_SHA}" != "${LIBARCHIVE_FOUND_SHA}" ]; then
@@ -46,6 +53,7 @@ if [ "${LIBARCHIVE_EXPECTED_SHA}" != "${LIBARCHIVE_FOUND_SHA}" ]; then
       -DLIBLZMA_INCLUDE_DIR="$(pwd)/xz/src/liblzma/api" \
       -DLIBLZMA_LIBRARY="$(pwd)/xz/build/liblzma.a" \
       -DENABLE_ZLIB=ON \
+      "${LIBARCHIVE_ZLIB_ARGS[@]}" \
       -DENABLE_BZip2=OFF \
       -DENABLE_ZSTD=OFF \
       -DENABLE_LZ4=OFF \
