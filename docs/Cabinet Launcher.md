@@ -20,43 +20,61 @@ library can be copied from a Frame, or restored from one of its backups, as it i
 - **Options band**, under the reel:
   - **Search**: a keyboard driven by the buttons; the reel shows the tables matching what is typed, the best match first, while typing.
   - **Options**: the full table picker of the Steam Frame Edition (tabs, favorites, scores, Wi-Fi upload, library and application
-    settings). Back returns to the reel.
+    settings). Cancel returns to the reel.
+  - **Wi-Fi: On / Off**: switches Wi-Fi upload (adding and managing tables from a browser). On lasts until Visual Pinball is closed
+    (the "ask every time" mode of the Wi-Fi upload screen; switching it here also clears "always on"); when it was started always on,
+    it shows On. While it is on, a badge in the top right corner gives the address to open and the pairing code.
   - **Quit**: leaves Visual Pinball.
   - **Shutdown**: asks for a confirmation, then turns the computer off once Visual Pinball has closed (`shutdown /s` on Windows,
     `systemctl poweroff` on Linux, System Events on macOS).
 
 ## Buttons
 
+The menus use the UI actions of the input settings (Settings, Controls), which a cabinet maps to buttons of its own, the other
+buttons staying free for the tables:
+
 | Button | Default key | In the reel | In the options band |
 |---|---|---|---|
-| Left / right flipper (UI Left / UI Right) | Left / right Shift | Previous / next table; held, faster and faster | Previous / next option |
-| Start | 1 | Play the table | Select the option |
-| Left / right magna-save (UI Up / UI Down) | Left / right Ctrl | Down: to the options band; Up: back to the keyboard while searching | Up: back to the reel |
-| Credit / Exit (Back) | 5 / Escape | To the options band; while searching, closes the keyboard, then clears the search first | Back to the reel |
-| Launch Ball | Enter | Nothing | Nothing |
+| UI: Next Item | Left Ctrl | Next table; held, faster and faster | Next option |
+| UI: Previous Item | Right Ctrl | Previous table; held, faster and faster | Previous option |
+| UI: Confirm | Right Shift | Play the table | Select the option |
+| UI: Cancel | Left Shift | To the options band; while searching, clears the search first | Back to the reel |
+| UI: Up / UI: Down | Up / Down arrow | Down: to the options band | Up: back to the reel |
+
+The menus only listen to these actions, in VR too: Start, Credit, Launch Ball, Exit Game (Escape) and Toggle InGame UI (F12, which
+still opens the menu while a table is played) do nothing in them. To go back with Escape, map it to UI: Cancel as well (a key mapped to two
+actions with the same use counts once). The default keys of the UI actions are the ones of the flippers and magna-saves: a keyboard cabinet
+without UI buttons navigates with them.
 
 In the menu opened by Options, the buttons navigate on two levels. The menu opens with the focus on the left menu (one icon per screen);
-Start enters the selected screen, Back gets back to the left menu:
+Confirm enters the selected screen, Cancel gets back to the left menu:
 
-| Button | In the left menu | In a screen |
-|---|---|---|
-| Left / right flipper (UI Left / UI Right) | Previous / next screen | Previous / next value or tab; left flipper: back to the left menu from a link or a button |
-| UI Up / UI Down | Previous / next screen | Previous / next item |
-| Start | Enters the screen | Selects the item |
-| Credit / Exit (Back) | Back to the reel | Back to the left menu |
-| Launch Ball | | Resets the screen to its defaults |
+| Button | In the left menu | In a screen | Editing a value |
+|---|---|---|---|
+| UI: Next Item / UI: Previous Item | Next / previous screen | Next / previous item (tiles in reading order) | Increase / decrease it (held: faster) |
+| UI: Confirm | Enters the screen | Selects the item: opens a page, flips a switch, defines an input mapping, starts editing a slider or a choice | Keeps the value |
+| UI: Cancel | Back to the reel | Back to the left menu | Restores the value it had |
+| UI: Up / UI: Down | Previous / next screen | The tile above / below in a grid, otherwise the previous / next item | Increase / decrease it |
 
-The Tables screen adds a level: the flippers go through its tab row (All, Recent, Favorites...), the icon buttons at its end, the search
-field and the button clearing the search, and Start gets to the first table of the list (on an icon button, Start uses it; on the search
-field, Start opens the keyboard of the menu to type, and Done or Back closes it and gets to the first table found). In the grid, the flippers go from table to table in
-reading order: right from the end of a row to the start of the next one, left from the start of a row to the end of the previous one.
-Back gets from the tables to the tab row (or to the search field, when they were reached from it), then to the left menu. On a cabinet the
-menu's on-screen keyboard is used, as in VR.
+UI: Up and UI: Down are for a full D-pad: in the cycles of the menu (the left menu, the tab row, the lists) they do what Previous and Next
+do, in a grid (the tables, the tiles, the on-screen keyboard) they move by rows, and in the launcher they go between the reel and the
+options band.
 
-The same applies in VR when the buttons navigate (a pinball controller, the sticks of the VR controllers). While pointing, Back closes
-the menu at once, and a click in a screen or on an icon moves the buttons' focus there.
+A slider or a choice (a list of values) is edited in two steps: Confirm on it frames its row, Next/Previous then change the value, Confirm
+keeps it, Cancel restores it.
 
-The launcher is never closed with Back: it is the start screen. A mouse works too (click a table to select it, click it again to play
+The Tables screen adds a level: Next/Previous go through its tab row (All, Recent, Favorites...), the icon buttons at its end, the search
+field, the button clearing the search and the letter filter, and Confirm gets to the first table of the list (on an icon button, Confirm
+uses it; on the search field, Confirm opens the keyboard of the menu to type, and Done or Cancel closes it and gets to the first table
+found; on the letter filter, Confirm edits the letter). In the grid, Next/Previous go from table to table in reading order. Cancel gets
+from the tables to the tab row (or to the search field, when they were reached from it), then to the left menu. On a cabinet the menu's
+on-screen keyboard is used, as in VR: Next/Previous go through its keys in reading order, Confirm presses one, Cancel closes it.
+
+The same applies in VR when the buttons navigate (a pinball controller, the sticks and the D-pad of the VR controllers, whose up, down,
+left and right are Next, Previous, Cancel and Confirm). While pointing, Cancel closes the menu at once, and a click in a screen or on an
+icon moves the buttons' focus there.
+
+The launcher is never closed with Cancel: it is the start screen. A mouse works too (click a table to select it, click it again to play
 it; the wheel scrolls the reel).
 
 ## Screens
@@ -88,8 +106,10 @@ src/steamframe/Launcher.h, .cpp              cabinet mode: lobby without a room,
 src/steamframe/PlayerTableImage.cpp          captures of the playfield and backglass windows when a table closes
 src/core/AppCommands.cpp                     '-Cabinet' option (guarded VPX_STEAM_FRAME)
 src/core/player.h                            CaptureTableImages (several windows), in the fork's block
-src/ui/live/ingameui/InGameUIPage.h          HandleBack, UpdateOpenAnimation (guarded VPX_STEAM_FRAME)
-src/ui/live/ingameui/InGameUI.cpp            Back offered to the page first (guarded VPX_STEAM_FRAME)
+src/ui/live/ingameui/InGameUIPage.h          HandleBack, StepItem and the edited items, UpdateOpenAnimation (guarded VPX_STEAM_FRAME)
+src/ui/live/ingameui/InGameUI.h, .cpp        the four UI actions: Next/Previous (OnUIStep), Confirm, Cancel, the value edited with them (guarded VPX_STEAM_FRAME)
+src/input/InputManager.cpp                   the menus only listen to the UI actions; labels UI: Cancel, UI: Confirm; presses only go to a mapping being captured (guarded VPX_STEAM_FRAME)
+src/steamframe/vrui/PageAdapter.cpp          default StepItem and editable items, the frame of the edited row
 src/steamframe/TableLibrary.cpp              the pictures are deleted with their table
 ```
 

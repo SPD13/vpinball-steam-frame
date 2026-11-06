@@ -49,6 +49,16 @@ public:
    void SelectNextItem() override;
    void SelectPrevItem() override;
    void AdjustItem(float direction, bool isInitialPress) override;
+   void ReleaseAdjustedItem() override;
+   const InGameUI::InGameUIItem* GetFocusedItem() const override { return GetSelectedSectionItem(); }
+   bool IsEditableItem(const InGameUI::InGameUIItem& item) const override; // As the page of the item tells
+   int GetNavPosition() const override { return m_selected.section >= 0 ? m_selected.section * 0x10000 + m_selected.index : -1; }
+   void SetNavPosition(int position) override
+   {
+      if (position >= 0)
+         m_selected = { position / 0x10000, position % 0x10000 };
+   }
+   string GetEditKey(const InGameUI::InGameUIItem& item) const override;
    bool IsDefaults() const override;
    bool IsModified() const override;
    void SaveGlobally() override;
@@ -68,6 +78,9 @@ public:
          func(*source.page);
    }
 
+   // Calls a function for each shown item (not the headers) of each section (the performance profile sets the items of its screen)
+   void ForEachShownItem(const std::function<void(InGameUI::InGameUIPage&, InGameUI::InGameUIItem&)>& func) const;
+
 private:
    void BuildPage() override { }
 
@@ -75,8 +88,7 @@ private:
    const string& GetTitle() const;
    // Whether an item of a section is shown (headers of 'rest' sections: when an item of the section follows them)
    bool IsShown(const Section& section, const InGameUI::InGameUIPage& page, int index) const;
-   // Calls a function for each shown item (not the headers) of each section
-   void ForEachShownItem(const std::function<void(InGameUI::InGameUIPage&, InGameUI::InGameUIItem&)>& func) const;
+
 
    vector<SourcePage> m_sources;
    vector<Section> m_sections;

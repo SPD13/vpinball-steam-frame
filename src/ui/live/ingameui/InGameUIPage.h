@@ -54,6 +54,24 @@ public:
    // launcher, src/steamframe/CabinetLauncherPage.cpp, is never closed with Back). wasButtonNav: the buttons were already navigating
    // (not a pointer), as in the main menu of the VR UI where Back gets from a screen to its rail
    virtual bool HandleBack(bool wasButtonNav) { return false; }
+   // The buttons of the menus: UI: Next Item and UI: Previous Item go through the stops of the page in reading order, UI: Confirm activates
+   // the stop (or starts editing a value, which Next/Previous then change), UI: Cancel goes back (or restores the edited value). With a
+   // full D-pad, UI: Up and UI: Down move by rows in grids. See InGameUI::OnUIStep and src/steamframe/vrui/PageAdapter.cpp.
+   enum class StepPhase
+   {
+      Press, // The button was pressed
+      Repeat, // It is held: repeated, faster and faster
+      Held, // It is held: every frame, for pages with their own repeats (the reel of the cabinet launcher)
+   };
+   virtual void StepItem(int direction, StepPhase phase); // Default: the previous/next item
+   virtual void StepRow(int direction, StepPhase phase); // UI: Up/Down. Default: the row above/below in a grid of tiles, otherwise StepItem
+   virtual InGameUIPage* GetButtonTarget() { return this; } // The page the buttons act on (the screen of the main menu of the VR UI)
+   virtual const InGameUIItem* GetFocusedItem() const { return GetSelectedItem(); } // Its item they act on (one of its sections)
+   virtual bool IsEditableItem(const InGameUIItem& item) const; // Edited once confirmed: the sliders and choices
+   virtual string GetEditKey(const InGameUIItem& item) const; // What identifies the edited item, even when the page is rebuilt (its label)
+   // The selected item, kept by the main menu of the VR UI when it opens a page, to get back to it
+   virtual int GetNavPosition() const { return m_selectedItem; }
+   virtual void SetNavPosition(int position) { m_selectedItem = position; }
    // Moves the open/close animation forward, for pages drawing themselves without calling InGameUIPage::Render (CabinetLauncherPage.cpp)
    void UpdateOpenAnimation(float elapsedS);
 #endif

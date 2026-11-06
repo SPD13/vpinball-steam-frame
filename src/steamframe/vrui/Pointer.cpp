@@ -47,7 +47,7 @@ void LiveUI::UpdateVRPointer()
          constexpr float deadZone = 0.2f;
          const InputManager& input = m_player->m_pininput;
          if (input.IsPressed(input.GetUIUpActionId()) || input.IsPressed(input.GetUIDownActionId()) || input.IsPressed(input.GetUILeftActionId())
-            || input.IsPressed(input.GetUIRightActionId()))
+            || input.IsPressed(input.GetUIRightActionId()) || input.IsPressed(input.GetUIRowUpActionId()) || input.IsPressed(input.GetUIRowDownActionId()))
             m_vrPointerScrollBlocked = true;
          else if (fabsf(scroll) <= deadZone)
             m_vrPointerScrollBlocked = false;

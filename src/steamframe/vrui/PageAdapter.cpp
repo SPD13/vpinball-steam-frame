@@ -458,6 +458,8 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
          drawList->ChannelsSetCurrent(0);
          if (!item->m_customHighlight)
             Widgets::RowBackground(rowMin, rowMax, hovered, selected);
+         if (selected && page.m_player->m_liveUI->m_inGameUI.IsEditing(item)) // Edited with the buttons (the performance profile)
+            drawList->AddRect(rowMin, rowMax, Theme::kAccent, Theme::Px(0.45f), 0, Theme::Px(0.15f));
          drawList->ChannelsMerge();
          if (hovered || selected)
             hoveredItem = item;
@@ -516,6 +518,8 @@ const InGameUIItem* InGameUIPageView::RenderContent(InGameUIPage& page, bool sho
       case Property:
       {
          Widgets::RowBackground(rowMin, ImVec2(rowMin.x + width, rowMin.y + rowHeight), isMouseOver, selected);
+         if (selected && page.m_player->m_liveUI->m_inGameUI.IsEditing(item)) // Edited with the buttons: Next/Previous change the value
+            drawList->AddRect(rowMin, ImVec2(rowMin.x + width, rowMin.y + rowHeight), Theme::kAccent, Theme::Px(0.45f), 0, Theme::Px(0.15f));
          ImGui::SetCursorScreenPos(ImVec2(rowMin.x + pad, textY));
          Widgets::TextEllipsis(item->m_property->m_label.c_str(), labelWidth - 2.f * pad, Theme::kText);
          const ImVec2 widgetPos(widgetX, rowMin.y + (rowHeight - frameHeight) * 0.5f);
@@ -683,6 +687,38 @@ void InGameUIPage::ActivateItem()
    }
    AdjustItem(1.f, true);
 }
+
+// The buttons of the menus (see InGameUI::OnUIStep): Next/Previous go through the items, the tiles of a grid being in reading order
+void InGameUIPage::StepItem(int direction, StepPhase phase)
+{
+   if (phase == StepPhase::Held)
+      return;
+   if (direction > 0)
+      SelectNextItem();
+   else
+      SelectPrevItem();
+}
+
+// UI: Up, UI: Down: the tile above/below in a grid (getting out of it from its first/last row), otherwise as Previous/Next (the cycles of
+// the pages, like the rail of the main menu or the reel of the cabinet launcher, and the lists)
+void InGameUIPage::StepRow(int direction, StepPhase phase)
+{
+   if (phase != StepPhase::Held && StepTileGrid(0, direction))
+      return;
+   StepItem(direction, phase);
+}
+
+// Confirm on these starts editing their value with Next/Previous: Confirm keeps it, Cancel restores it. The other items are activated by
+// Confirm (switches flipped, input mappings defined, folders browsed, pages opened).
+bool InGameUIPage::IsEditableItem(const InGameUIItem& item) const
+{
+   if (item.m_type != InGameUIItem::Type::Property)
+      return false;
+   const PropertyDef::Type type = item.m_property->m_type;
+   return type == PropertyDef::Type::Float || type == PropertyDef::Type::Int || type == PropertyDef::Type::Enum;
+}
+
+string InGameUIPage::GetEditKey(const InGameUIItem& item) const { return item.m_label; }
 
 bool InGameUIPage::RenderVRUI(float elapsedS)
 {
