@@ -128,6 +128,12 @@ public class IDLParserToCpp {
 
 		outputStream.write("\n".getBytes());
 
+		// An argument left out by the script ("LightSeq.Play SeqBlinking, , 5, 150") comes as VT_ERROR DISP_E_PARAMNOTFOUND: like DispInvoke,
+		// a parameter with a default value then takes it, instead of failing its conversion (see generateHeaderVariant())
+		outputStream.write("static inline VARIANT* OptionalArg(VARIANT* arg, VARIANT* def) {\n".getBytes());
+		outputStream.write("\treturn (V_VT(arg) == VT_ERROR && V_ERROR(arg) == DISP_E_PARAMNOTFOUND) ? def : arg;\n".getBytes());
+		outputStream.write("}\n\n".getBytes());
+
 		for (String[] block : order) {
 			String kind = block[0];
 			String name = block[1];
@@ -639,7 +645,8 @@ public class IDLParserToCpp {
 				buffer.append("if (SUCCEEDED(hrConv)) hrConv = VariantChangeType(&var" + index + ", ");
 
 				if (param.hasDefaultValue() || param.isOptional()) {
-					buffer.append("(index > 0) ? &pDispParams->rgvarg[--index] : &var" + index);
+					// A left out argument keeps var's default value (VT_ERROR cannot be converted)
+					buffer.append("(index > 0) ? OptionalArg(&pDispParams->rgvarg[--index], &var" + index + ") : &var" + index);
 				}
 				else {
 					buffer.append("&pDispParams->rgvarg[--index]");
