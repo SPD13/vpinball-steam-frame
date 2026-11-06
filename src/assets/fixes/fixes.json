@@ -136,6 +136,22 @@
           "replace": "\tIf Keycode = AddCreditKey then ' Keycode= 6 before the Steam Frame Edition (fix aloha-coin-key): 6 is the '5' key of a keyboard only, the coin button of the controllers sends AddCreditKey\n"
         }
       ]
+    },
+    {
+      "id": "sonic-hedgehog-vr-dmd",
+      "version": 1,
+      "title": "Sonic The Hedgehog (Brendan Bailey 2005) VPX MOD: DMD in the backglass",
+      "symptom": "In VR the DMD stands on the playfield, at its top right, and the window under the backglass picture reads 'This table requires a directB2S file'.",
+      "cause": "The table places its DMD (the flasher 'DMD') at the top of the playfield, outside of its VR backglass. The backglass is a picture whose DMD window holds that text.",
+      "change": "The DMD is moved into the window of the backglass, where it hides most of the text: only its first and last letters stay visible on both sides, the DMD being narrower than the text.",
+      "doc": "sonic-hedgehog-vr-dmd",
+      "match": { "files": ["sonic the hedgehog"] },
+      "script": [
+        {
+          "find": "\tDMD.visible = 1\n",
+          "replace": "\tDMD.visible = 1 : DMD.X = 474 : DMD.Y = -62 : DMD.Height = 402 ' Position added by the Steam Frame Edition (fix sonic-hedgehog-vr-dmd): the DMD stood on the playfield, it goes into the window of the backglass\n"
+        }
+      ]
     }
   ]
 }
