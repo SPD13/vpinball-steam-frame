@@ -402,3 +402,29 @@ With the recipe (the text found once, CRLF kept): 1 credit, and the game starts 
 coin and Start with the controllers.
 
 History: version 1, 2026-11-05.
+
+### <a id="sonic-hedgehog-vr-dmd"></a>Sonic The Hedgehog (Brendan Bailey 2005) VPX MOD: DMD in the backglass
+
+Applies to: tables whose file name contains `Sonic The Hedgehog` (checked with *Sonic The Hedgehog (Brendan Bailey 2005) VPX MOD 1.33*, an
+original table with UltraDMD and a `.directb2s`). Another version without the line is reported as "not needed".
+
+**Symptom.** In VR the DMD stands upright on the playfield, at its top right, and the window under the backglass picture reads "This
+table requires a directB2S file".
+
+**Cause.** The table, not VPX. Its VR backglass is the primitive `Primary_backglass01` (x -166 to 1113, z 270 to 1450, in front of the
+backbox at y -68), textured with `BackglassImage`: a picture with a DMD window at its bottom (x 152 to 798, z 314 to 491), in which the
+text is part of the picture. Its DMD is the flasher `DMD` (545 x 153, rotated -90 degrees around X, height 150), whose points put it at
+x 397 to 942, y 27, z 74 to 226: on the playfield. The script only makes it visible in VR (`If RenderingMode = 2`), and never moves it.
+VPX 10.8.0 placed it at the same spot: the center of a flasher has always been taken from its points, not from the center stored in the
+file (`FLAX`, `FLAY`). The `.directb2s` is found and loaded by the B2S plugin, but VPX only shows it in VR with **Add Backglass** (off
+by default), on a panel of its own that does not match this backbox: smaller than the table's backglass, which still shows around it.
+
+**Fix.** The line that shows the DMD in VR also moves it to the center of the window, just in front of the glass:
+`DMD.X = 474 : DMD.Y = -62 : DMD.Height = 402` (x 202 to 746, z 326 to 478). The DMD is opaque and hides the text, except its first
+and last letters ("Th", "le"): the text is 614 units wide, the DMD 545, and a script cannot change the size of a flasher.
+
+**Checked** on the Mac, 2026-11-05, with the simulated headset of the `xr-sim` branch (`VPX_XRSIM=1`, left eye recorded): before, the DMD
+on the playfield and the text in the window; with the recipe (the text found once, CRLF kept), the UltraDMD scoreboard in the window,
+the playfield clear. **To check** on the Frame.
+
+History: version 1, 2026-11-05.
