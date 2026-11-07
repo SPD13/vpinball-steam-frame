@@ -428,3 +428,33 @@ on the playfield and the text in the window; with the recipe (the text found onc
 the playfield clear. **To check** on the Frame.
 
 History: version 1, 2026-11-05.
+
+### <a id="batman66-vr-scores"></a>Batman 66 (Original 2018): scores on the cabinet's DMD
+
+Applies to: tables whose file name contains `Batman 66` and whose script plays the ROM `flash_l1` (checked with *VR ROOM Batman 66
+(Original 2018) 1.0.1*, by LuvtheCubs on JPSalas' Flash, mod by Onevox, with a `.directb2s`). The Batman 66 tables made from
+Stern's machine play another ROM and do not match. Another version without the two lines is reported as "not needed".
+
+**Symptom.** In VR the DMD of the cabinet stays black, and no score shows anywhere: the score windows of the backglass picture (players
+1 and 3, credits, ball) are empty. The game itself plays (the log shows the scores read from the ROM).
+
+**Cause.** The table, not VPX. It is a retheme of Williams' Flash (1978, System 4), whose ROM has 7-segment displays and no DMD: four
+scores of 6 digits, then 2 digits of credits (24-25) and 2 of ball in play (26-27). The script reads them in `UpdateLEDs` and shows them on
+28 reels (`a1` to `e4`) of the desktop backglass, which VR never draws. Its VR backglass (`PinCab_Backglass`, image `BackglassImage`) is a
+picture whose score windows are black, and the window of the speaker panel (`PinCab_Grills`) holds the flasher `DMD`, a DMD flasher that
+the script hides at its start (`dmd.visible=0 'change to 0 if no pup pack`): it is kept for a PuP pack, and none exists for the table.
+Showing it would not show the segments: a flasher in DMD mode only shows a DMD (the segment mode of a flasher is set in the table file,
+not by the script), and FlexDMD in a segment render mode sends segments too.
+
+**Fix.** In VR only (`RenderingMode = 2`), the script creates a FlexDMD of 128 x 32 (4 shades, tinted red by the color of the `DMD`
+flasher), shows the flasher, and draws on it the scores of players 1 and 2 at the top, 3 and 4 at the bottom, the ball in play and the
+credits in the middle. `UpdateLEDs` passes every digit that changes to it, decoded with the same segment codes as the reels. The stage is
+cleared at every frame (`Clear = True`): otherwise a label whose text changes leaves the old digits under the new ones. Desktop and cabinet
+modes keep the reels and the `.directb2s`.
+
+**Checked** on the Mac, 2026-11-06, with the simulated headset of the `xr-sim` branch (left eye recorded every second, the table started
+with its ROM, coins, Start, the plunger and `autoflip`): the scoreboard in the window of the speaker panel, the attract mode alternating
+the high score (550,000) and the scores, the credits counting the coins and dropping at Start, ball 1 then 2, the score of player 1
+rising from 0 to 8,750. **To check** on the Frame.
+
+History: version 1, 2026-11-06.
