@@ -69,6 +69,9 @@ bool InGameUIPageView::NeedsRebuild(const InGameUIPage& page) { return page.m_ne
 void InGameUIPageView::SyncCoreItems(InGameUIPage& page, bool withBack)
 {
    using enum InGameUIItem::Type;
+   // Stale items until the page is drawn again (see ComposedPage::ForEachShownItem): its core items are synced then
+   if (page.m_needsRebuild)
+      return;
    std::erase_if(page.m_items, [](auto& item) { return IsCoreType(item->m_type); });
    if (page.IsAdjustable())
    {

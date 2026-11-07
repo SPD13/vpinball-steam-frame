@@ -122,6 +122,10 @@ void ComposedPage::ForEachShownItem(const std::function<void(InGameUIPage&, InGa
    for (const Section& section : m_sections)
    {
       InGameUIPage* const page = GetSource(section.source);
+      // A page waiting for its rebuild (a change made while it was drawn) is left out until it is drawn again: its items may query what the
+      // change removed (switching a window output away from Window destroys the window the items of its size read: a crash on the cabinet)
+      if (InGameUIPageView::NeedsRebuild(*page))
+         continue;
       // Index based, as a change may rebuild the page (the rebuild happens when the page is drawn, so the items stay valid until then)
       for (int i = 0; i < static_cast<int>(InGameUIPageView::GetItems(*page).size()); i++)
          if (IsShown(section, *page, i) && !IsHeader(*InGameUIPageView::GetItems(*page)[i]))
