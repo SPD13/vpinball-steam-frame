@@ -152,6 +152,10 @@ public:
    // Area drawn by the window's renderer on the last frame, normalized to the output (left, top, right, bottom), empty (right <= left) if none
    const vec4& GetAncillaryContentBounds(VPXWindowId window) const { return m_ancillaryContentBounds[window]; }
    void ResetAncillaryContentBounds(VPXWindowId window) { m_ancillaryContentBounds[window] = vec4(0.f, 0.f, 0.f, 0.f); }
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: whether a renderer drew the window on the last frame (the performance panel over the backglass, src/steamframe/PerfPanel.cpp)
+   bool IsAncillaryWindowRendered(VPXWindowId window) const { return m_ancillaryWndRendered[window]; }
+#endif
 
    // 'unmirror' flips the display content back in mirror mode so that it stays readable. Only for displays that are scene objects of their
    // own (e.g. flashers): ancillary renderer content is flipped as a whole (see Flasher::Render) and backdrop displays are not mirrored
@@ -324,6 +328,7 @@ private:
    RenderTarget* ApplyPostProcessedAntialiasing(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplySharpening(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplyUpscaling(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
+   bool NeedsUpscaling() const; // The upscale pass runs (see ApplyUpscaling)
    RenderTarget* ApplyStereo(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
 
    // Ancillary window rendering

@@ -421,11 +421,11 @@ void LiveUI::RenderUI()
 
    ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
-   #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
-   // Steam Frame Edition: the performance panel, drawn in a layer of its own when it has new content (src/steamframe/PerfPanel.cpp)
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the performance panel (src/steamframe/PerfPanel.cpp), drawn in a layer of its own in VR when it has new content, and
+   // outside VR over the backglass window, or over the playfield when there is none
    ImDrawList* perfPanelDrawList = nullptr;
-   if (m_player->m_vrDevice)
-      VPX::PerfPanel::Get().OnLogicFrame(m_player);
+   VPX::PerfPanel::Get().OnLogicFrame(m_player);
    #endif
 
    ImDrawList* loadingDrawList = nullptr;
@@ -488,11 +488,10 @@ void LiveUI::RenderUI()
 
       // Display performance overlays
       m_perfUI.Update();
-      #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
-      // Built every frame, though drawn into its layer only when it has new content: ImGui discards the glyphs of the font sizes unused for a
+      #if defined(VPX_STEAM_FRAME)
+      // Built every frame, though drawn into its layer only when it has new content in VR: ImGui discards the glyphs of the font sizes unused for a
       // couple of frames when its font texture is full, and rebuilding them for the panel every 0.5 s repacked the texture the menu uses (flicker)
-      if (m_player->m_vrDevice)
-         perfPanelDrawList = VPX::PerfPanel::Get().BuildWindow();
+      perfPanelDrawList = VPX::PerfPanel::Get().BuildWindow(m_player->m_vrDevice == nullptr);
       #endif
    }
 
@@ -571,6 +570,13 @@ void LiveUI::RenderUI()
       if (m_rd->m_nEyes == 2)
          matView[1] = matView[0];
    }
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: outside VR, the performance panel over the backglass window, or over the playfield under the UI (drawn from the highest depth)
+   if (m_player->m_vrDevice == nullptr && !VPX::PerfPanel::Get().RenderOverBackglass(m_rd, m_player, perfPanelDrawList, m_perfPanelMeshBuffer) && perfPanelDrawList
+      && m_rd->GetCurrentPass()->m_rt->m_nLayers == 1)
+      VPX::PerfPanel::SubmitDrawList(m_rd, perfPanelDrawList, m_perfPanelMeshBuffer, "PerfPanel"s, VPX::PerfPanel::Get().GetOverlayPlacement(io.DisplaySize.x, io.DisplaySize.y) * matView[0],
+         -5000, m_player->m_playfieldWnd->IsWCGBackBuffer() ? m_player->m_playfieldWnd->GetSDRWhitePoint() * (float)(80. / 10000.) : 0.f);
+   #endif
    m_rd->m_uiShader->SetMatrix(ShaderUniform::matWorldView, &matView[0], m_rd->m_nEyes);
    // UI shader parameters: x = VR stereo offset (BGFX), y = texture is sRGB decoded (set per draw, unused on DX9), w = HDR white level (BGFX)
    vec4 uiParams(0.f, 0.f, 0.f, 0.f);
@@ -618,8 +624,12 @@ void LiveUI::RenderUI()
    for (int n = 0; n < draw_data->CmdListsCount; n++)
    {
       const ImDrawList * const cmd_list = draw_data->CmdLists[n];
+      #if defined(VPX_STEAM_FRAME)
+      if (cmd_list == perfPanelDrawList) // Drawn into its own layer in VR (below), on its own outside VR (above)
+         continue;
+      #endif
       #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
-      if (cmd_list == perfPanelDrawList || cmd_list == loadingDrawList) // Drawn into their own layers, below
+      if (cmd_list == loadingDrawList) // Drawn into its own layer, below
          continue;
       #endif
       const unsigned int numVertices = cmd_list->VtxBuffer.size();
@@ -685,7 +695,7 @@ void LiveUI::RenderUI()
       m_player->m_vrDevice->SetShowUILayer(hasContent);
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    RenderVRPointerRay(onVRPanel, depthSort); // Steam Frame Edition: ray from the pointing VR controller to the dot (src/steamframe/vrui/Pointer.cpp)
-   if (perfPanelDrawList && m_player->m_vrDevice->GetPerfPanelRenderTarget()
+   if (perfPanelDrawList && m_player->m_vrDevice && m_player->m_vrDevice->GetPerfPanelRenderTarget()
       && VPX::PerfPanel::Get().Render(m_rd, m_player->m_vrDevice->GetPerfPanelRenderTarget(), perfPanelDrawList, m_perfPanelMeshBuffer))
       m_player->m_vrDevice->SetPerfPanelDrawn();
    if (loadingDrawList && VPX::PerfPanel::RenderDrawList(m_rd, m_player->m_vrDevice->GetLoadingLayerRenderTarget(), loadingDrawList, m_loadingLayerMeshBuffer, "LoadingLayer"s))

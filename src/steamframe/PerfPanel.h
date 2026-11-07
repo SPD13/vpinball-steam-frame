@@ -18,6 +18,11 @@
 // - a thread of the panel takes a sample every 0.5 s: it adds up the frames given since the last one, reads the CPU and GPU use of the
 //   process from /proc and the clocks and temperatures from /sys (Linux), and gives the rating at the end of each 30 s window.
 // The panel is drawn in its own OpenXR quad layer, only when a sample was taken (see VRDevice in PerfPanelLayer.cpp).
+//
+// Outside VR (the desktop, or a cabinet in '-Cabinet' mode), the render thread gives the frames of the desktop render loop (OnDesktopFrame):
+// the target is the playfield window's resolution at its refresh rate (or the frame rate cap, if lower). The panel is laid out wide, with a
+// see-through background, and drawn every frame over the backglass window when the backglass is a window of its own, else over the playfield
+// (RenderOverBackglass, GetOverlayPlacement, called by LiveUI).
 
 #include <array>
 #include <atomic>
@@ -25,6 +30,7 @@
 #include <mutex>
 #include <thread>
 
+class Matrix3D;
 class RenderDevice;
 class RenderTarget;
 class MeshBuffer;
@@ -49,6 +55,9 @@ public:
    static constexpr int kHeight = 1200;
    static constexpr float kWidthMeters = 0.72f;
    static constexpr float kHeightMeters = 0.96f;
+   // Outside VR: laid out wide (rating and details left, graphs right), this many pixels wide, as high as the shape of the space it is drawn in
+   // makes it (the graphs share the height), or as its content needs (see BuildWindow); then scaled to fit that space
+   static constexpr int kOverlayWidth = 1280;
 
    // Render thread, once per frame (VRDevice::UpdateDynamicResolution)
    struct FrameInfo
@@ -66,22 +75,41 @@ public:
       bool foveationEyeTracked = false; // Following the gaze (else fixed at the center of the view)
       bool foveationFixedLow = false; // Fixed through the shading rate image, which then uses the wide Low profile whatever the level
       int foveatedAntialiasing = 0; // The anti-aliasing pass foveated too: 0 no, 1 always, 2 turned on by the automatic mode
+      bool headset = true; // VR: a GPU time under 1 ms means nothing was rendered (the headset is not worn). Outside VR, any GPU time is a frame's
    };
    void OnFrame(const FrameInfo& frame);
+   // Render thread, outside VR, once per frame of the desktop render loop, after its present (and its frame rate cap): the display periods
+   // since the previous frame are counted from the time between them, at the refresh rate of the playfield window, or the cap if lower
+   // (fractions are carried over, as the frames of an uncapped loop without vertical sync are shorter than a period). gpuMs < 0 when unknown.
+   // scale: the dynamic resolution scale of the frame presented (src/steamframe/DesktopDynamicResolution.cpp), of the render size.
+   void OnDesktopFrame(uint64_t presentUs, float gpuMs, float refreshHz, int renderWidth, int renderHeight, float scale, int windowWidth, int windowHeight);
+   // The desktop render loop starts (a table, or the lobby of the cabinet launcher, see Launcher::OnPlayerCreated): history and rating start again
+   void OnDesktopStart();
    // A table starts with the VR device (ApplyTableSettings): the history and the rating start again (and the sampling thread, the first time)
    void OnTableStart();
 
    // Logic thread, once per frame (LiveUI::RenderUI): whether the game is played (not paused by the menu, not loading), and the logic profiler
    void OnLogicFrame(const Player* player);
    // Logic thread: builds the ImGui window of the panel (between ImGui::NewFrame and ImGui::Render), returns its draw list, to be left out of the
-   // UI and given to Render
-   ImDrawList* BuildWindow();
+   // UI and given to Render. overlay: the wide layout with a see-through background, drawn over a window outside VR
+   ImDrawList* BuildWindow(bool overlay = false);
    // Logic thread, after ImGui::Render: renders the draw list of the panel into the panel's image, false if nothing was drawn. The mesh buffer is
    // the caller's: it must not outlive the player (its GPU buffers are released with it), while the panel lives as long as the application
    bool Render(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer);
    // Draws an ImGui window into a target of its own (a quad layer), its pixel coordinates mapped to the target from its top left (also used by the
    // loading message, see LiveUI::RenderLoadingScreen)
    static bool RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name);
+   // Outside VR, logic thread, after ImGui::Render: draws the overlay panel (BuildWindow(true), null when it is off) over the backglass window,
+   // fitted into it and turned like its content. False when the backglass is not a window of its own: the caller then draws the panel over the
+   // playfield, with the UI (SubmitDrawList, at GetOverlayPlacement). A backglass window that nothing else draws is shown with the panel, and hidden
+   // again without it.
+   bool RenderOverBackglass(RenderDevice* rd, Player* player, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer);
+   // Where the overlay panel goes over the playfield: top left of the UI, in its pixels (before the UI's own rotation)
+   Matrix3D GetOverlayPlacement(float uiWidth, float uiHeight);
+   // Submits an ImGui window to the current pass, matView mapping its pixels to the target, the first command at depthSort (the commands of a pass
+   // are drawn from the highest depth). sdrWhitePQ: the white level on a HDR10 back buffer, 0 for sRGB (see LiveUI::RenderUI)
+   static void SubmitDrawList(RenderDevice* rd, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name, const Matrix3D& matView, int depthSort,
+      float sdrWhitePQ);
 
    // A sample was taken since the panel was last drawn: the render thread acquires an image of the panel's swapchain for the next frame
    bool IsDirty() const { return m_dirty; }
@@ -114,6 +142,15 @@ private:
       double scaleSum = 0.;
    };
    std::mutex m_frameMutex;
+   // Desktop render loop (render thread only): previous present, and the display periods not counted yet
+   uint64_t m_desktopPresentUs = 0;
+   double m_desktopPeriods = 0.;
+   std::atomic<bool> m_desktopStarted = false;
+   bool m_backglassShown = false; // The backglass window was shown for the panel (logic thread)
+   // Overlay (logic thread): width / height of the space it was last drawn in, which the next layout takes, and the size of the last layout,
+   // its content included (the window is laid out without a bottom, so that nothing is clipped, and the background drawn to that size)
+   float m_overlayAspect = 5.f / 3.f;
+   float m_overlayHeight = 768.f; // Its width is kOverlayWidth
    FrameCounters m_frameCounters;
    FrameInfo m_lastFrame;
    std::atomic<bool> m_tableStarted = false;

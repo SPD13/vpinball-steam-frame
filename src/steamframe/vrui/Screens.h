@@ -14,6 +14,7 @@ enum class Screen
    ThisTable, // Actions and options of the table being played (not in the lobby)
    Scores, // Who is playing, leaderboards
    Room, // VR placement and room (point of view on the desktop)
+   Screens, // The screens of the windows (playfield, backglass, score view, topper), outside VR
    Performance, // The choice of the two next screens, which are not on the rail (they are shown in its place)
    Display, // VPX Performance: graphics, and the performance panel and VR rendering in VR
    SteamFrame, // Device Performance: the features of the Steam Frame Edition (dynamic resolution, foveated rendering, simplified meshes...)

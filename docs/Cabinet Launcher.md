@@ -79,11 +79,52 @@ it; the wheel scrolls the reel).
 
 ## Screens
 
+At the first start in cabinet mode, when no screen is chosen yet for the playfield or the backglass (`Player.PlayfieldDisplay`,
+`Backglass.BackglassDisplay` empty) and there are at least two screens, the playfield goes on the largest screen (in pixels, the
+primary one on a tie) and the backglass is turned on, borderless full screen, on the next largest (`SetupCabinetScreens` in
+`Launcher.cpp`, saved once). The screens are then changed in the menu: Options, then Screens on the left (outside VR only), with one
+page per window (playfield, backglass, score view, topper): on or off, screen, display mode, rotation, size and position. A change of
+the playfield's screen or display mode applies at the next start.
+
 The playfield screen is set up as for playing in a cabinet: `Player.BGSet` = Cabinet, the playfield window on the playfield screen.
 The launcher turns with the playfield like the tables do (window layout: a landscape screen shows the playfield turned by 270 degrees;
 the global `ViewCabRotation` override of the cabinet view, when set, applies too). The backglass picture is drawn on the backglass
 window when `Backglass.BackglassOutput` is Floating (a window of its own); B2S, PuP and the DMD take the screens back when a table
 starts.
+
+## Performance panel
+
+The performance panel of the VR build also works outside VR (Options, VPX Performance, Performance panel; `Standalone.PerfPanel`). It
+rates the table every 30 seconds against the playfield window: its resolution at its refresh rate, or at the frame rate cap when that is
+lower. Green: rendered at the window's resolution (or above, with supersampling) and on time; yellow: on time below it (`AAFactor` under
+1); red: frames missed, "GPU bound" when the GPU time was over 90 % of the frame period. The frames come from the desktop render loop
+after its present and its cap (`PerfPanel::OnDesktopFrame`, from `RenderDevice::BGFXDesktopRenderLoop`): the display periods are counted
+from the time between two frames, the GPU time is bgfx's. The rating of a whole play is kept for the table page, as in VR.
+
+The panel is laid out wide (1280 pixels, rating and details left, graphs right) with a see-through background, as high as the shape of
+its space makes it (the graphs share the height) or as its content needs, then scaled to fit that space whole. It is drawn over the
+backglass window when the backglass is a window of its own (fitted into it, turned like its content; a backglass window that nothing
+else draws is shown for the panel, on black), else over the playfield, top left, under the menus. Not shown outside Linux: GPU busy
+time, CPU use per thread, clocks and temperatures (read from `/proc` and `/sys`). The resolution graph is shown with dynamic resolution on.
+
+## Dynamic resolution
+
+Outside VR too (Options, Performance, Device Performance, Dynamic resolution; the settings of VR: `PlayerVR.DynamicResolution`, on in the
+Low and Medium profiles, `DynamicResolutionTarget`, `DynamicResolutionMinScale`; not with stereo 3D). The scene is rendered into the top left
+part of its buffers, as in VR (`RenderDevice::BeginScaledRendering`), and stretched to the window by the upscale pass of the post-processing
+(`Renderer::NeedsUpscaling`, a filtered copy), the menus and the backglass staying at full size. The scale follows the GPU time of bgfx
+(the whole frame, all windows), against the target share of the frame period (`src/steamframe/DesktopDynamicResolution.cpp`).
+
+Unlike VR, the desktop draws the parts of the table that never move once, accumulated over 128 frames (the static prepass), which every frame
+starts from: drawn at the scale of the frames, it is drawn again when the scale changes, a couple of seconds of heavier frames (and a hitch when
+the table has ambient occlusion, computed again). So the scale moves by steps of 10 %, rarely: down after two seconds over the target (as many
+steps as the GPU time is expected to need, three quarters of it following the pixels), up one step after a few seconds with room for it, the
+wait doubling each time a rise is followed by a drop within 20 seconds (up to a minute). The readings are left out for the first 15 seconds of
+a table (its first frames are heavier) and while the prepass is accumulated. Changes are logged (`Desktop dynamic resolution: 100 % -> 80 %`).
+
+Made to follow the scale outside VR: the ambient occlusion (its inverse projection maps the rendered part back to the screen), the
+tonemapping of the embedded windows without the color grade. The ball motion blur is left out below 100 %. Screen space reflection
+(off by default) takes its view direction from the whole screen and is slightly off below 100 %.
 
 ## Pictures of the tables
 
@@ -111,6 +152,11 @@ src/ui/live/ingameui/InGameUI.h, .cpp        the four UI actions: Next/Previous 
 src/input/InputManager.cpp                   the menus only listen to the UI actions; labels UI: Cancel, UI: Confirm; presses only go to a mapping being captured (guarded VPX_STEAM_FRAME)
 src/steamframe/vrui/PageAdapter.cpp          default StepItem and editable items, the frame of the edited row
 src/steamframe/TableLibrary.cpp              the pictures are deleted with their table
+src/steamframe/PerfPanel.h, .cpp             performance panel: desktop frames, the wide overlay, drawn over the backglass or the playfield
+src/steamframe/DesktopDynamicResolution.h, .cpp  dynamic resolution outside VR: the scale from bgfx's GPU time
+src/renderer/RenderDevice.cpp                desktop render loop gives its frames to the panel and the dynamic resolution (guarded VPX_STEAM_FRAME)
+src/renderer/Renderer.cpp                    the scale outside VR, the static prepass drawn again, upscale pass, AO and embedded windows at a scale
+src/ui/live/LiveUI.cpp                       the panel outside VR: backglass window, or playfield under the UI (guarded VPX_STEAM_FRAME)
 ```
 
 `VPX_CABINET_SHUTDOWN_DRYRUN=1` logs the shutdown command instead of running it, for tests.

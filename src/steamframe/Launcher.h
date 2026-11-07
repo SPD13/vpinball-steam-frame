@@ -8,6 +8,7 @@
 
 #include "core/AppCommands.h"
 
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -75,6 +76,7 @@ public:
    // Cabinet launcher ('-Cabinet' command line option): launcher mode where the lobby shows the cabinet launcher (CabinetLauncherPage) instead
    // of the table picker, over an empty room, the UI turned with the playfield like a table on a cabinet screen
    bool m_cabinetMode = false;
+   std::atomic<bool> m_playingInVR = false; // See IsPlayingInVR
    string m_cabinetSelectedUuid; // The table selected in its reel, which it shows again when a table is closed
    // Leaves the application (as 'Quit Visual Pinball'), from the lobby or a table
    static void QuitApplication(Player* player);
@@ -111,6 +113,9 @@ public:
    static vector<IEditable*> GetRoomParts(PinTable* table); // All the parts of its VR room, visible or not
    // Whether a table has a VR room or cabinet: the tables made for desktops and cabinets only show their playfield in a headset
    static bool IsMadeForVR(PinTable* table);
+   // Whether the tables are played in VR (the last player had a VR device): the warnings about the tables without a VR room only show then
+   // (table picker, web page). Read by the web server's threads
+   bool IsPlayingInVR() const { return m_playingInVR; }
    static bool ReadMadeForVR(const std::filesystem::path& tablePath); // Same, from the file, without loading the table
    // The 'Visible' property that scripts use, for the parts which have one
    static std::optional<bool> GetPartVisible(IEditable* part);

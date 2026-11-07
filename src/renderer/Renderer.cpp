@@ -34,6 +34,7 @@
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/SceneBufferFormat.h"
 #include "steamframe/Reflections.h"
+#include "steamframe/DesktopDynamicResolution.h"
 #endif
 
 // MSVC Concurrency Viewer support
@@ -152,6 +153,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    #if defined(VPX_STEAM_FRAME)
    VPX::SceneBufferFormat::Load(m_table->GetSettings()); // RGBA16F or RG11B10F for the targets asked as RGB16F
    VPX::Reflections::Load(m_table->GetSettings()); // What the reflections leave out
+   VPX::DesktopDynamicResolution::Get().OnTableStart(m_table->GetSettings()); // Dynamic resolution outside VR
    #endif
 
    #ifdef ENABLE_BGFX
@@ -2528,6 +2530,19 @@ void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jit
       matProjInv[eye] = GetMVP().GetFlippedProj(eye);
       matProjInv[eye].Invert();
    }
+   // Dynamic resolution (only outside VR, which has no AO): the shader takes its texture coordinates, in the rendered part of the buffers, for
+   // screen coordinates. Mapped back to the whole screen ahead of the inverse projection, whose vertical scale, which sizes the kernel, follows
+   if (const float s = m_renderDevice->GetRenderScale(); s < 1.f)
+   {
+      #if defined(ENABLE_BGFX)
+      const bool vUp = bgfx::getCaps()->originBottomLeft;
+      #else
+      constexpr bool vUp = false;
+      #endif
+      const Matrix3D toScreen = Matrix3D::MatrixScale(1.f / s, 1.f / s, 1.f) * Matrix3D::MatrixTranslate((1.f - s) / s, vUp ? (1.f - s) / s : (s - 1.f) / s, 0.f);
+      for (int eye = 0; eye < nEyes; eye++)
+         matProjInv[eye] = toScreen * matProjInv[eye];
+   }
    m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
    m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::AO);
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
@@ -2988,10 +3003,10 @@ RenderTarget* Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarget*
       for (const vec4& region : m_embeddedRegions)
       {
          const Vertex3D_TexelOnly regionVerts[4] = {
-            { 2.f * region.z - 1.f + m_screenOffset.x, 1.f - 2.f * region.y + m_screenOffset.y, 0.0f, region.z, region.y },
-            { 2.f * region.x - 1.f + m_screenOffset.x, 1.f - 2.f * region.y + m_screenOffset.y, 0.0f, region.x, region.y },
-            { 2.f * region.z - 1.f + m_screenOffset.x, 1.f - 2.f * region.w + m_screenOffset.y, 0.0f, region.z, region.w },
-            { 2.f * region.x - 1.f + m_screenOffset.x, 1.f - 2.f * region.w + m_screenOffset.y, 0.0f, region.x, region.w }
+            { 2.f * region.z - 1.f + m_screenOffset.x, 1.f - 2.f * region.y + m_screenOffset.y, 0.0f, s * region.z, s * region.y }, // In the rendered part of the source
+            { 2.f * region.x - 1.f + m_screenOffset.x, 1.f - 2.f * region.y + m_screenOffset.y, 0.0f, s * region.x, s * region.y },
+            { 2.f * region.z - 1.f + m_screenOffset.x, 1.f - 2.f * region.w + m_screenOffset.y, 0.0f, s * region.z, s * region.w },
+            { 2.f * region.x - 1.f + m_screenOffset.x, 1.f - 2.f * region.w + m_screenOffset.y, 0.0f, s * region.x, s * region.w }
          };
          m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, regionVerts);
       }
@@ -3015,6 +3030,10 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
       return afterTonemapRT;
 
    if (m_motionBlurOff)
+      return afterTonemapRT;
+
+   // Not at a dynamic resolution scale: the quads derive their texture coordinates from clip space, for the whole buffers
+   if (m_renderDevice->GetRenderScale() < 1.f)
       return afterTonemapRT;
 
    m_renderDevice->ResetRenderState();
@@ -3303,10 +3322,18 @@ RenderTarget* Renderer::ApplySharpening(RenderTarget* renderedRT, RenderTarget* 
    return outputRT;
 }
 
+bool Renderer::NeedsUpscaling() const
+{
+   // An undersampled render (AA factor below 100%), a supersampled one is resolved by the tonemapping. Dynamic resolution outside VR too: the
+   // scene is rendered into a part of its buffers (see Render3DScene), stretched to the window here with a filtered copy (the last pass
+   // before would stretch it with its own sampling, unfiltered for the tonemapping without supersampling). In VR, the runtime is told
+   // which part of the swapchain image was drawn.
+   return GetBackBufferTexture()->GetWidth() < m_renderWidth || (m_stereo3D != STEREO_VR && m_renderDevice->GetRenderScale() < 1.f);
+}
+
 RenderTarget* Renderer::ApplyUpscaling(RenderTarget* renderedRT, RenderTarget* outputBackBuffer)
 {
-   // Only for an undersampled render (AA factor below 100%), a supersampled one is resolved by the tonemapping
-   if (GetBackBufferTexture()->GetWidth() >= m_renderWidth)
+   if (!NeedsUpscaling())
       return renderedRT;
 
    // TODO add AMD FidelityFX Super Resolution (FSR) support
@@ -3577,6 +3604,17 @@ void Renderer::Render3DScene()
    if (m_stereo3D == STEREO_VR && g_pplayer->m_vrDevice)
       renderScale = g_pplayer->m_vrDevice->GetDynamicRenderScale();
    #endif
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition, outside VR: the scale the GPU time of the desktop frames asks for (src/steamframe/DesktopDynamicResolution.cpp), the
+   // scene then stretched to the window by the upscale pass. The static prepass is drawn at the scale of the frames: again when it changes
+   if (m_stereo3D != STEREO_VR)
+   {
+      bool scaleChanged = false;
+      renderScale = VPX::DesktopDynamicResolution::Get().BeginFrame(m_stereo3D == STEREO_OFF && g_pplayer->m_vrDevice == nullptr, IsTemporalAccumulationInProgress(), scaleChanged);
+      if (scaleChanged)
+         m_isStaticPrepassDirty = true;
+   }
+   #endif
    m_renderDevice->BeginScaledRendering(renderScale);
    {
       const vec4 whh = m_renderDevice->m_basicShader->GetVector(ShaderUniform::w_h_height);
@@ -3727,7 +3765,7 @@ void Renderer::Render3DScene()
 
    const bool hasAntialiasPass = m_FXAA != Disabled;
    const bool hasSharpenPass = m_sharpen != 0;
-   const bool hasUpscalerPass = GetBackBufferTexture()->GetWidth() < m_renderWidth;
+   const bool hasUpscalerPass = NeedsUpscaling();
    // OpenXR directly renders to the XR render target view without any postprocess needs
    #ifdef ENABLE_XR
    const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && m_vrApplyColorKey);

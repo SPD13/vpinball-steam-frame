@@ -49,12 +49,13 @@ check whether the new view needs the same change:
 ## The new menu
 
 One window with a rail of icon buttons on the left (`MainMenuPage`), each choosing a screen (`Screens.cpp`): Tables, This table (not in the
-lobby), Scores, VR & Room, Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
+lobby), Scores, VR & Room (Point of view outside VR), Screens (outside VR only: upstream's display settings, one page per window),
+Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
 button is on the screen, so that moving down the rail never quits; during a table it also offers Return to Lobby). A screen shows a page (upstream's, like
 `GraphicSettingsPage`, or one of the fork) inside the menu; the pages it opens (sub-pages) are shown in the same frame, with a Back button.
 The Performance screen offers two screens shown in its place, which have no icon on the rail (`IsScreenOnRail`, `GetRailScreen`): Device
-Performance (the features of the fork: the performance profile, dynamic resolution and foveated rendering in VR, simplified meshes, scene
-buffer, reflections) and VPX Performance (upstream's graphics, and in VR the performance panel and the VR rendering). Cancel or their Back button gets back to the
+Performance (the features of the fork: the performance profile, dynamic resolution (outside VR too, see Cabinet Launcher.md), foveated
+rendering in VR, simplified meshes, scene buffer, reflections) and VPX Performance (the performance panel, upstream's graphics, and in VR the VR rendering; outside VR the panel is drawn over the backglass window or the playfield, see Cabinet Launcher.md). Cancel or their Back button gets back to the
 choice (`MainMenuPage::BackToRailScreen`), Cancel again to the rail.
 The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
 
