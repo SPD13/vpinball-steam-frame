@@ -168,7 +168,7 @@ private:
    }
 };
 
-// Performance profile (top of the Device Performance screen): Low, Medium and High set the performance settings of the screen at once, any
+// Performance profile (Device Performance screen, under the performance panel switch): Low, Medium and High set the performance settings of the screen at once, any
 // other combination of them is Custom. Medium is the defaults, in every build (Settings_properties.inl). The values are set as the items of
 // the screen would set them: live, and saved with its Save button (for the table or for all of them), undone with Undo.
 enum class PerfProfile { Low, Medium, High, Custom };
@@ -336,14 +336,14 @@ private:
          }
       };
       AddItem(std::make_unique<InGameUIItem>("Device Performance"s,
-         "What the Steam Frame Edition adds to keep heavy tables smooth: dynamic resolution, foveated rendering in VR, simplified meshes, compact scene buffer, reflections"s,
+         "The performance panel, and what the Steam Frame Edition adds to keep heavy tables smooth: dynamic resolution, foveated rendering in VR, simplified meshes, compact scene buffer, reflections"s,
          [open]() { open(Screen::SteamFrame); }));
-      AddItem(std::make_unique<InGameUIItem>("VPX Performance"s, "The graphics options of Visual Pinball (and, in VR, the performance panel and the VR rendering)"s,
+      AddItem(std::make_unique<InGameUIItem>("VPX Performance"s, "The graphics options of Visual Pinball (and, in VR, the VR rendering)"s,
          [open]() { open(Screen::Display); }));
    }
 };
 
-// The performance panel (VPX Performance screen): left of the cabinet in VR, over the backglass window or the playfield outside VR. A tool to tune
+// The performance panel (top of the Device Performance screen): left of the cabinet in VR, over the backglass window or the playfield outside VR. A tool to tune
 // the tables, on or off for all of them, saved at once
 class PerformancePanelPage final : public InGameUIPage
 {
@@ -625,7 +625,6 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Display:
       return {
-         Section { ""s, kPerfPanel, {}, true },
          Section { "VR rendering"s, kVR, { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Label("Render resolution status"s) }, false, false },
          Section { "Desktop mirror"s, kVR, { Prop(Settings::m_propPlayerVR_DesktopDisplay), Prop(Settings::m_propPlayerVR_ShrinkDesktopDisplay) }, false, false },
          Section { ""s, kGraphics, {}, true },
@@ -633,6 +632,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::SteamFrame:
       return {
+         Section { ""s, kPerfPanel, {}, true },
          Section { ""s, kPerfProfile, {}, true },
          Section { "Dynamic resolution"s, kVR,
             { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
@@ -794,13 +794,13 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
    case Screen::Screens: return std::make_unique<DisplayHomePage>(); // Upstream's display settings: one page per window
    case Screen::Performance: return std::make_unique<PerformanceChoicePage>();
    case Screen::Display:
-      sources.push_back(source(kPerfPanel, std::make_unique<PerformancePanelPage>())); // In VR left of the cabinet, else over the backglass or the playfield
       if (vr)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kGraphics, std::make_unique<GraphicSettingsPage>()));
       return CreateComposed(screen, "VPX Performance"s, ""s, std::move(sources));
    case Screen::SteamFrame:
    {
+      sources.push_back(source(kPerfPanel, std::make_unique<PerformancePanelPage>())); // In VR left of the cabinet, else over the backglass or the playfield
       auto profile = std::make_unique<PerfProfilePage>();
       PerfProfilePage* const profilePage = profile.get();
       sources.push_back(source(kPerfProfile, std::move(profile)));

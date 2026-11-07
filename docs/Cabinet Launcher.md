@@ -94,7 +94,7 @@ starts.
 
 ## Performance panel
 
-The performance panel of the VR build also works outside VR (Options, VPX Performance, Performance panel; `Standalone.PerfPanel`). It
+The performance panel of the VR build also works outside VR (Options, Device Performance, Performance panel; `Standalone.PerfPanel`). It
 rates the table every 30 seconds against the playfield window: its resolution at its refresh rate, or at the frame rate cap when that is
 lower. Green: rendered at the window's resolution (or above, with supersampling) and on time; yellow: on time below it (`AAFactor` under
 1); red: frames missed, "GPU bound" when the GPU time was over 90 % of the frame period. The frames come from the desktop render loop

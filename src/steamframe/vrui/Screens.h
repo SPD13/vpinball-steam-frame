@@ -16,8 +16,8 @@ enum class Screen
    Room, // VR placement and room (point of view on the desktop)
    Screens, // The screens of the windows (playfield, backglass, score view, topper), outside VR
    Performance, // The choice of the two next screens, which are not on the rail (they are shown in its place)
-   Display, // VPX Performance: graphics, and the performance panel and VR rendering in VR
-   SteamFrame, // Device Performance: the features of the Steam Frame Edition (dynamic resolution, foveated rendering, simplified meshes...)
+   Display, // VPX Performance: graphics, and the VR rendering in VR
+   SteamFrame, // Device Performance: the performance panel, then the features of the Steam Frame Edition (dynamic resolution, foveated rendering, simplified meshes...)
    Sound,
    Controls,
    Plugins,
