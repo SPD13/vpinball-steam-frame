@@ -563,9 +563,53 @@ void DisplaySettingsPage::BuildWindowPage()
          VPX::Properties::EnumPropertyDef(""s, ""s, "Lock aspect ratio"s, "Limit window size to a predefined aspect ratio"s, false, 0, m_arLock, arNames), //
          [this]() { return m_arLock; }, // Live
          [this](const Settings& settings) { return m_arLock; }, // Stored
-         [this](int, int v)
+         [this, containerWidth, containerHeight, wndDisplay](int, int v)
          {
             m_arLock = v;
+#if defined(VPX_STEAM_FRAME) && defined(ENABLE_BGFX)
+            // Steam Frame Edition: a ratio chosen applies at once (the width kept and the height following, or the height kept when the
+            // width would not fit the display), centered where the window was, instead of only at the next change of its width or height.
+            // From the size the window had before the ratios were stepped through (with the buttons, each one is applied on the way):
+            // otherwise the width would shrink at each ratio too tall for the display
+            Window* const wnd = GetWindow();
+            if (wnd != nullptr)
+            {
+               const bool appliedLast = wnd->GetPixelWidth() == m_arAppliedSize.x && wnd->GetPixelHeight() == m_arAppliedSize.y;
+               if (!appliedLast)
+                  m_arBaseSize = { wnd->GetPixelWidth(), wnd->GetPixelHeight() };
+               SDL_Point size = m_arBaseSize; // Free just after a ratio (UI: Cancel): back to the size before
+               if (v != 0)
+               {
+                  const int2& ar = aspectRatios[v];
+                  size = { m_arBaseSize.x, (m_arBaseSize.x * ar.y) / ar.x };
+                  if (size.y > containerHeight)
+                  {
+                     size.y = containerHeight;
+                     size.x = (size.y * ar.x) / ar.y;
+                  }
+                  if (size.x > containerWidth)
+                  {
+                     size.x = containerWidth;
+                     size.y = (size.x * ar.y) / ar.x;
+                  }
+               }
+               if ((v != 0 || appliedLast) && size.x > 0 && size.y > 0 && (size.x != wnd->GetPixelWidth() || size.y != wnd->GetPixelHeight()))
+               {
+                  SDL_Point pos;
+                  wnd->GetPixelPos(pos.x, pos.y);
+                  const int displayLeft = wnd->LogicalToPixel(m_displays[wndDisplay].left);
+                  const int displayTop = wnd->LogicalToPixel(m_displays[wndDisplay].top);
+                  pos.x = clamp(pos.x - (size.x - wnd->GetPixelWidth()) / 2, displayLeft, max(displayLeft, displayLeft + containerWidth - size.x));
+                  pos.y = clamp(pos.y - (size.y - wnd->GetPixelHeight()) / 2, displayTop, max(displayTop, displayTop + containerHeight - size.y));
+                  if (m_isMainWindow)
+                     m_delayApplyNotifId = m_player->m_liveUI->PushNotification("You have changed main window size\nRendering will be stretched until you restart the game"s, 5000, m_delayApplyNotifId);
+                  wnd->SetPixelPos(pos.x, pos.y);
+                  wnd->SetPixelSize(size.x, size.y);
+                  OnStaticRenderDirty();
+               }
+               m_arAppliedSize = v != 0 ? size : SDL_Point { 0, 0 };
+            }
+#endif
             RequestRebuild();
          }, //
          [](Settings&) { /* UI state, not persisted */ }, //

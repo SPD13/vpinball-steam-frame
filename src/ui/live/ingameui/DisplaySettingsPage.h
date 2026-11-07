@@ -53,6 +53,10 @@ private:
    vector<Window::DisplayConfig> m_displays;
    vector<string> m_displayNames;
    int m_arLock = 0;
+#if defined(VPX_STEAM_FRAME)
+   SDL_Point m_arBaseSize { 0, 0 }; // Size the chosen ratios are applied from, and the last size applied (see the Lock aspect ratio item)
+   SDL_Point m_arAppliedSize { 0, 0 };
+#endif
    bool m_fitToContent = false; // Output just enabled: fit it to the content once its renderer has drawn
    unsigned int m_delayApplyNotifId = 0;
 };
