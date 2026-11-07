@@ -40,6 +40,10 @@ private:
    void BuildEmbeddedPage();
    VPX::RenderOutput& GetOutput(VPXWindowId wndId);
    VPX::Window* GetWindow();
+#if defined(VPX_STEAM_FRAME)
+   void ChooseDisplayForNewWindow();
+   void FitNewWindowToDisplay();
+#endif
 
    void OnStaticRenderDirty();
    bool m_staticPrepassDisabled = false;

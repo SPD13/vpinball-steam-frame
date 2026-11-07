@@ -241,6 +241,68 @@ VPX::Window* DisplaySettingsPage::GetWindow()
    return m_player->m_playfieldWnd;
 }
 
+#if defined(VPX_STEAM_FRAME)
+// Steam Frame Edition: an output switched to Window with no display chosen yet opens on another display than the playfield's (the backglass's
+// when it is a window, else the first other one): on the default display, the playfield's on a cabinet, it covered the playfield and the menu
+// drawn there, its Display choice only coming once the window exists. The choice is the window's Display setting, as if chosen in the page.
+void DisplaySettingsPage::ChooseDisplayForNewWindow()
+{
+   Settings& settings = g_settingsService.GetActiveSettings();
+   if (m_isMainWindow || !settings.GetWindow_Display(m_wndId).empty() || m_player->m_playfieldWnd == nullptr)
+      return;
+   const SDL_DisplayID playfieldDisplay = SDL_GetDisplayForWindow(m_player->m_playfieldWnd->GetCore());
+   SDL_DisplayID target = 0;
+   if (m_wndId != VPXWINDOW_Backglass && m_player->m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW && m_player->m_backglassOutput.GetWindow())
+      target = SDL_GetDisplayForWindow(m_player->m_backglassOutput.GetWindow()->GetCore());
+   if (target == 0 || target == playfieldDisplay)
+   {
+      target = 0;
+      for (const Window::DisplayConfig& display : m_displays)
+         if (display.display != playfieldDisplay)
+         {
+            target = display.display;
+            break;
+         }
+   }
+   const auto it = std::ranges::find_if(m_displays, [target](const Window::DisplayConfig& display) { return display.display == target; });
+   if (target == 0 || it == m_displays.end())
+      return; // A single display
+   PLOGI << "Window output " << static_cast<int>(m_wndId) << " switched on with no display chosen: placed on \"" << it->displayName << "\", not on the playfield's";
+   settings.SetWindow_Display(m_wndId, it->displayId, false);
+}
+
+// The window just created, larger than its display (its default size): shrunk to fit it and centered, as when its display is chosen. The
+// playfield window gets the focus back, so that the menu keeps the buttons and the game does not pause.
+void DisplaySettingsPage::FitNewWindowToDisplay()
+{
+   Window* const wnd = GetWindow();
+   if (wnd == nullptr)
+      return;
+   const SDL_DisplayID displayId = SDL_GetDisplayForWindow(wnd->GetCore());
+   if (const auto it = std::ranges::find_if(m_displays, [displayId](const Window::DisplayConfig& display) { return display.display == displayId; }); it != m_displays.end())
+   {
+      SDL_Point size { wnd->GetWidth(), wnd->GetHeight() };
+      if (size.x > it->videomode.width || size.y > it->videomode.height)
+      {
+         if (size.x > it->videomode.width)
+         {
+            size.y = (size.y * it->videomode.width) / size.x;
+            size.x = it->videomode.width;
+         }
+         if (size.y > it->videomode.height)
+         {
+            size.x = (size.x * it->videomode.height) / size.y;
+            size.y = it->videomode.height;
+         }
+         wnd->SetSize(size.x, size.y);
+         wnd->SetPos(it->left + (it->videomode.width - size.x) / 2, it->top + (it->videomode.height - size.y) / 2);
+      }
+   }
+   if (m_player->m_playfieldWnd)
+      m_player->m_playfieldWnd->RaiseAndFocus();
+}
+#endif
+
 void DisplaySettingsPage::BuildPage()
 {
 #if defined(ENABLE_BGFX) && !defined(__EMSCRIPTEN__)
@@ -323,11 +385,18 @@ void DisplaySettingsPage::BuildPage()
                     const bool wasDisabled = GetOutput(m_wndId).GetMode() == VPX::RenderOutput::OM_DISABLED;
                     if (windowWasCreated && v != VPX::RenderOutput::OM_WINDOW)
                        m_player->m_renderer->m_renderDevice->RemoveWindow(GetOutput(m_wndId).GetWindow());
+#if defined(VPX_STEAM_FRAME)
+                    if (!windowWasCreated && v == VPX::RenderOutput::OM_WINDOW)
+                       ChooseDisplayForNewWindow();
+#endif
                     GetOutput(m_wndId).SetMode(g_settingsService.GetActiveSettings(), static_cast<VPX::RenderOutput::OutputMode>(v));
                     if (!windowWasCreated && v == VPX::RenderOutput::OM_WINDOW)
                     {
                        m_player->m_renderer->m_renderDevice->AddWindow(GetOutput(m_wndId).GetWindow());
                        GetOutput(m_wndId).GetWindow()->Show();
+#if defined(VPX_STEAM_FRAME)
+                       FitNewWindowToDisplay();
+#endif
                     }
                     StartFitToContent(wasDisabled && v != VPX::RenderOutput::OM_DISABLED);
                     ResetARLock();
