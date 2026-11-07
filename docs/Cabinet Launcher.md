@@ -104,9 +104,9 @@ from the time between two frames, the GPU time is bgfx's. The rating of a whole 
 The panel is laid out wide (1280 pixels, rating and details left, graphs right) with a see-through background, as high as the shape of
 its space makes it (the graphs share the height) or as its content needs, then scaled to fit that space whole. It is drawn over the
 backglass window when the backglass is a window of its own (fitted into it, turned like its content; a backglass window that nothing
-else draws is shown for the panel, on black), else over the playfield, top left, under the menus. A score view (DMD) or topper window
-placed over the backglass window keeps the panel out of its way: the panel is fitted into the largest band of the backglass left free
-(above, below, left or right of them), or drawn over the playfield when no band is a quarter of the window.
+else draws is shown for the panel, on black), else over the playfield, top left, under the menus. The panel stays on top of a score view
+(DMD) or topper window placed over the backglass window: the part of it they cover is drawn into them too, after their content, at the
+same place on the screen (`PerfPanel::RenderOverCoveringWindows`).
 
 A window output (DMD, backglass, topper) switched to Window in the Screens menu with no display chosen yet opens on another display than
 the playfield's (the backglass's when it is a window), shrunk to fit it, and the playfield keeps the focus (`DisplaySettingsPage`,

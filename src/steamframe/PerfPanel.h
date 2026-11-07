@@ -100,9 +100,8 @@ public:
    // loading message, see LiveUI::RenderLoadingScreen)
    static bool RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name);
    // Outside VR, logic thread, after ImGui::Render: draws the overlay panel (BuildWindow(true), null when it is off) over the backglass window,
-   // fitted into it (into the largest band left free by a score view/DMD or topper window placed over it) and turned like its content. False
-   // when the backglass is not a window of its own, or when those windows cover most of it: the caller then draws the panel over the playfield,
-   // with the UI (SubmitDrawList, at GetOverlayPlacement). A backglass window that nothing else draws is shown with the panel, and hidden
+   // fitted into it and turned like its content, and kept on top of a score view (DMD) or topper window placed over it. False when the backglass
+   // is not a window of its own: the caller then draws the panel over the playfield, with the UI (SubmitDrawList, at GetOverlayPlacement). A backglass window that nothing else draws is shown with the panel, and hidden
    // again without it.
    bool RenderOverBackglass(RenderDevice* rd, Player* player, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer);
    // Where the overlay panel goes over the playfield: top left of the UI, in its pixels (before the UI's own rotation)
@@ -151,6 +150,8 @@ private:
    // Overlay (logic thread): width / height of the space it was last drawn in, which the next layout takes, and the size of the last layout,
    // its content included (the window is laid out without a bottom, so that nothing is clipped, and the background drawn to that size)
    float m_overlayAspect = 5.f / 3.f;
+   std::shared_ptr<MeshBuffer> m_coveringMeshBuffers[2]; // The panel drawn into the score view and topper windows over the backglass
+   void RenderOverCoveringWindows(RenderDevice* rd, Player* player, const Window* backglass, const ImDrawList* drawList, const Matrix3D& panelToPixels, float w, float h);
    float m_overlayHeight = 768.f; // Its width is kOverlayWidth
    FrameCounters m_frameCounters;
    FrameInfo m_lastFrame;

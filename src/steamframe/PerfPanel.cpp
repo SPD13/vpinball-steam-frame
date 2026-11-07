@@ -1103,42 +1103,42 @@ Matrix3D PerfPanel::GetOverlayPlacement(float uiWidth, float uiHeight)
    return Matrix3D::MatrixScale(scale, scale, 1.f) * Matrix3D::MatrixTranslate(margin, margin, 0.f);
 }
 
-// The part of the backglass window left free by the other windows over it (a score view/DMD or topper window placed on the backglass), in
-// pixels of its back buffer: the largest band above, below, left or right of them. False when none is a quarter of the window.
-static bool GetFreeArea(Player* player, const VPX::Window* backglass, float w, float h, float& x0, float& y0, float& rw, float& rh)
+// Kept on top of the score view (DMD) and topper windows placed over the backglass window: the part of the panel they cover is drawn into them
+// too, after their content, at the same place on the screen. panelToPixels: the panel in pixels of the backglass window (w x h)
+void PerfPanel::RenderOverCoveringWindows(RenderDevice* rd, Player* player, const VPX::Window* backglass, const ImDrawList* drawList, const Matrix3D& panelToPixels, float w, float h)
 {
-   x0 = 0.f, y0 = 0.f, rw = w, rh = h;
+   if (!backglass->IsPositioningSupported() || backglass->GetWidth() <= 0 || backglass->GetHeight() <= 0)
+      return;
    int bx, by;
    backglass->GetPos(bx, by);
-   const float bw = static_cast<float>(backglass->GetWidth()), bh = static_cast<float>(backglass->GetHeight());
-   if (!backglass->IsPositioningSupported() || bw <= 0.f || bh <= 0.f)
-      return true;
-   // Bounds of what covers it, in back buffer pixels
-   float left = w, top = h, right = 0.f, bottom = 0.f;
-   for (const VPX::RenderOutput* output : { &player->m_scoreViewOutput, &player->m_topperOutput })
+   const int bw = backglass->GetWidth(), bh = backglass->GetHeight();
+   const std::pair<const VPX::RenderOutput*, VPXWindowId> outputs[2] = { { &player->m_scoreViewOutput, VPXWindowId::VPXWINDOW_ScoreView },
+      { &player->m_topperOutput, VPXWindowId::VPXWINDOW_Topper } };
+   for (int i = 0; i < 2; i++)
    {
-      const VPX::Window* const wnd = output->GetMode() == VPX::RenderOutput::OM_WINDOW ? output->GetWindow() : nullptr;
-      if (wnd == nullptr || wnd == backglass || !wnd->IsVisible())
+      const auto& [output, id] = outputs[i];
+      VPX::Window* const wnd = output->GetMode() == VPX::RenderOutput::OM_WINDOW ? output->GetWindow() : nullptr;
+      RenderTarget* const target = wnd ? wnd->GetBackBuffer() : nullptr;
+      if (wnd == nullptr || wnd == backglass || target == nullptr || !wnd->IsVisible() || wnd->GetWidth() <= 0 || wnd->GetHeight() <= 0)
          continue;
       int x, y;
       wnd->GetPos(x, y);
-      const float l = max(0.f, static_cast<float>(x - bx)), t = max(0.f, static_cast<float>(y - by));
-      const float r = min(bw, static_cast<float>(x - bx + wnd->GetWidth())), b = min(bh, static_cast<float>(y - by + wnd->GetHeight()));
-      if (r <= l || b <= t)
-         continue;
-      left = min(left, l * w / bw), top = min(top, t * h / bh), right = max(right, r * w / bw), bottom = max(bottom, b * h / bh);
+      if (x >= bx + bw || y >= by + bh || x + wnd->GetWidth() <= bx || y + wnd->GetHeight() <= by)
+         continue; // Not over the backglass window
+      // Backglass pixels -> screen (logical units) -> this window's pixels
+      const float tw = static_cast<float>(target->GetWidth()), th = static_cast<float>(target->GetHeight());
+      const Matrix3D toWindow = Matrix3D::MatrixScale(static_cast<float>(bw) / w, static_cast<float>(bh) / h, 1.f)
+         * Matrix3D::MatrixTranslate(static_cast<float>(bx - x), static_cast<float>(by - y), 0.f)
+         * Matrix3D::MatrixScale(tw / static_cast<float>(wnd->GetWidth()), th / static_cast<float>(wnd->GetHeight()), 1.f)
+         * Matrix3D::MatrixOrthoOffCenterRH(0.f, tw, th, 0.f, 0.f, 1.f);
+      RenderTarget* const previous = rd->GetCurrentPass()->m_rt;
+      rd->SetRenderTarget(i == 0 ? "PerfPanel ScoreView"s : "PerfPanel Topper"s, target, true, true);
+      if (!player->m_renderer->IsAncillaryWindowRendered(id))
+         rd->Clear(clearType::TARGET, 0x00000000);
+      SubmitDrawList(rd, drawList, m_coveringMeshBuffers[i], "PerfPanel"s, panelToPixels * toWindow, -10000,
+         wnd->IsWCGBackBuffer() ? wnd->GetSDRWhitePoint() * (float)(80. / 10000.) : 0.f);
+      rd->SetRenderTarget("LiveUI"s, previous, true, true);
    }
-   if (right <= left || bottom <= top)
-      return true; // Nothing over it
-   const float bands[4][4] = { { 0.f, 0.f, w, top }, { 0.f, bottom, w, h - bottom }, { 0.f, 0.f, left, h }, { right, 0.f, w - right, h } };
-   float best = 0.f;
-   for (const auto& band : bands)
-      if (band[2] * band[3] > best)
-      {
-         best = band[2] * band[3];
-         x0 = band[0], y0 = band[1], rw = band[2], rh = band[3];
-      }
-   return best >= 0.25f * w * h;
 }
 
 bool PerfPanel::RenderOverBackglass(RenderDevice* rd, Player* player, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer)
@@ -1161,23 +1161,19 @@ bool PerfPanel::RenderOverBackglass(RenderDevice* rd, Player* player, const ImDr
       return true;
    }
 
-   // Fitted into the window, or the part of it the other windows leave free (over the playfield when they cover most of it), turned like its
-   // content (Renderer::SetupAncillaryRenderTarget)
+   // Fitted into the window, turned like its content (Renderer::SetupAncillaryRenderTarget)
    const float w = static_cast<float>(target->GetWidth()), h = static_cast<float>(target->GetHeight());
-   float areaX, areaY, areaW, areaH;
-   if (!GetFreeArea(player, wnd, w, h, areaX, areaY, areaW, areaH))
-      return false;
    const int rotation = player->m_renderer->GetAncillaryContentRotation(VPXWindowId::VPXWINDOW_Backglass, output);
    const bool swapAxes = (rotation % 180) != 0;
-   const float boxW = swapAxes ? areaH : areaW, boxH = swapAxes ? areaW : areaH;
+   const float boxW = swapAxes ? h : w, boxH = swapAxes ? w : h;
    if (boxW > 0.f && boxH > 0.f)
       m_overlayAspect = boxW / boxH; // The next layout takes the shape of the window
    const ImVec2 size(static_cast<float>(kOverlayWidth), m_overlayHeight);
    const float scale = min(boxW / size.x, boxH / size.y);
-   const Matrix3D matView = Matrix3D::MatrixScale(scale, scale, 1.f)
+   const Matrix3D panelToPixels = Matrix3D::MatrixScale(scale, scale, 1.f)
       * Matrix3D::MatrixTranslate((boxW - scale * size.x) * 0.5f - boxW * 0.5f, (boxH - scale * size.y) * 0.5f - boxH * 0.5f, 0.f)
-      * Matrix3D::MatrixRotateZ(ANGTORAD(static_cast<float>(rotation))) * Matrix3D::MatrixTranslate(areaX + areaW * 0.5f, areaY + areaH * 0.5f, 0.f)
-      * Matrix3D::MatrixOrthoOffCenterRH(0.f, w, h, 0.f, 0.f, 1.f);
+      * Matrix3D::MatrixRotateZ(ANGTORAD(static_cast<float>(rotation))) * Matrix3D::MatrixTranslate(w * 0.5f, h * 0.5f, 0.f);
+   const Matrix3D matView = panelToPixels * Matrix3D::MatrixOrthoOffCenterRH(0.f, w, h, 0.f, 0.f, 1.f);
 
    // After the window's content, drawn earlier in the frame. Without any (no backglass for this table), the pass of the window was dropped: the
    // panel is on black
@@ -1187,6 +1183,7 @@ bool PerfPanel::RenderOverBackglass(RenderDevice* rd, Player* player, const ImDr
       rd->Clear(clearType::TARGET, 0x00000000);
    SubmitDrawList(rd, drawList, meshBuffer, "PerfPanel"s, matView, -10000, wnd->IsWCGBackBuffer() ? wnd->GetSDRWhitePoint() * (float)(80. / 10000.) : 0.f);
    rd->SetRenderTarget("LiveUI"s, previous, true, true);
+   RenderOverCoveringWindows(rd, player, wnd, drawList, panelToPixels, w, h);
 
    // Shown once the playfield is, as the renderer does it
    if (!wnd->IsVisible() && player->m_playfieldWnd->IsVisible())
