@@ -100,8 +100,9 @@ public:
    // loading message, see LiveUI::RenderLoadingScreen)
    static bool RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name);
    // Outside VR, logic thread, after ImGui::Render: draws the overlay panel (BuildWindow(true), null when it is off) over the backglass window,
-   // fitted into it and turned like its content. False when the backglass is not a window of its own: the caller then draws the panel over the
-   // playfield, with the UI (SubmitDrawList, at GetOverlayPlacement). A backglass window that nothing else draws is shown with the panel, and hidden
+   // fitted into it (into the largest band left free by a score view/DMD or topper window placed over it) and turned like its content. False
+   // when the backglass is not a window of its own, or when those windows cover most of it: the caller then draws the panel over the playfield,
+   // with the UI (SubmitDrawList, at GetOverlayPlacement). A backglass window that nothing else draws is shown with the panel, and hidden
    // again without it.
    bool RenderOverBackglass(RenderDevice* rd, Player* player, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer);
    // Where the overlay panel goes over the playfield: top left of the UI, in its pixels (before the UI's own rotation)

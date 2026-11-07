@@ -104,7 +104,13 @@ from the time between two frames, the GPU time is bgfx's. The rating of a whole 
 The panel is laid out wide (1280 pixels, rating and details left, graphs right) with a see-through background, as high as the shape of
 its space makes it (the graphs share the height) or as its content needs, then scaled to fit that space whole. It is drawn over the
 backglass window when the backglass is a window of its own (fitted into it, turned like its content; a backglass window that nothing
-else draws is shown for the panel, on black), else over the playfield, top left, under the menus. Not shown outside Linux: GPU busy
+else draws is shown for the panel, on black), else over the playfield, top left, under the menus. A score view (DMD) or topper window
+placed over the backglass window keeps the panel out of its way: the panel is fitted into the largest band of the backglass left free
+(above, below, left or right of them), or drawn over the playfield when no band is a quarter of the window.
+
+A window output (DMD, backglass, topper) switched to Window in the Screens menu with no display chosen yet opens on another display than
+the playfield's (the backglass's when it is a window), shrunk to fit it, and the playfield keeps the focus (`DisplaySettingsPage`,
+guarded `VPX_STEAM_FRAME`): on the default display it covered the playfield and the menu before its Display choice could be reached. Not shown outside Linux: GPU busy
 time, CPU use per thread, clocks and temperatures (read from `/proc` and `/sys`). The resolution graph is shown with dynamic resolution on.
 
 ## Dynamic resolution
