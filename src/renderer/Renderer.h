@@ -195,6 +195,10 @@ public:
    // Area drawn by the window's renderer on the last frame, normalized to the output (left, top, right, bottom), empty (right <= left) if none
    const vec4& GetAncillaryContentBounds(VPXWindowId window) const { return m_ancillaryContentBounds[window]; }
    void ResetAncillaryContentBounds(VPXWindowId window) { m_ancillaryContentBounds[window] = vec4(0.f, 0.f, 0.f, 0.f); }
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: whether a renderer drew the window on the last frame (the performance panel over the backglass, src/steamframe/PerfPanel.cpp)
+   bool IsAncillaryWindowRendered(VPXWindowId window) const { return m_ancillaryWndRendered[window]; }
+#endif
 
    // 'unmirror' flips the display content back in mirror mode so that it stays readable. Only for displays that are scene objects of their
    // own (e.g. flashers): ancillary renderer content is flipped as a whole (see Flasher::Render) and backdrop displays are not mirrored
@@ -420,6 +424,7 @@ private:
    RenderTarget* GetBloomBufferTexture() const { return m_activeView->GetBloomBufferTexture(); }
    RenderTarget* GetBloomTmpBufferTexture() const { return m_activeView->GetBloomTmpBufferTexture(); }
    bool IsFXAALumaInAlpha(const RenderView* view, const RenderTarget* tonemapRT) const; // The tonemap writes the luma of its output in the alpha channel for the FXAA pass
+   bool NeedsUpscaling(const RenderView* view) const; // The upscale pass of the view runs (see RenderView::ApplyUpscaling)
 
    // Ancillary window rendering
 

@@ -35,6 +35,7 @@
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/SceneBufferFormat.h"
 #include "steamframe/Reflections.h"
+#include "steamframe/DesktopDynamicResolution.h"
 #endif
 
 // MSVC Concurrency Viewer support
@@ -161,6 +162,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    #if defined(VPX_STEAM_FRAME)
    VPX::SceneBufferFormat::Load(m_table->GetSettings()); // RGBA16F or RG11B10F for the targets asked as RGB16F
    VPX::Reflections::Load(m_table->GetSettings()); // What the reflections leave out
+   VPX::DesktopDynamicResolution::Get().OnTableStart(m_table->GetSettings()); // Dynamic resolution outside VR
    #endif
 
    view->SetupTargets(renderWidthAA, renderHeightAA, rtType, renderFormat, nMSAASamples);
@@ -1545,6 +1547,15 @@ bool Renderer::IsBloomEnabled() const { return !m_bloomOff && (m_table->m_bloom_
 
 // FXAA reads the luma of its source from the alpha channel when the tonemap wrote it there (fs_pp_fxaa.sc): the tonemap writes the 8-bit
 // post-processing target that an FXAA pass reads next (and nothing else reads its alpha). Not in the AO view, drawn by another shader
+bool Renderer::NeedsUpscaling(const RenderView* view) const
+{
+   // An undersampled render (AA factor below 100%), a supersampled one is resolved by the tonemapping. Dynamic resolution outside VR too: the
+   // scene is rendered into a part of its buffers (see RenderView::Render), stretched to the window here with a filtered copy (the last pass
+   // before would stretch it with its own sampling, unfiltered for the tonemapping without supersampling). In VR, the runtime is told
+   // which part of the swapchain image was drawn.
+   return view->GetBackBufferTexture()->GetWidth() < view->m_renderWidth || (m_stereo3D != STEREO_VR && m_renderDevice->GetRenderScale() < 1.f);
+}
+
 bool Renderer::IsFXAALumaInAlpha(const RenderView* view, const RenderTarget* tonemapRT) const
 {
    return (m_FXAA == Fast_FXAA || m_FXAA == Standard_FXAA || m_FXAA == Quality_FXAA) && tonemapRT == view->m_pPostProcessRenderTarget1

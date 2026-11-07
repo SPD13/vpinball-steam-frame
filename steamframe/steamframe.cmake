@@ -44,6 +44,9 @@ target_sources(vpinball PRIVATE
    src/steamframe/WebServerLibrary.cpp
 
    # Performance panel in the headset, left of the cabinet: a tool to tune the tables
+   src/steamframe/DesktopDynamicResolution.h
+   src/steamframe/DesktopDynamicResolution.cpp
+   src/steamframe/NaN.h
    src/steamframe/PerfPanel.h
    src/steamframe/PerfPanel.cpp
    src/steamframe/PerfPanelLayer.cpp

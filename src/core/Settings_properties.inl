@@ -158,12 +158,8 @@ PropBool(Player, CompressTextures, "Compress Textures"s, "Compress textures to G
 #ifdef VPX_STEAM_FRAME // Simplified render meshes of heavy tables, see src/steamframe/MeshSimplifier.h
 PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, true);
 PropFloat(Player, SimplifyMeshesError, "Allowed error"s, "Largest deviation of a simplified part from its mesh, in pixels of the view at its full render resolution"s, 0.25f, 4.f, 1.f);
-// Light maps without their dimmest triangles, see src/steamframe/LightMapPruning.h; Medium in the build of the Steam Frame (checked in the headset), Off elsewhere
-#ifdef VPX_STEAM_FRAME_HEADSET
+// Light maps without their dimmest triangles, see src/steamframe/LightMapPruning.h; Medium by default (Low and Medium performance profiles, checked in the headset)
 PropEnum(Player, LightMapPruning, "Light map pruning"s, "Leave out the dimmest triangles of the light maps of baked tables: what they add is too faint to see, but each one costs GPU time while its light is on. Low leaves out those adding less than 0.02 of the light at full strength, Medium 0.05, High 0.08: the higher, the more GPU time saved, and the more the faint glow of the lights on dark walls ends along visible edges"s, int, 2, "Off"s, "Low"s, "Medium"s, "High"s);
-#else
-PropEnum(Player, LightMapPruning, "Light map pruning"s, "Leave out the dimmest triangles of the light maps of baked tables: what they add is too faint to see, but each one costs GPU time while its light is on. Low leaves out those adding less than 0.02 of the light at full strength, Medium 0.05, High 0.08: the higher, the more GPU time saved, and the more the faint glow of the lights on dark walls ends along visible edges"s, int, 0, "Off"s, "Low"s, "Medium"s, "High"s);
-#endif
 // Scene buffers in RG11B10F instead of RGBA16F, see src/steamframe/SceneBufferFormat.h; on by default (Medium performance profile, checked in the headset)
 PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, true);
 #ifdef VPX_STEAM_FRAME_HEADSET
@@ -332,11 +328,12 @@ PropBool(PlayerVR, OverrideLockbarHeight, "Custom Lockbar Height"s,
 // Dynamic resolution: the render scale follows the GPU time of the frames reported by the runtime (XR_META_performance_metrics), between the
 // headset's recommended size and the size chosen with ResFactor, so heavy tables keep their frame rate instead of judder on head movements and
 // light tables keep the full sharpness (see VRDevice::UpdateDynamicResolution). On by default in the builds of the fork (Medium performance profile, see
-// PerfProfilePage in src/steamframe/vrui/Screens.cpp), inert where the runtime lacks the counters.
+// PerfProfilePage in src/steamframe/vrui/Screens.cpp), inert where the runtime lacks the counters. The same settings steer it outside VR in the
+// builds of the fork (Target and MinScale, from bgfx's GPU time, see src/steamframe/DesktopDynamicResolution.cpp).
 #if defined(VPX_STEAM_FRAME)
-PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, up to the headset's recommended resolution, and raise it back when there is room. Needs runtime support (XR_META_performance_metrics)"s, true);
+PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, down to the minimum, and raise it back when there is room. In VR, needs runtime support (XR_META_performance_metrics); outside VR, by steps of 10 %"s, true);
 #else
-PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, up to the headset's recommended resolution, and raise it back when there is room. Needs runtime support (XR_META_performance_metrics)"s, false);
+PropBool(PlayerVR, DynamicResolution, "Dynamic resolution"s, "Lower the rendering resolution when a frame takes longer than the target, down to the minimum, and raise it back when there is room. In VR, needs runtime support (XR_META_performance_metrics); outside VR, by steps of 10 %"s, false);
 #endif
 PropFloat(PlayerVR, DynamicResolutionTarget, "Dynamic resolution target"s, "GPU time the dynamic resolution aims for, as a fraction of the frame period (85% of 13.9 ms at 72 Hz is 11.8 ms). Lower values keep more headroom for the compositor and for the GPU slowing down as the headset heats up"s, 0.5f, 1.f, 0.85f);
 PropEnum(PlayerVR, DynamicResolutionSensitivity, "Dynamic resolution sensitivity"s, "How many slow frames, close together, it takes to lower the resolution at once: frames over the whole frame period, or that missed their display. Low: a single one. Medium: 2 within 3 frames. High: 3 within 5 frames. Medium and High keep the full resolution through single slow frames, which are often not GPU work but a frame handed over late, and can miss a few more frames on a table that is really too heavy"s, int, 1, "Low"s, "Medium"s, "High"s);
@@ -1464,7 +1461,7 @@ PropEnum(Standalone, LobbyRoom, "Lobby room"s, "The room shown behind the table 
 PropBool(Standalone, WebServerAlwaysOn, "Wi-Fi upload always on"s, "Start the web server of the table picker with the application, instead of only when it is turned on from the menu"s, false);
 PropBool(Standalone, WebServerPairing, "Wi-Fi upload pairing code"s, "Ask the browsers for the code displayed by the application before giving them access to the tables folder. When disabled, any device on the local network can add, change or delete tables."s, true);
 PropBool(Standalone, NewVRUI, "New UI"s, "Use the new menu (one menu with big icon buttons on the left) instead of the classic one. The VPX_VRUI environment variable (new or classic) overrides it."s, true);
-PropBool(Standalone, PerfPanel, "Performance panel"s, "A panel left of the cabinet, facing the player: the table's rating every 30 seconds against the headset's native resolution and frame rate, with the frame rate, resolution, CPU and GPU use of the last 3 minutes. Saved as soon as it is changed"s, false);
+PropBool(Standalone, PerfPanel, "Performance panel"s, "The table's rating every 30 seconds against the native resolution and frame rate, with the frame rate, resolution, CPU and GPU use of the last 3 minutes. In VR, a panel left of the cabinet, facing the player; on a desktop or a cabinet, over the backglass window (over the playfield without one). Saved as soon as it is changed"s, false);
 #endif
 PropFloat(Standalone, VRMenuDistance, "VR menu distance"s, "Distance in meters between the player and the menu window in VR"s, 0.3f, 3.f, 1.5f);
 
