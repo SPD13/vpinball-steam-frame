@@ -187,6 +187,7 @@ static const vector<ProfileSetting>& GetProfileSettings()
       { &Settings::m_propPlayerVR_FoveateTonemapping, { 1, 1, 0 } },
       { &Settings::m_propPlayerVR_FoveateAntialiasing, { 1, 0, 0 } }, // Always On, Always Off, Always Off
       { &Settings::m_propPlayer_SimplifyMeshes, { 1, 1, 0 } },
+      { &Settings::m_propPlayer_LightMapPruning, { 2, 2, 0 } }, // Medium, Medium, Off
       { &Settings::m_propPlayer_CompactSceneBuffer, { 1, 1, 0 } },
       { &Settings::m_propPlayer_ExtraMirrors, { 1, 1, 0 } }, // Off, Off, On
       { &Settings::m_propPlayer_RoomReflection, { 1, 1, 0 } }, // Off, Off, On

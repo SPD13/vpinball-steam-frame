@@ -2,8 +2,8 @@
 
 #pragma once
 
-// Steam Frame Edition: light maps without their dimmest triangles, switched live in the Light maps section of the Steam Frame screen of the VR menu
-// (Settings Player/LightMapPruning: Off, Low, Medium, High; Medium by default in the build of the Steam Frame, Off elsewhere). In the headset on
+// Steam Frame Edition: light maps without their dimmest triangles, switched live in the Light maps section of the Device Performance screen
+// (Settings Player/LightMapPruning: Off, Low, Medium, High; Medium by default, as in the Low and Medium performance profiles, Off in High). In the headset on
 // Medieval Madness (2026-11-04), Medium and High made the game clearly crisper (dynamic resolution holds a higher resolution) for little visible loss.
 //
 // A baked table (VLM) lights its parts with light maps: additive copies of the geometry each light reaches, textured with what that light adds. They are

@@ -153,12 +153,8 @@ PropBool(Player, CompressTextures, "Compress Textures"s, "Compress textures to G
 #ifdef VPX_STEAM_FRAME // Simplified render meshes of heavy tables, see src/steamframe/MeshSimplifier.h
 PropBool(Player, SimplifyMeshes, "Simplified meshes"s, "Draw the large 3D parts of heavy tables with fewer triangles where the difference cannot be seen from the player's eyes (made while the table loads, the full mesh when leaning in). Switching it on applies to the next table started if it was off when this one loaded"s, true);
 PropFloat(Player, SimplifyMeshesError, "Allowed error"s, "Largest deviation of a simplified part from its mesh, in pixels of the view at its full render resolution"s, 0.25f, 4.f, 1.f);
-// Light maps without their dimmest triangles, see src/steamframe/LightMapPruning.h; Medium in the build of the Steam Frame (checked in the headset), Off elsewhere
-#ifdef VPX_STEAM_FRAME_HEADSET
+// Light maps without their dimmest triangles, see src/steamframe/LightMapPruning.h; Medium by default (Low and Medium performance profiles, checked in the headset)
 PropEnum(Player, LightMapPruning, "Light map pruning"s, "Leave out the dimmest triangles of the light maps of baked tables: what they add is too faint to see, but each one costs GPU time while its light is on. Low leaves out those adding less than 0.02 of the light at full strength, Medium 0.05, High 0.08: the higher, the more GPU time saved, and the more the faint glow of the lights on dark walls ends along visible edges"s, int, 2, "Off"s, "Low"s, "Medium"s, "High"s);
-#else
-PropEnum(Player, LightMapPruning, "Light map pruning"s, "Leave out the dimmest triangles of the light maps of baked tables: what they add is too faint to see, but each one costs GPU time while its light is on. Low leaves out those adding less than 0.02 of the light at full strength, Medium 0.05, High 0.08: the higher, the more GPU time saved, and the more the faint glow of the lights on dark walls ends along visible edges"s, int, 0, "Off"s, "Low"s, "Medium"s, "High"s);
-#endif
 // Scene buffers in RG11B10F instead of RGBA16F, see src/steamframe/SceneBufferFormat.h; on by default (Medium performance profile, checked in the headset)
 PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendered scene with 4 bytes per pixel instead of 8: faster, with less color precision before the tone mapping (faint banding may show in smooth gradients)"s, true);
 #ifdef VPX_STEAM_FRAME_HEADSET
