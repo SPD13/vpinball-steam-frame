@@ -49,12 +49,13 @@ check whether the new view needs the same change:
 ## The new menu
 
 One window with a rail of icon buttons on the left (`MainMenuPage`), each choosing a screen (`Screens.cpp`): Tables, This table (not in the
-lobby), Scores, VR & Room, Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
+lobby), Scores, VR & Room (Point of view outside VR), Screens (outside VR only: upstream's display settings, one page per window),
+Performance, Sound, Controls, Plugins, System, Wi-Fi upload, Quit (its
 button is on the screen, so that moving down the rail never quits; during a table it also offers Return to Lobby). A screen shows a page (upstream's, like
 `GraphicSettingsPage`, or one of the fork) inside the menu; the pages it opens (sub-pages) are shown in the same frame, with a Back button.
 The Performance screen offers two screens shown in its place, which have no icon on the rail (`IsScreenOnRail`, `GetRailScreen`): Device
-Performance (the features of the fork: the performance profile, dynamic resolution and foveated rendering in VR, simplified meshes, scene
-buffer, reflections) and VPX Performance (upstream's graphics, and in VR the performance panel and the VR rendering). Cancel or their Back button gets back to the
+Performance (the performance panel switch first, then the features of the fork: the performance profile, dynamic resolution (outside VR too, see Cabinet Launcher.md), foveated
+rendering in VR, simplified meshes, scene buffer, reflections) and VPX Performance (upstream's graphics, and in VR the VR rendering); outside VR the panel is drawn over the backglass window or the playfield, see Cabinet Launcher.md. Cancel or their Back button gets back to the
 choice (`MainMenuPage::BackToRailScreen`), Cancel again to the rail.
 The routes `homepage` and `tables/picker` give this menu when the new view is active, and the classic pages otherwise (`VRUI::OnPlayerCreated`).
 
@@ -103,8 +104,8 @@ The routes `homepage` and `tables/picker` give this menu when the new view is ac
 ## Screens made of several pages
 
 Some screens group options of several pages (`ComposedPage`, layout in `GetSections` of `Screens.cpp`): VR & Room (menu distance and lobby
-room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), VPX Performance (the performance panel switch, saved at once, then the refresh rate and render
-resolution of the VR settings, then the graphics settings), Steam Frame (the performance features of the fork: dynamic resolution and
+room first, with "Choose a lobby room", then the position, cabinet and room options of the VR settings), VPX Performance (the refresh rate and render
+resolution of the VR settings, then the graphics settings), Device Performance (the performance panel switch, saved at once, then the performance features of the fork: dynamic resolution and
 foveated rendering, with its tone mapping and anti-aliasing switches, from the VR settings, then the simplified meshes: switch, allowed error and status, from a page of the fork saved for
 the table or for all, then the scene buffer: switch and status, from another such page), Sound (sound settings, spatial audio of the VR settings), Controls (input settings, nudge/plunger/cabinet pages), This
 table (its actions, then its lighting and difficulty options).

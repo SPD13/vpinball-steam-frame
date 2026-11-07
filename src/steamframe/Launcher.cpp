@@ -1009,7 +1009,8 @@ void Launcher::OnTableLoaded(PinTable* table, const std::filesystem::path& table
 void Launcher::OnTableClosed(const Player* player)
 {
    VPX::Cabinet::BackglassRenderer::Get().Detach(player);
-   if (player->m_isLobby || player->m_vrDevice == nullptr || player->m_playMode != Player::PlayMode::Play)
+   // In VR and outside (the desktop render loop gives its frames too, see PerfPanel::OnDesktopFrame): the rating is the device's the table was played on
+   if (player->m_isLobby || player->m_playMode != Player::PlayMode::Play)
       return;
    const VPX::PerfPanel::RatingResult result = VPX::PerfPanel::Get().GetRunRating();
    const string rating = VPX::PerfPanel::GetRatingName(result.rating);
@@ -1026,6 +1027,13 @@ void Launcher::OnTableClosed(const Player* player)
 void Launcher::OnPlayerCreated(Player* player, bool isLobby)
 {
    VPX::VRUI::OnPlayerCreated(player, isLobby);
+   m_playingInVR = player->m_vrDevice != nullptr;
+   // The performance panel outside VR (the VR device starts it with the table in VR, see VRDevice): on or off, history and rating started again
+   if (player->m_vrDevice == nullptr)
+   {
+      VPX::PerfPanel::Get().SetEnabled(g_settingsService.GetAppSettings().GetStandalone_PerfPanel());
+      VPX::PerfPanel::Get().OnDesktopStart();
+   }
    player->m_liveUI->m_inGameUI.AddPage("lobby/rooms"s, []() { return VPX::InGameUI::CreateLobbyRoomsPage(); });
    CabinetDisplays::RegisterPage(player);
    if (!isLobby)
@@ -1073,6 +1081,33 @@ void Launcher::PlaySelectedTables()
    }
 }
 
+// Cabinet mode, first start (no screen chosen yet for the playfield or the backglass): the playfield on the largest screen, the backglass on,
+// full screen, on the next largest one. A cabinet usually has a large playfield and a smaller backglass, and the order in which the system
+// lists the screens varies. Saved, so that it is only done once and the Screens screen of the menu shows it.
+static void SetupCabinetScreens()
+{
+   Settings& settings = g_settingsService.GetAppSettings();
+   if (!settings.GetWindow_Display(VPXWindowId::VPXWINDOW_Playfield).empty() || !settings.GetWindow_Display(VPXWindowId::VPXWINDOW_Backglass).empty())
+      return;
+   SDL_InitSubSystem(SDL_INIT_VIDEO);
+   vector<VPX::Window::DisplayConfig> displays = VPX::Window::GetDisplays();
+   SDL_QuitSubSystem(SDL_INIT_VIDEO);
+   if (displays.size() < 2)
+      return;
+   const auto area = [](const VPX::Window::DisplayConfig& d) { return static_cast<int64_t>(d.videomode.GetPixelWidth()) * d.videomode.GetPixelHeight(); };
+   std::ranges::stable_sort(displays, [&area](const auto& a, const auto& b) { return area(a) != area(b) ? area(a) > area(b) : a.isPrimary && !b.isPrimary; });
+   settings.SetWindow_Display(VPXWindowId::VPXWINDOW_Playfield, displays[0].displayId, false);
+   if (settings.GetWindow_Mode(VPXWindowId::VPXWINDOW_Backglass) == VPX::RenderOutput::OM_DISABLED)
+   {
+      settings.SetWindow_Mode(VPXWindowId::VPXWINDOW_Backglass, VPX::RenderOutput::OM_WINDOW, false);
+      settings.SetWindow_FullScreen(VPXWindowId::VPXWINDOW_Backglass, 1, false); // Borderless full screen
+   }
+   settings.SetWindow_Display(VPXWindowId::VPXWINDOW_Backglass, displays[1].displayId, false);
+   settings.Save();
+   settings.Load(false); // Loading computes the default window sizes from the chosen screens
+   PLOGI << "Cabinet mode, first start: playfield on " << displays[0].displayId << ", backglass on " << displays[1].displayId;
+}
+
 LauncherCommand::LauncherCommand(bool cabinet)
    : m_cabinet(cabinet)
 {
@@ -1083,6 +1118,8 @@ void LauncherCommand::Execute()
    // Closing a table gets back to the lobby, closing the lobby without selecting a table quits
    g_launcher->m_launcherMode = true;
    g_launcher->m_cabinetMode = m_cabinet;
+   if (m_cabinet)
+      SetupCabinetScreens();
    // Switching between the lobby and the tables keeps the window and the VR device (see VPApp::m_keepDisplayBetweenTables)
    g_app->m_keepDisplayBetweenTables = true;
    while (g_launcher->m_launcherMode)

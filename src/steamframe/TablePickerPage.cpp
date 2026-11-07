@@ -823,7 +823,9 @@ void TablePickerPage::BuildPage()
          label = ICON_FK_STAR " "s + label;
       if (!gridView && table.hasPupPack)
          label += "  [PuP]";
-      if (!gridView && !table.madeForVR)
+      // The tables without a VR room only show their playfield in a headset: a warning in VR only (desktops and cabinets play them as made)
+      const bool noVRRoom = !table.madeForVR && m_player->m_vrDevice != nullptr;
+      if (!gridView && noVRRoom)
          label += "  [No VR room]";
       const string path = "tables/" + table.uuid;
       const string uuid = table.uuid;
@@ -840,7 +842,7 @@ void TablePickerPage::BuildPage()
          item.m_tileToggleAction = [uuid, favorite = table.favorite]() { g_launcher->GetTableLibrary().SetFavorite(uuid, !favorite); }; // The page is rebuilt as the library changes
          if (table.hasPupPack)
             item.m_tileBadge = "PuP"s;
-         if (!table.madeForVR)
+         if (noVRRoom)
             item.m_tileWarning = "No VR room"s;
       }
    }
@@ -1482,7 +1484,7 @@ void TableActionsPage::BuildPage()
 
    AddPerformanceRow(*this, table->performance);
 
-   if (!table->madeForVR)
+   if (!table->madeForVR && m_player->m_vrDevice != nullptr)
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Error,
          "No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset"s));
 

@@ -8,8 +8,12 @@
 #include "renderer/MeshBuffer.h"
 #include "renderer/RenderDevice.h"
 #include "renderer/RenderPass.h"
+#include "renderer/Renderer.h"
+#include "renderer/Window.h"
 #include "renderer/Shader.h"
 #include "renderer/VertexBuffer.h"
+#include "steamframe/DesktopDynamicResolution.h"
+#include "steamframe/NaN.h"
 #include "steamframe/MeshSimplifier.h"
 #include "steamframe/LightMapPruning.h"
 #include "steamframe/vrui/Theme.h"
@@ -213,14 +217,14 @@ void PerfPanel::OnFrame(const FrameInfo& frame)
 {
    // The frame counts for the rating while the game is played (the logic thread said so a moment ago) and the headset is worn (when the
    // runtime reports the GPU time, it is under 1 ms when nothing is rendered)
-   const bool valid = m_playing && Now() - m_playingTime < 0.25 && (frame.gpuMs < 0.f || frame.gpuMs >= 1.f);
+   const bool valid = m_playing && Now() - m_playingTime < 0.25 && (!frame.headset || frame.gpuMs < 0.f || frame.gpuMs >= 1.f);
    const std::lock_guard lock(m_frameMutex);
    m_lastFrame = frame;
    FrameCounters& c = m_frameCounters;
    c.frames++;
    c.periods += frame.periods;
    c.scaleSum += frame.scale;
-   if (frame.gpuMs >= 1.f)
+   if (frame.headset ? frame.gpuMs >= 1.f : frame.gpuMs > 0.f)
    {
       c.gpuReadings++;
       c.gpuMsSum += frame.gpuMs;
@@ -242,6 +246,51 @@ void PerfPanel::OnTableStart()
    m_tableStarted = true;
    if (!m_thread.joinable())
       m_thread = std::thread(&PerfPanel::SamplerThread, this);
+}
+
+void PerfPanel::OnDesktopStart()
+{
+   m_desktopStarted = true;
+   OnTableStart();
+}
+
+void PerfPanel::OnDesktopFrame(uint64_t presentUs, float gpuMs, float refreshHz, int renderWidth, int renderHeight, float scale, int windowWidth, int windowHeight)
+{
+   if (m_desktopStarted.exchange(false))
+   {
+      m_desktopPresentUs = 0;
+      m_desktopPeriods = 0.;
+   }
+   if (refreshHz <= 0.f)
+      return;
+   const float budgetMs = 1000.f / refreshHz;
+   // Display periods since the previous frame, rounded (a frame on time comes a bit before or after its period, the timers jitter), the rest
+   // carried over: the periods of a loop faster than the display add up to its time
+   if (m_desktopPresentUs != 0 && presentUs > m_desktopPresentUs)
+      m_desktopPeriods += static_cast<double>(presentUs - m_desktopPresentUs) / 1000. / static_cast<double>(budgetMs);
+   else
+      m_desktopPeriods += 1.;
+   m_desktopPresentUs = presentUs;
+   const double periods = std::floor(m_desktopPeriods + 0.5);
+   m_desktopPeriods -= periods;
+
+   FrameInfo frame;
+   frame.headset = false;
+   frame.periods = static_cast<int>(periods);
+   frame.gpuMs = gpuMs;
+   const DesktopDynamicResolution& dynamicResolution = DesktopDynamicResolution::Get();
+   frame.scale = scale;
+   frame.eyeWidth = renderWidth;
+   frame.eyeHeight = renderHeight;
+   frame.nativeWidth = windowWidth;
+   frame.nativeHeight = windowHeight;
+   frame.budgetMs = budgetMs;
+   frame.dynamicResolution = dynamicResolution.IsActive();
+   frame.minScale = frame.dynamicResolution ? dynamicResolution.GetMinScale() : 1.f;
+   // Without dynamic resolution, no target of its own: frames missed with the GPU busy most of the period are the GPU's (see Rate)
+   frame.targetMs = budgetMs * (frame.dynamicResolution ? dynamicResolution.GetTarget() : 0.9f);
+   frame.foveationLevel = -1;
+   OnFrame(frame);
 }
 
 void PerfPanel::OnLogicFrame(const Player* player)
@@ -487,10 +536,10 @@ void PerfPanel::SamplerThread()
          if (!gpuFreqPath.empty())
             system.gpuMHz = ReadNumber(gpuFreqPath) / 1e6f; // Hz
          for (const string& path : cpuThermalPaths)
-            if (const float t = ReadNumber(path) / 1000.f; !std::isnan(t) && (std::isnan(system.cpuTemp) || t > system.cpuTemp))
+            if (const float t = ReadNumber(path) / 1000.f; !IsNaN(t) && (IsNaN(system.cpuTemp) || t > system.cpuTemp))
                system.cpuTemp = t;
          for (const string& path : gpuThermalPaths)
-            if (const float t = ReadNumber(path) / 1000.f; !std::isnan(t) && (std::isnan(system.gpuTemp) || t > system.gpuTemp))
+            if (const float t = ReadNumber(path) / 1000.f; !IsNaN(t) && (IsNaN(system.gpuTemp) || t > system.gpuTemp))
                system.gpuTemp = t;
       }
       #endif
@@ -540,7 +589,7 @@ void PerfPanel::SamplerThread()
    }
 }
 
-ImDrawList* PerfPanel::BuildWindow()
+ImDrawList* PerfPanel::BuildWindow(bool overlay)
 {
    if (!m_enabled)
       return nullptr;
@@ -581,38 +630,85 @@ ImDrawList* PerfPanel::BuildWindow()
       float sum = 0.f;
       int n = 0;
       for (int i = max(0, count - 4); i < count; i++)
-         if (!std::isnan(series[s][i]))
+         if (!IsNaN(series[s][i]))
          {
             sum += series[s][i];
             n++;
          }
       return n ? sum / static_cast<float>(n) : NAN;
    };
-   const auto fmt = [](float v, const char* format) { return std::isnan(v) ? string("-") : std::vformat(format, std::make_format_args(v)); };
+   const auto fmt = [](float v, const char* format) { return IsNaN(v) ? string("-") : std::vformat(format, std::make_format_args(v)); };
 
-   ImFont* const font = VRUI::Theme::Font() ? VRUI::Theme::Font() : ImGui::GetFont();
-   ImFont* const boldFont = VRUI::Theme::BoldFont() ? VRUI::Theme::BoldFont() : font;
+   // The fonts of LiveUI, as the theme of the menu takes them (VRUI::Theme::BeginFrame): taken here from the current context, since the theme only
+   // takes them again when the menu draws, and keeps those of the previous player until then (freed with it: crash when a table started)
+   const ImVector<ImFont*>& fonts = ImGui::GetIO().Fonts->Fonts;
+   ImFont* const font = fonts.Size > 0 ? fonts[0] : ImGui::GetFont();
+   ImFont* const boldFont = fonts.Size > 2 ? fonts[2] : font;
    constexpr float kText = 28.f, kSmall = 25.f, kValue = 36.f, kTitle = 30.f, kBadge = 58.f;
    constexpr float kPad = 22.f;
+   // VR: one column, opaque. Overlay (outside VR): the rating and its details in a left column, the graphs right, see-through
+   const float width = static_cast<float>(overlay ? kOverlayWidth : kWidth);
+   // Overlay: the height the shape of its space gives, that the graphs share. The content may need more (left column): the window is then as
+   // high as it, measured below, and scaled down with it
+   const float height = overlay ? clamp(width / max(m_overlayAspect, 0.1f), 560.f, 2400.f) : static_cast<float>(kHeight);
+   constexpr float kOverlayLeftWidth = 470.f, kOverlayGap = 26.f;
+   const bool vr = !overlay;
+   const auto hasValues = [&](std::initializer_list<int> list)
+   {
+      for (const int s : list)
+         for (int i = 0; i < count; i++)
+            if (!IsNaN(series[s][i]))
+               return true;
+      return false;
+   };
 
    ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
-   ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kWidth), static_cast<float>(kHeight)));
+   ImGui::SetNextWindowSize(ImVec2(width, overlay ? 4000.f : height)); // Overlay: not clipped at the bottom, its height is the content's
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kPad, kPad));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.f, 4.f));
-   ImGui::Begin("##PerfPanel", nullptr,
+   ImGui::Begin(overlay ? "##PerfOverlay" : "##PerfPanel", nullptr,
       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus
          | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
    ImDrawList* const drawList = ImGui::GetWindowDrawList();
    const ImVec2 origin = ImGui::GetWindowPos();
-   drawList->AddRectFilled(origin, origin + ImVec2(static_cast<float>(kWidth), static_cast<float>(kHeight)), IM_COL32(16, 19, 26, 255), 20.f);
-   const float contentWidth = static_cast<float>(kWidth) - 2.f * kPad;
+   // Overlay: laid out in pixels of its own, then scaled into its space, while ImGui clips the windows to the display, whose size has nothing to
+   // do with it (the UI turned with a cabinet's playfield is narrower than the layout): clipped to the layout instead
+   if (overlay)
+      ImGui::PushClipRect(origin, origin + ImVec2(width, 4000.f), false);
+   // Overlay: to the height of the last layout (the same, unless the content or the space changed: one frame late then)
+   drawList->AddRectFilled(origin, origin + ImVec2(width, overlay ? m_overlayHeight : height), overlay ? IM_COL32(16, 19, 26, 175) : IM_COL32(16, 19, 26, 255), 20.f);
+   float contentBottom = 0.f; // Overlay: bottom of its columns, relative to the window
+   // Column the text is right aligned in: x of its left side, relative to the window (SameLine offsets also count from the group the line is in)
+   float columnStart = kPad;
+   float columnWidth = overlay ? kOverlayLeftWidth : width - 2.f * kPad;
+   bool inGroup = false;
    const auto rightAligned = [&](const string& text, ImU32 color)
    {
-      ImGui::SameLine(ImGui::GetCursorStartPos().x + contentWidth - ImGui::CalcTextSize(text.c_str()).x);
+      ImGui::SameLine((inGroup ? 0.f : columnStart) + columnWidth - ImGui::CalcTextSize(text.c_str()).x);
       ImGui::PushStyleColor(ImGuiCol_Text, color);
       ImGui::TextUnformatted(text.c_str());
       ImGui::PopStyleColor();
+   };
+   const auto footer = [&]()
+   {
+      // The logic thread's script and physics, clocks and temperatures (Linux)
+      ImGui::PushFont(font, kSmall);
+      ImGui::PushStyleColor(ImGuiCol_Text, VRUI::Theme::kTextMuted);
+      ImGui::TextUnformatted(std::format("Script {} ms, physics {} ms, render waits {} ms for logic", fmt(last(SCRIPT_MS), "{:.1f}"), fmt(last(PHYSICS_MS), "{:.1f}"),
+         fmt(m_waitLogicMs.load(), "{:.1f}")).c_str());
+      string clocks = "CPU MHz";
+      bool anyClock = !IsNaN(system.gpuMHz) || !IsNaN(system.cpuTemp) || !IsNaN(system.gpuTemp);
+      for (const float mhz : system.cpuMHz)
+         if (!IsNaN(mhz))
+         {
+            clocks += std::format(" {:.0f}", mhz);
+            anyClock = true;
+         }
+      if (vr || anyClock)
+         ImGui::TextUnformatted(std::format("{}, GPU {} MHz, {} °C CPU, {} °C GPU", clocks, fmt(system.gpuMHz, "{:.0f}"), fmt(system.cpuTemp, "{:.0f}"), fmt(system.gpuTemp, "{:.0f}")).c_str());
+      ImGui::PopStyleColor();
+      ImGui::PopFont();
    };
 
    // Rating of the last window, the target and the current window
@@ -628,11 +724,11 @@ ImDrawList* PerfPanel::BuildWindow()
       default: label = "RATING..."; color = kColorGrey; break;
       }
       const ImVec2 badgePos = ImGui::GetCursorScreenPos();
-      const ImVec2 badgeSize(290.f, 150.f);
+      const ImVec2 badgeSize = overlay ? ImVec2(kOverlayLeftWidth, 130.f) : ImVec2(290.f, 150.f);
       drawList->AddRectFilled(badgePos, badgePos + badgeSize, color, 14.f);
       ImGui::PushFont(boldFont, rating.rating == Rating::NotEnoughPlay || rating.rating == Rating::None ? kTitle : kBadge);
       const ImVec2 labelSize = ImGui::CalcTextSize(label);
-      drawList->AddText(badgePos + ImVec2((badgeSize.x - labelSize.x) * 0.5f, 22.f), IM_COL32(255, 255, 255, 255), label);
+      drawList->AddText(badgePos + ImVec2((badgeSize.x - labelSize.x) * 0.5f, overlay ? 14.f : 22.f), IM_COL32(255, 255, 255, 255), label);
       ImGui::PopFont();
       ImGui::PushFont(font, kSmall);
       string detail;
@@ -650,65 +746,102 @@ ImDrawList* PerfPanel::BuildWindow()
       drawList->AddText(badgePos + ImVec2((badgeSize.x - detailSize.x) * 0.5f, badgeSize.y - detailSize.y - 12.f), IM_COL32(255, 255, 255, 230), detail.c_str());
       ImGui::PopFont();
 
-      // Right of the badge: target, numbers of the rated window, current window
-      ImGui::SetCursorScreenPos(badgePos + ImVec2(badgeSize.x + 18.f, 0.f));
+      // Right of the badge in VR, below it in the overlay: target, numbers of the rated window, current window
+      ImGui::SetCursorScreenPos(badgePos + (overlay ? ImVec2(0.f, badgeSize.y + 12.f) : ImVec2(badgeSize.x + 18.f, 0.f)));
       ImGui::BeginGroup();
+      if (overlay)
+      {
+         inGroup = true;
+         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kOverlayLeftWidth);
+      }
       ImGui::PushFont(boldFont, kText);
       const float refreshHz = target.budgetMs > 0.f ? 1000.f / target.budgetMs : 0.f;
-      ImGui::TextUnformatted(target.nativeWidth > 0 ? std::format("Target {}x{} @ {:.0f} Hz", target.nativeWidth, target.nativeHeight, refreshHz).c_str() : "Target: waiting for the headset");
+      ImGui::TextUnformatted(target.nativeWidth > 0 ? std::format("Target {}x{} @ {:.0f} Hz", target.nativeWidth, target.nativeHeight, refreshHz).c_str()
+            : vr                                   ? "Target: waiting for the headset"
+                                                   : "Target: waiting for the display");
       ImGui::PopFont();
       ImGui::PushFont(font, kSmall);
       ImGui::PushStyleColor(ImGuiCol_Text, VRUI::Theme::kTextMuted);
       if (rating.rating == Rating::Green || rating.rating == Rating::Yellow || rating.rating == Rating::Red)
       {
          const WindowStats& s = rating.stats;
-         ImGui::TextUnformatted(std::format("Native {:.0f} % of the time, floor {:.0f} %", s.NativeFraction() * 100.f, s.FloorFraction() * 100.f).c_str());
+         ImGui::TextUnformatted(vr || target.dynamicResolution ? std::format("Native {:.0f} % of the time, floor {:.0f} %", s.NativeFraction() * 100.f, s.FloorFraction() * 100.f).c_str()
+                                                               : std::format("Native {:.0f} % of the time", s.NativeFraction() * 100.f).c_str());
          ImGui::TextUnformatted(std::format("On time {:.1f} %, {} frames missed", s.FpsRatio() * 100.f, s.periods - s.frames).c_str());
          ImGui::TextUnformatted(s.GpuMs() > 0.f ? std::format("GPU {:.1f} ms (target {:.1f} ms)", s.GpuMs(), target.targetMs).c_str() : "GPU time not reported");
       }
-      else
+      else if (vr)
       {
          ImGui::TextUnformatted("Rates the last 30 s: green = native");
          ImGui::TextUnformatted("95 % of the time, yellow = lower");
          ImGui::TextUnformatted("resolution, red = frames missed");
       }
+      else
+         ImGui::TextUnformatted("Rates the last 30 s: green = native 95 % of the time, yellow = lower resolution, red = frames missed");
       const int secondsLeft = static_cast<int>(ceilf(static_cast<float>(kWindowSamples - windowSamples) * kSampleSeconds));
       ImGui::TextUnformatted(window.periods > 0
             ? std::format("In {} s: {:.0f} % native, {:.1f} % on time", secondsLeft, window.NativeFraction() * 100.f, window.FpsRatio() * 100.f).c_str()
             : std::format("In {} s ({})", secondsLeft, startup ? "table starting" : "not played").c_str());
       ImGui::PopStyleColor();
       ImGui::PopFont();
-      ImGui::EndGroup();
-      ImGui::SetCursorScreenPos(badgePos + ImVec2(0.f, badgeSize.y + 8.f));
+      if (vr)
+      {
+         ImGui::EndGroup();
+         ImGui::SetCursorScreenPos(badgePos + ImVec2(0.f, badgeSize.y + 8.f));
+      }
+      else
+         ImGui::Spacing();
       ImGui::PushFont(font, kSmall);
       // Settings that keep the table from reaching the target
       ImGui::PushStyleColor(ImGuiCol_Text, kColorYellow);
       if (target.nativeWidth > 0 && target.eyeWidth < target.nativeWidth)
-         ImGui::TextUnformatted(std::format("Render resolution {}x{} is below native: green is out of reach", target.eyeWidth, target.eyeHeight).c_str());
-      else if (target.nativeWidth > 0 && !target.dynamicResolution)
+         ImGui::TextUnformatted(std::format("Render resolution {}x{} is below {}: green is out of reach", target.eyeWidth, target.eyeHeight, vr ? "native" : "the window's").c_str());
+      else if (vr && target.nativeWidth > 0 && !target.dynamicResolution)
          ImGui::TextUnformatted("Dynamic resolution is off");
-      else
+      else if (vr)
          ImGui::NewLine();
+      else if (target.nativeWidth > 0)
+      {
+         ImGui::PushStyleColor(ImGuiCol_Text, VRUI::Theme::kTextMuted);
+         // With dynamic resolution, the part of the render size drawn by the last frame
+         const int width = static_cast<int>(lroundf(static_cast<float>(target.eyeWidth) * target.scale));
+         const int height = static_cast<int>(lroundf(static_cast<float>(target.eyeHeight) * target.scale));
+         ImGui::TextUnformatted(std::format("Render {}x{}, {:.0f} % of the window{}", width, height, static_cast<float>(width) * 100.f / static_cast<float>(target.nativeWidth),
+            target.dynamicResolution ? std::format(" (dynamic, floor {:.0f} %)", target.minScale * static_cast<float>(target.eyeWidth) * 100.f / static_cast<float>(target.nativeWidth))
+                                     : string("")).c_str());
+         ImGui::PopStyleColor();
+      }
       ImGui::PopStyleColor();
-      // The performance features of the fork (Steam Frame screen of the menu): foveated rendering (left), simplified meshes (right)
-      static constexpr const char* kFoveationLevels[] = { "off", "Low", "Medium", "High" };
-      // " + AA": the anti-aliasing pass is foveated too, "(auto)" when the automatic mode turned it on for this table
-      const string foveation = target.foveationLevel < 0 ? "Foveation: not supported"s
-         : target.foveationLevel == 0                    ? "Foveation off"s
-                                                         : std::format("Foveation {}, {}{}", kFoveationLevels[min(target.foveationLevel, 3)],
-                                                              target.foveationEyeTracked ? "eye-tracked" : target.foveationFixedLow ? "fixed (Low profile)" : "fixed",
-                                                              target.foveatedAntialiasing == 2 ? " + AA (auto)" : target.foveatedAntialiasing == 1 ? " + AA" : "");
-      ImGui::PushStyleColor(ImGuiCol_Text, target.foveationLevel > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
-      ImGui::TextUnformatted(foveation.c_str());
-      ImGui::PopStyleColor();
+      // The performance features of the fork (Steam Frame screen of the menu): foveated rendering (left, VR only), simplified meshes (right)
+      if (vr)
+      {
+         static constexpr const char* kFoveationLevels[] = { "off", "Low", "Medium", "High" };
+         // " + AA": the anti-aliasing pass is foveated too, "(auto)" when the automatic mode turned it on for this table
+         const string foveation = target.foveationLevel < 0 ? "Foveation: not supported"s
+            : target.foveationLevel == 0                    ? "Foveation off"s
+                                                            : std::format("Foveation {}, {}{}", kFoveationLevels[min(target.foveationLevel, 3)],
+                                                                 target.foveationEyeTracked ? "eye-tracked" : target.foveationFixedLow ? "fixed (Low profile)" : "fixed",
+                                                                 target.foveatedAntialiasing == 2 ? " + AA (auto)" : target.foveatedAntialiasing == 1 ? " + AA" : "");
+         ImGui::PushStyleColor(ImGuiCol_Text, target.foveationLevel > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
+         ImGui::TextUnformatted(foveation.c_str());
+         ImGui::PopStyleColor();
+      }
       const MeshSimplifier& simplifier = MeshSimplifier::Get();
       const float saved = simplifier.GetSavedShare();
       const string meshes = simplifier.GetSimplifiedPartCount() == 0 ? "Meshes: none simplified"s
          : !simplifier.IsEnabled()                                  ? "Simplified meshes off"s
-         : std::isnan(saved)                                        ? "Meshes: measuring"s
+         : IsNaN(saved)                                        ? "Meshes: measuring"s
                                                                     : std::format("Meshes -{:.0f} % triangles", saved * 100.f);
-      rightAligned(meshes, simplifier.IsEnabled() && simplifier.GetSimplifiedPartCount() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted);
-      // Lighting: the light-map pruning level (Steam Frame screen, Light maps) and the share of the light maps' triangles it leaves out
+      const ImU32 meshesColor = simplifier.IsEnabled() && simplifier.GetSimplifiedPartCount() > 0 ? VRUI::Theme::kText : VRUI::Theme::kTextMuted;
+      if (vr)
+         rightAligned(meshes, meshesColor);
+      else
+      {
+         ImGui::PushStyleColor(ImGuiCol_Text, meshesColor);
+         ImGui::TextUnformatted(meshes.c_str());
+         ImGui::PopStyleColor();
+      }
+      // Lighting: the light-map pruning level (Device Performance screen, Light maps) and the share of the light maps' triangles it leaves out
       const LightMapPruning& lightMaps = LightMapPruning::Get();
       const string lighting = lightMaps.WasOffAtLoad()         ? "Lighting: light map pruning Off when the table loaded"s
          : lightMaps.GetLightMapCount() == 0                    ? "Lighting: no light map on this table"s
@@ -719,13 +852,26 @@ ImDrawList* PerfPanel::BuildWindow()
       ImGui::TextUnformatted(lighting.c_str());
       ImGui::PopStyleColor();
       ImGui::PopFont();
+      if (overlay)
+      {
+         ImGui::Spacing();
+         footer();
+         ImGui::PopTextWrapPos();
+         ImGui::EndGroup();
+         contentBottom = ImGui::GetItemRectMax().y - origin.y;
+         // The graphs, right of the column
+         ImGui::SetCursorScreenPos(origin + ImVec2(kPad + kOverlayLeftWidth + kOverlayGap, kPad));
+         ImGui::BeginGroup();
+         columnStart = kPad + kOverlayLeftWidth + kOverlayGap;
+         columnWidth = width - columnStart - kPad;
+      }
    }
 
    // Graphs of the last 3 minutes
    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(4.f, 4.f));
    ImPlot::PushStyleVar(ImPlotStyleVar_LegendPadding, ImVec2(2.f, 2.f));
    ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(0.f, 0.f, 0.f, 0.f));
-   ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImGui::ColorConvertU32ToFloat4(IM_COL32(28, 33, 44, 255)));
+   ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImGui::ColorConvertU32ToFloat4(overlay ? IM_COL32(28, 33, 44, 140) : IM_COL32(28, 33, 44, 255)));
    ImPlot::PushStyleColor(ImPlotCol_LegendBg, ImVec4(0.f, 0.f, 0.f, 0.f));
    ImPlot::PushStyleColor(ImPlotCol_LegendBorder, ImVec4(0.f, 0.f, 0.f, 0.f));
    const auto section = [&](const char* title, const string& value, ImU32 valueColor)
@@ -752,10 +898,10 @@ ImDrawList* PerfPanel::BuildWindow()
       spec.Flags = static_cast<int>(ImPlotInfLinesFlags_Horizontal) | static_cast<int>(ImPlotItemFlags_NoLegend);
       ImPlot::PlotInfLines(label, &value, 1, spec);
    };
-   const auto beginPlot = [&](const char* id, float height, float yMax, bool legend) -> bool
+   const auto beginPlot = [&](const char* id, float plotHeight, float yMax, bool legend) -> bool
    {
       ImGui::PushFont(font, kSmall);
-      if (!ImPlot::BeginPlot(id, ImVec2(-1.f, height), ImPlotFlags_NoInputs | ImPlotFlags_NoMenus | ImPlotFlags_NoTitle | (legend ? 0 : ImPlotFlags_NoLegend)))
+      if (!ImPlot::BeginPlot(id, ImVec2(overlay ? columnWidth : -1.f, plotHeight), ImPlotFlags_NoInputs | ImPlotFlags_NoMenus | ImPlotFlags_NoTitle | (legend ? 0 : ImPlotFlags_NoLegend)))
       {
          ImGui::PopFont();
          return false;
@@ -773,38 +919,55 @@ ImDrawList* PerfPanel::BuildWindow()
       ImPlot::EndPlot();
       ImGui::PopFont();
    };
-   constexpr float kPlotHeight = 130.f; // 136 before the lighting line above the graphs
+   // VR: all the graphs. Overlay: the ones with values on this system (the resolution with dynamic resolution on; GPU busy and CPU use are read
+   // on Linux only), sharing the height of the window
+   const bool showResolution = vr || target.dynamicResolution;
+   const bool showGpuBusy = vr || hasValues({ GPU_BUSY, GPU_COMPOSITOR });
+   const bool showCpu = vr || hasValues({ CPU_LOGIC, CPU_RENDER, CPU_PINMAME, CPU_AUDIO, CPU_OTHER });
+   float plotHeight = 130.f; // 136 before the lighting line above the graphs (VR)
+   if (overlay)
+   {
+      constexpr float kSectionTitle = 48.f; // Title row and the spacing around the graph
+      const int sections = 2 + (showResolution ? 1 : 0) + (showCpu ? 1 : 0);
+      const float plots = static_cast<float>(sections) + (showGpuBusy ? 0.7f : 0.f);
+      plotHeight = max(80.f, floorf((height - 2.f * kPad - static_cast<float>(sections) * kSectionTitle - (showGpuBusy ? 4.f : 0.f)) / plots));
+   }
 
    const float refreshHz = target.budgetMs > 0.f ? 1000.f / target.budgetMs : 72.f;
    const float fps = last(FPS);
-   section("Frame rate", fmt(fps, "{:.0f} fps"), (!std::isnan(fps) && fps < refreshHz * kOnTimeRatio) ? kColorRed : kColorFps);
-   if (beginPlot("##fps", kPlotHeight, ceilf(refreshHz * 1.15f / 10.f) * 10.f, false))
+   section("Frame rate", fmt(fps, "{:.0f} fps"), (!IsNaN(fps) && fps < refreshHz * kOnTimeRatio) ? kColorRed : kColorFps);
+   if (beginPlot("##fps", plotHeight, ceilf(refreshHz * 1.15f / 10.f) * 10.f, false))
    {
       reference("##refresh", refreshHz, VRUI::Theme::kTextMuted);
-      line("Headset", FPS, kColorFps);
+      line(vr ? "Headset" : "Display", FPS, kColorFps);
       endPlot();
    }
 
-   const float resolution = last(RESOLUTION);
-   const string resolutionText = std::isnan(resolution) || target.nativeWidth <= 0
-      ? string("-")
-      : std::format("{}x{}  {:.0f} %", static_cast<int>(lroundf(static_cast<float>(target.nativeWidth) * resolution / 100.f)),
-         static_cast<int>(lroundf(static_cast<float>(target.nativeHeight) * resolution / 100.f)), resolution);
-   section("Resolution (of native)", resolutionText, kColorResolution);
-   if (beginPlot("##resolution", kPlotHeight, 130.f, false))
+   if (showResolution)
    {
-      reference("##native", 100.f, VRUI::Theme::kTextMuted);
-      if (target.dynamicResolution && target.nativeWidth > 0)
-         reference("##floor", target.minScale * static_cast<float>(target.eyeWidth) / static_cast<float>(target.nativeWidth) * 100.f, kColorRed);
-      line("Rendered", RESOLUTION, kColorResolution);
-      endPlot();
+      const float resolution = last(RESOLUTION);
+      const string resolutionText = IsNaN(resolution) || target.nativeWidth <= 0
+         ? string("-")
+         : std::format("{}x{}  {:.0f} %", static_cast<int>(lroundf(static_cast<float>(target.nativeWidth) * resolution / 100.f)),
+            static_cast<int>(lroundf(static_cast<float>(target.nativeHeight) * resolution / 100.f)), resolution);
+      section("Resolution (of native)", resolutionText, kColorResolution);
+      // Up to the render size (above native with supersampling: 200 % at AAFactor 2 outside VR, the ResFactor in VR)
+      const float fullSize = target.nativeWidth > 0 ? static_cast<float>(target.eyeWidth) * 100.f / static_cast<float>(target.nativeWidth) : 100.f;
+      if (beginPlot("##resolution", plotHeight, max(130.f, ceilf(fullSize * 1.1f / 10.f) * 10.f), false))
+      {
+         reference("##native", 100.f, VRUI::Theme::kTextMuted);
+         if (target.dynamicResolution && target.nativeWidth > 0)
+            reference("##floor", target.minScale * static_cast<float>(target.eyeWidth) / static_cast<float>(target.nativeWidth) * 100.f, kColorRed);
+         line("Rendered", RESOLUTION, kColorResolution);
+         endPlot();
+      }
    }
 
    const float gpuMs = last(GPU_MS);
-   section("GPU", fmt(gpuMs, "{:.1f} ms") + (std::isnan(last(GPU_BUSY)) ? string() : std::format("  {:.0f} %", last(GPU_BUSY))),
-      (!std::isnan(gpuMs) && gpuMs > target.targetMs && target.targetMs > 0.f) ? kColorYellow : kColorGpu);
+   section("GPU", fmt(gpuMs, "{:.1f} ms") + (IsNaN(last(GPU_BUSY)) ? string() : std::format("  {:.0f} %", last(GPU_BUSY))),
+      (!IsNaN(gpuMs) && gpuMs > target.targetMs && target.targetMs > 0.f) ? kColorYellow : kColorGpu);
    const float budgetMs = target.budgetMs > 0.f ? target.budgetMs : 13.9f;
-   if (beginPlot("##gpu", kPlotHeight, ceilf(budgetMs * 1.3f), true))
+   if (beginPlot("##gpu", plotHeight, ceilf(budgetMs * 1.3f), true))
    {
       // GPU time per frame (ms) against the budget and the target of the dynamic resolution
       reference("##budget", budgetMs, kColorRed);
@@ -813,38 +976,38 @@ ImDrawList* PerfPanel::BuildWindow()
       line("ms per frame", GPU_MS, kColorGpu);
       endPlot();
    }
-   if (beginPlot("##gpubusy", kPlotHeight * 0.7f, 100.f, true))
+   if (showGpuBusy && beginPlot("##gpubusy", plotHeight * 0.7f, 100.f, true))
    {
       line("VPX %", GPU_BUSY, kColorGpu);
-      line("Compositor %", GPU_COMPOSITOR, kColorCompositor, 1.5f);
+      line(vr ? "Compositor %" : "Compositor (VR) %", GPU_COMPOSITOR, kColorCompositor, 1.5f);
       endPlot();
    }
 
-   section("CPU (% of a core)", std::isnan(system.vpxCpu) ? string("-") : std::format("VPX {:.0f} %", system.vpxCpu), kColorLogic);
-   if (beginPlot("##cpu", kPlotHeight, 100.f, true))
+   if (showCpu)
    {
-      line("Logic", CPU_LOGIC, kColorLogic);
-      line("Render", CPU_RENDER, kColorRender);
-      line("PinMAME", CPU_PINMAME, kColorPinMAME);
-      line("Audio", CPU_AUDIO, kColorAudio, 1.5f);
-      line("Other", CPU_OTHER, kColorOther, 1.5f);
-      endPlot();
+      section("CPU (% of a core)", IsNaN(system.vpxCpu) ? string("-") : std::format("VPX {:.0f} %", system.vpxCpu), kColorLogic);
+      if (beginPlot("##cpu", plotHeight, 100.f, true))
+      {
+         line("Logic", CPU_LOGIC, kColorLogic);
+         line("Render", CPU_RENDER, kColorRender);
+         line("PinMAME", CPU_PINMAME, kColorPinMAME);
+         line("Audio", CPU_AUDIO, kColorAudio, 1.5f);
+         line("Other", CPU_OTHER, kColorOther, 1.5f);
+         endPlot();
+      }
    }
    ImPlot::PopStyleColor(4);
    ImPlot::PopStyleVar(2);
 
-   // Footer: the logic thread's script and physics, clocks and temperatures
-   ImGui::PushFont(font, kSmall);
-   ImGui::PushStyleColor(ImGuiCol_Text, VRUI::Theme::kTextMuted);
-   ImGui::TextUnformatted(std::format("Script {} ms, physics {} ms, render waits {} ms for logic", fmt(last(SCRIPT_MS), "{:.1f}"), fmt(last(PHYSICS_MS), "{:.1f}"),
-      fmt(m_waitLogicMs.load(), "{:.1f}")).c_str());
-   string clocks = "CPU MHz";
-   for (const float mhz : system.cpuMHz)
-      if (!std::isnan(mhz))
-         clocks += std::format(" {:.0f}", mhz);
-   ImGui::TextUnformatted(std::format("{}, GPU {} MHz, {} °C CPU, {} °C GPU", clocks, fmt(system.gpuMHz, "{:.0f}"), fmt(system.cpuTemp, "{:.0f}"), fmt(system.gpuTemp, "{:.0f}")).c_str());
-   ImGui::PopStyleColor();
-   ImGui::PopFont();
+   if (overlay)
+   {
+      ImGui::EndGroup();
+      contentBottom = max(contentBottom, ImGui::GetItemRectMax().y - origin.y);
+      m_overlayHeight = max(height, ceilf(contentBottom + kPad));
+      ImGui::PopClipRect();
+   }
+   else
+      footer();
 
    ImGui::End();
    ImGui::PopStyleVar(3);
@@ -864,36 +1027,36 @@ bool PerfPanel::RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImD
    RenderTarget* const previous = rd->GetCurrentPass()->m_rt;
    rd->SetRenderTarget(name, target, false, true);
    rd->Clear(clearType::TARGET, 0x00000000);
+   const Matrix3D matView = Matrix3D::MatrixOrthoOffCenterRH(0.f, static_cast<float>(target->GetWidth()), static_cast<float>(target->GetHeight()), 0.f, 0.f, 1.f);
+   SubmitDrawList(rd, drawList, meshBuffer, name, matView, -10000, 0.f);
+   // Back to the target of the UI: the passes of a frame are ordered from its last one (RenderFrame::Execute), which must stay the display's
+   rd->SetRenderTarget("LiveUI"s, previous, true, true);
+   return true;
+}
 
+void PerfPanel::SubmitDrawList(RenderDevice* rd, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer, const string& name, const Matrix3D& matView, int depthSort,
+   float sdrWhitePQ)
+{
    const unsigned int numVertices = drawList->VtxBuffer.size();
    const unsigned int numIndices = drawList->IdxBuffer.size();
+   if (numVertices == 0 || numIndices == 0)
+      return;
    if (meshBuffer == nullptr || meshBuffer->m_ib->m_count < numIndices || meshBuffer->m_vb->m_count < numVertices)
    {
       auto ib = std::make_shared<IndexBuffer>(rd, max(meshBuffer ? meshBuffer->m_ib->m_count : 0, numIndices), true, IndexBuffer::Format::FMT_INDEX32);
-      auto vb = std::make_shared<VertexBuffer>(rd, max(meshBuffer ? meshBuffer->m_vb->m_count : 0, numVertices), nullptr, true);
+      auto vb = std::make_shared<VertexBuffer>(rd, max(meshBuffer ? meshBuffer->m_vb->m_count : 0, numVertices), nullptr, true, VertexFormat::VF_IMGUI);
       meshBuffer = std::make_shared<MeshBuffer>(name, vb, ib, false);
    }
-   Vertex3D_NoTex2* vb;
-   meshBuffer->m_vb->Lock(vb);
-   for (unsigned int i = 0; i < numVertices; i++)
-   {
-      const uint32_t rgba = drawList->VtxBuffer[i].col;
-      vb[i].x = drawList->VtxBuffer[i].pos.x;
-      vb[i].y = drawList->VtxBuffer[i].pos.y;
-      vb[i].z = (float)((rgba >> 24) & 0xFFu) * (float)(1.0 / 255.0); // alpha
-      vb[i].nx = (float)(rgba & 0x000000FFu) * (float)(1.0 / 255.0); // red
-      vb[i].ny = (float)(rgba & 0x0000FF00u) * (float)(1.0 / 65280.0); // green
-      vb[i].nz = (float)(rgba & 0x00FF0000u) * (float)(1.0 / 16711680.0); // blue
-      vb[i].tu = drawList->VtxBuffer[i].uv.x;
-      vb[i].tv = drawList->VtxBuffer[i].uv.y;
-   }
+   // ImGui's vertices as they are (VF_IMGUI, the format of the UI shader since upstream b78fce3d7)
+   VertexUI* vb;
+   meshBuffer->m_vb->Lock(vb, 0, numVertices * sizeof(ImDrawVert));
+   memcpy(vb, drawList->VtxBuffer.Data, numVertices * sizeof(ImDrawVert));
    meshBuffer->m_vb->Unlock();
    uint32_t* ib;
    meshBuffer->m_ib->Lock(ib);
    memcpy(ib, drawList->IdxBuffer.begin(), numIndices * sizeof(ImDrawIdx));
    meshBuffer->m_ib->Unlock();
 
-   const Matrix3D matView = Matrix3D::MatrixOrthoOffCenterRH(0.f, static_cast<float>(target->GetWidth()), static_cast<float>(target->GetHeight()), 0.f, 0.f, 1.f);
    rd->m_uiShader->SetMatrix(ShaderUniform::matWorldView, &matView, 1);
    rd->ResetRenderState();
    rd->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
@@ -905,21 +1068,119 @@ bool PerfPanel::RenderDrawList(RenderDevice* rd, RenderTarget* target, const ImD
    rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
    rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
    rd->m_uiShader->SetTechnique(ShaderTechnique::LiveUI_mono);
-   int depthSort = -10000;
    for (const ImDrawCmd* cmd = drawList->CmdBuffer.begin(), *cmdEnd = drawList->CmdBuffer.end(); cmd != cmdEnd; cmd++)
    {
       if (cmd->ElemCount == 0 || cmd->UserCallback != nullptr)
          continue;
       rd->m_uiShader->SetVector(ShaderUniform::clip_plane, cmd->ClipRect.x, cmd->ClipRect.y, cmd->ClipRect.z, cmd->ClipRect.w);
       rd->m_uiShader->SetTexture(ShaderUniform::tex_base_color, cmd->GetTexID(), SamplerFilter::SF_BILINEAR);
-      // UI shader parameters: x = no stereo offset, y = texture is sRGB decoded, w = no HDR conversion (see LiveUI::RenderUI)
-      const vec4 uiParams(0.f, (cmd->GetTexID() != nullptr && cmd->GetTexID()->IsSRGB()) ? 1.f : 0.f, 0.f, 0.f);
+      // UI shader parameters: x = no stereo offset, y = texture is sRGB decoded, w = HDR white level (see LiveUI::RenderUI)
+      const vec4 uiParams(0.f, (cmd->GetTexID() != nullptr && cmd->GetTexID()->IsSRGB()) ? 1.f : 0.f, 0.f, sdrWhitePQ);
       rd->m_uiShader->SetVector(ShaderUniform::staticColor_Alpha, &uiParams);
       rd->DrawMesh(rd->m_uiShader, true, Vertex3Ds(0.f, 0.f, 0.f), static_cast<float>(depthSort), meshBuffer, RenderDevice::TRIANGLELIST, cmd->IdxOffset, cmd->ElemCount);
       depthSort--;
    }
-   // Back to the target of the UI: the passes of a frame are ordered from its last one (RenderFrame::Execute), which must stay the display's
+}
+
+Matrix3D PerfPanel::GetOverlayPlacement(float uiWidth, float uiHeight)
+{
+   // At most 45 % of the width and 55 % of the height of the UI, a margin from its top left corner
+   const float boxW = 0.45f * uiWidth, boxH = 0.55f * uiHeight;
+   if (boxW > 0.f && boxH > 0.f)
+      m_overlayAspect = boxW / boxH;
+   const float scale = min(boxW / static_cast<float>(kOverlayWidth), boxH / m_overlayHeight);
+   const float margin = 0.015f * min(uiWidth, uiHeight);
+   return Matrix3D::MatrixScale(scale, scale, 1.f) * Matrix3D::MatrixTranslate(margin, margin, 0.f);
+}
+
+// Kept on top of the score view (DMD) and topper windows placed over the backglass window: the part of the panel they cover is drawn into them
+// too, after their content, at the same place on the screen. panelToPixels: the panel in pixels of the backglass window (w x h)
+void PerfPanel::RenderOverCoveringWindows(RenderDevice* rd, Player* player, const VPX::Window* backglass, const ImDrawList* drawList, const Matrix3D& panelToPixels, float w, float h)
+{
+   if (!backglass->IsPositioningSupported() || backglass->GetWidth() <= 0 || backglass->GetHeight() <= 0)
+      return;
+   int bx, by;
+   backglass->GetPos(bx, by);
+   const int bw = backglass->GetWidth(), bh = backglass->GetHeight();
+   const std::pair<const VPX::RenderOutput*, VPXWindowId> outputs[2] = { { &player->m_scoreViewOutput, VPXWindowId::VPXWINDOW_ScoreView },
+      { &player->m_topperOutput, VPXWindowId::VPXWINDOW_Topper } };
+   for (int i = 0; i < 2; i++)
+   {
+      const auto& [output, id] = outputs[i];
+      VPX::Window* const wnd = output->GetMode() == VPX::RenderOutput::OM_WINDOW ? output->GetWindow() : nullptr;
+      RenderTarget* const target = wnd ? wnd->GetBackBuffer() : nullptr;
+      if (wnd == nullptr || wnd == backglass || target == nullptr || !wnd->IsVisible() || wnd->GetWidth() <= 0 || wnd->GetHeight() <= 0)
+         continue;
+      int x, y;
+      wnd->GetPos(x, y);
+      if (x >= bx + bw || y >= by + bh || x + wnd->GetWidth() <= bx || y + wnd->GetHeight() <= by)
+         continue; // Not over the backglass window
+      // Backglass pixels -> screen (logical units) -> this window's pixels
+      const float tw = static_cast<float>(target->GetWidth()), th = static_cast<float>(target->GetHeight());
+      const Matrix3D toWindow = Matrix3D::MatrixScale(static_cast<float>(bw) / w, static_cast<float>(bh) / h, 1.f)
+         * Matrix3D::MatrixTranslate(static_cast<float>(bx - x), static_cast<float>(by - y), 0.f)
+         * Matrix3D::MatrixScale(tw / static_cast<float>(wnd->GetWidth()), th / static_cast<float>(wnd->GetHeight()), 1.f)
+         * Matrix3D::MatrixOrthoOffCenterRH(0.f, tw, th, 0.f, 0.f, 1.f);
+      RenderTarget* const previous = rd->GetCurrentPass()->m_rt;
+      rd->SetRenderTarget(i == 0 ? "PerfPanel ScoreView"s : "PerfPanel Topper"s, target, true, true);
+      if (!player->m_renderer->IsAncillaryWindowRendered(id))
+         rd->Clear(clearType::TARGET, 0x00000000);
+      SubmitDrawList(rd, drawList, m_coveringMeshBuffers[i], "PerfPanel"s, panelToPixels * toWindow, -10000,
+         wnd->IsWCGBackBuffer() ? wnd->GetSDRWhitePoint() * (float)(80. / 10000.) : 0.f);
+      rd->SetRenderTarget("LiveUI"s, previous, true, true);
+   }
+}
+
+bool PerfPanel::RenderOverBackglass(RenderDevice* rd, Player* player, const ImDrawList* drawList, std::shared_ptr<MeshBuffer>& meshBuffer)
+{
+   const VPX::RenderOutput& output = player->m_backglassOutput;
+   VPX::Window* const wnd = output.GetMode() == VPX::RenderOutput::OM_WINDOW ? output.GetWindow() : nullptr;
+   if (wnd == nullptr)
+      return false;
+   const bool contentDrawn = player->m_renderer->IsAncillaryWindowRendered(VPXWindowId::VPXWINDOW_Backglass);
+   RenderTarget* const target = wnd->GetBackBuffer(); // Null while its swapchain is recreated
+   if (drawList == nullptr || drawList->IdxBuffer.empty() || target == nullptr || rd->GetCurrentPass() == nullptr)
+   {
+      // Panel turned off: a window shown for it alone is hidden again, as the renderer leaves it when nothing is drawn (Renderer::RenderAncillaryWindow)
+      if (drawList == nullptr && m_backglassShown)
+      {
+         m_backglassShown = false;
+         if (!contentDrawn && wnd->IsVisible())
+            wnd->Show(false);
+      }
+      return true;
+   }
+
+   // Fitted into the window, turned like its content (Renderer::SetupAncillaryRenderTarget)
+   const float w = static_cast<float>(target->GetWidth()), h = static_cast<float>(target->GetHeight());
+   const int rotation = player->m_renderer->GetAncillaryContentRotation(VPXWindowId::VPXWINDOW_Backglass, output);
+   const bool swapAxes = (rotation % 180) != 0;
+   const float boxW = swapAxes ? h : w, boxH = swapAxes ? w : h;
+   if (boxW > 0.f && boxH > 0.f)
+      m_overlayAspect = boxW / boxH; // The next layout takes the shape of the window
+   const ImVec2 size(static_cast<float>(kOverlayWidth), m_overlayHeight);
+   const float scale = min(boxW / size.x, boxH / size.y);
+   const Matrix3D panelToPixels = Matrix3D::MatrixScale(scale, scale, 1.f)
+      * Matrix3D::MatrixTranslate((boxW - scale * size.x) * 0.5f - boxW * 0.5f, (boxH - scale * size.y) * 0.5f - boxH * 0.5f, 0.f)
+      * Matrix3D::MatrixRotateZ(ANGTORAD(static_cast<float>(rotation))) * Matrix3D::MatrixTranslate(w * 0.5f, h * 0.5f, 0.f);
+   const Matrix3D matView = panelToPixels * Matrix3D::MatrixOrthoOffCenterRH(0.f, w, h, 0.f, 0.f, 1.f);
+
+   // After the window's content, drawn earlier in the frame. Without any (no backglass for this table), the pass of the window was dropped: the
+   // panel is on black
+   RenderTarget* const previous = rd->GetCurrentPass()->m_rt;
+   rd->SetRenderTarget("PerfPanel Backglass"s, target, true, true);
+   if (!contentDrawn)
+      rd->Clear(clearType::TARGET, 0x00000000);
+   SubmitDrawList(rd, drawList, meshBuffer, "PerfPanel"s, matView, -10000, wnd->IsWCGBackBuffer() ? wnd->GetSDRWhitePoint() * (float)(80. / 10000.) : 0.f);
    rd->SetRenderTarget("LiveUI"s, previous, true, true);
+   RenderOverCoveringWindows(rd, player, wnd, drawList, panelToPixels, w, h);
+
+   // Shown once the playfield is, as the renderer does it
+   if (!wnd->IsVisible() && player->m_playfieldWnd->IsVisible())
+   {
+      wnd->Show();
+      m_backglassShown = true;
+   }
    return true;
 }
 

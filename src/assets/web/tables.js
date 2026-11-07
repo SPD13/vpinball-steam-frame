@@ -36,6 +36,7 @@ const ICONS = {
 const State = {
   tables: [],
   scanning: false,
+  vr: true, // Played in VR: the tables without a VR room are tagged (not on desktops and cabinets)
   lastResponse: null, // To render again only when something changed
   tab: 'all',
   search: '',
@@ -77,6 +78,7 @@ async function fetchTables() {
     const data = JSON.parse(text);
     State.tables = data.tables || [];
     State.scanning = !!data.scanning;
+    State.vr = data.vr !== false;
     render();
   } catch (error) {
     console.error('Error fetching tables:', error);
@@ -268,7 +270,7 @@ function updateTile(refs, table) {
   refs.pup.hidden = !table.hasPupPack;
   refs.unknown.hidden = !table.unknownGame;
   refs.unknown.title = table.unknownGame ? getUnknownGameText(table) : '';
-  refs.noVr.hidden = table.madeForVR !== false;
+  refs.noVr.hidden = !State.vr || table.madeForVR !== false;
   // A fix available for the table, or applied to it (see the Table and ROM fixes of the Files page)
   refs.fix.hidden = !!table.unknownGame || (!table.fixesAvailable && !table.fixesApplied);
   refs.fix.classList.toggle('available', table.fixesAvailable > 0);

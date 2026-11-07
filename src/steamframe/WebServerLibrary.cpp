@@ -241,7 +241,7 @@ void WebServer::Tables(struct mg_connection *c, struct mg_http_message* hm)
          { "fixesApplied", fixSummary.applied },
          { "playing", IsPlayed(library, table) } });
    }
-   const string response = json { { "revision", library.GetRevision() }, { "scanning", library.IsScanning() }, { "tables", tables } }.dump();
+   const string response = json { { "revision", library.GetRevision() }, { "scanning", library.IsScanning() }, { "vr", g_launcher->IsPlayingInVR() }, { "tables", tables } }.dump();
    mg_http_reply(c, STATUS_OK, HEADER_JSON, "%s", response.c_str());
 }
 

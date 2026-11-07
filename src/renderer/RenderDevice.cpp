@@ -37,6 +37,10 @@
 #include "VRDevice.h"
 #include "renderer/AreaTex.h"
 #include "renderer/SearchTex.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/PerfPanel.h"
+#include "steamframe/DesktopDynamicResolution.h"
+#endif
 
 #if defined(ENABLE_BGFX)
 #if defined(__STANDALONE__) && !defined(_MSC_VER) // wine's headers (non MSVC standalone builds) define _WIN64 on any 64 bit target
@@ -835,6 +839,9 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
    int gpuLengthPos = 0;
    uint32_t lastGpuFrameNum = 0;
    uint64_t avgGPUFrameLength = 0;
+#if defined(VPX_STEAM_FRAME)
+   float gpuFrameMs = -1.f; // Steam Frame Edition: GPU time of the frame just measured, for the performance panel
+#endif
 
    const bool waitableSwapchain = (bgfx::getCaps()->supported & BGFX_CAPS_WAITABLE_SWAPCHAIN) != 0;
    if (waitableSwapchain)
@@ -1161,7 +1168,25 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
             for (const uint64_t length : gpuLengths)
                avg += length;
             avgGPUFrameLength = avg / gpuLengths.size();
+#if defined(VPX_STEAM_FRAME)
+            gpuFrameMs = stats->gpuTimerFreq > 0 && stats->gpuTimeEnd > stats->gpuTimeBegin
+               ? static_cast<float>(static_cast<double>(stats->gpuTimeEnd - stats->gpuTimeBegin) * 1000. / static_cast<double>(stats->gpuTimerFreq))
+               : -1.f;
+#endif
          }
+#if defined(VPX_STEAM_FRAME)
+         // Steam Frame Edition: the dynamic resolution outside VR (src/steamframe/DesktopDynamicResolution.cpp) and the frames of the performance
+         // panel (src/steamframe/PerfPanel.cpp), against the playfield window at its refresh rate, or the frame rate cap if lower
+         if (const RenderTarget* const bb = m_outputWnd[0]->GetBackBuffer(); bb && g_pplayer->m_renderer)
+         {
+            const float refreshHz = min(m_outputWnd[0]->GetRefreshRate(), g_pplayer->GetTargetRefreshRate());
+            const float gpuMs = std::exchange(gpuFrameMs, -1.f);
+            VPX::DesktopDynamicResolution::Get().OnFrame(gpuMs, refreshHz);
+            const RenderTarget* const rendered = g_pplayer->m_renderer->GetBackBufferTexture();
+            VPX::PerfPanel::Get().OnDesktopFrame(lastSyncTimestamp, gpuMs, refreshHz, rendered ? rendered->GetWidth() : bb->GetWidth(), rendered ? rendered->GetHeight() : bb->GetHeight(),
+               GetExecutedRenderScale(), bb->GetWidth(), bb->GetHeight());
+         }
+#endif
       }
 
       // Screenshot handling (state is concurrently written by the logic thread in CaptureScreenshot)

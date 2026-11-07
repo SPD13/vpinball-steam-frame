@@ -12,6 +12,8 @@
 #include "core/TournamentFile.h"
 #include "fonts/IconsForkAwesome.h"
 #include "renderer/Renderer.h"
+#include "steamframe/DesktopDynamicResolution.h"
+#include "steamframe/NaN.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
 #include "steamframe/LightMapPruning.h"
@@ -23,6 +25,7 @@
 #include "steamframe/TablePickerPage.h"
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/AudioSettingsPage.h"
+#include "ui/live/ingameui/DisplaySettingsPage.h"
 #include "ui/live/ingameui/GraphicSettingsPage.h"
 #include "ui/live/ingameui/InputSettingsPage.h"
 #include "ui/live/ingameui/PluginSettingsPage.h"
@@ -111,7 +114,8 @@ private:
       AddLobbyRoomItems(*this);
 
       AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "More settings"s));
-      AddItem(std::make_unique<InGameUIItem>("Display Settings"s, ""s, "settings/displays"s));
+      if (m_player->m_vrDevice) // Outside VR, the Screens screen of the rail shows them
+         AddItem(std::make_unique<InGameUIItem>("Display Settings"s, ""s, "settings/displays"s));
       AddItem(std::make_unique<InGameUIItem>("Alpha/DMD Profile Settings"s, ""s, "settings/display_profiles"s));
       #ifndef ENABLE_DX9
       if (m_player->m_renderer->m_stereo3D != STEREO_VR)
@@ -164,7 +168,7 @@ private:
    }
 };
 
-// Performance profile (top of the Device Performance screen): Low, Medium and High set the performance settings of the screen at once, any
+// Performance profile (Device Performance screen, under the performance panel switch): Low, Medium and High set the performance settings of the screen at once, any
 // other combination of them is Custom. Medium is the defaults, in every build (Settings_properties.inl). The values are set as the items of
 // the screen would set them: live, and saved with its Save button (for the table or for all of them), undone with Undo.
 enum class PerfProfile { Low, Medium, High, Custom };
@@ -183,6 +187,7 @@ static const vector<ProfileSetting>& GetProfileSettings()
       { &Settings::m_propPlayerVR_FoveateTonemapping, { 1, 1, 0 } },
       { &Settings::m_propPlayerVR_FoveateAntialiasing, { 1, 0, 0 } }, // Always On, Always Off, Always Off
       { &Settings::m_propPlayer_SimplifyMeshes, { 1, 1, 0 } },
+      { &Settings::m_propPlayer_LightMapPruning, { 2, 2, 0 } }, // Medium, Medium, Off
       { &Settings::m_propPlayer_CompactSceneBuffer, { 1, 1, 0 } },
       { &Settings::m_propPlayer_ExtraMirrors, { 1, 1, 0 } }, // Off, Off, On
       { &Settings::m_propPlayer_RoomReflection, { 1, 1, 0 } }, // Off, Off, On
@@ -331,14 +336,15 @@ private:
          }
       };
       AddItem(std::make_unique<InGameUIItem>("Device Performance"s,
-         "What the Steam Frame Edition adds to keep heavy tables smooth: dynamic resolution and foveated rendering in VR, simplified meshes, compact scene buffer, reflections"s,
+         "The performance panel, and what the Steam Frame Edition adds to keep heavy tables smooth: dynamic resolution, foveated rendering in VR, simplified meshes, compact scene buffer, reflections"s,
          [open]() { open(Screen::SteamFrame); }));
-      AddItem(std::make_unique<InGameUIItem>("VPX Performance"s, "The graphics options of Visual Pinball (and, in VR, the performance panel and the VR rendering)"s,
+      AddItem(std::make_unique<InGameUIItem>("VPX Performance"s, "The graphics options of Visual Pinball (and, in VR, the VR rendering)"s,
          [open]() { open(Screen::Display); }));
    }
 };
 
-// The performance panel left of the cabinet (VPX Performance screen): a tool to tune the tables, on or off for all of them, saved at once
+// The performance panel (top of the Device Performance screen): left of the cabinet in VR, over the backglass window or the playfield outside VR. A tool to tune
+// the tables, on or off for all of them, saved at once
 class PerformancePanelPage final : public InGameUIPage
 {
 public:
@@ -392,7 +398,7 @@ private:
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(parts == 0 ? "No part simplified (the setting was off when the table loaded, or the table is light)"
                   : !simplifier.IsEnabled()  ? std::format("{} parts simplified, drawn in full (off)", parts).c_str()
-                  : std::isnan(saved)        ? std::format("{} parts simplified", parts).c_str()
+                  : VPX::IsNaN(saved)        ? std::format("{} parts simplified", parts).c_str()
                                              : std::format("{} parts simplified, {:.0f} % of the triangles left out", parts, saved * 100.f).c_str());
          }));
    }
@@ -419,6 +425,41 @@ private:
          {
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(LightMapPruning::Get().GetStatus().c_str());
+         }));
+   }
+};
+
+// Dynamic resolution outside VR (Device Performance screen; in VR, the items of the VR settings): the settings of VR, applied live, saved for the
+// table or for all of them like the settings pages
+class DesktopDynamicResolutionPage final : public InGameUIPage
+{
+public:
+   DesktopDynamicResolutionPage()
+      : InGameUIPage("Dynamic resolution"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      DesktopDynamicResolution& dynamicResolution = DesktopDynamicResolution::Get();
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayerVR_DynamicResolution, //
+         [&dynamicResolution]() { return dynamicResolution.IsEnabled(); }, //
+         [&dynamicResolution](bool v) { dynamicResolution.SetEnabled(v); }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayerVR_DynamicResolutionTarget, 100.f, "%4.0f %%"s, //
+         [&dynamicResolution]() { return dynamicResolution.GetTarget(); }, //
+         [&dynamicResolution](float, float v) { dynamicResolution.SetTarget(v); }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayerVR_DynamicResolutionMinScale, 100.f, "%4.0f %%"s, //
+         [&dynamicResolution]() { return dynamicResolution.GetMinScale(); }, //
+         [&dynamicResolution](float, float v) { dynamicResolution.SetMinScale(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Desktop dynamic resolution status"s, "Current rendering size, and the GPU time per frame against the frame period"s,
+         [&dynamicResolution](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(("Dynamic resolution: " + dynamicResolution.GetStatus()).c_str());
          }));
    }
 };
@@ -549,6 +590,7 @@ constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
 constexpr const char* kSceneBuffer = "vrui/scene-buffer";
 constexpr const char* kLightMaps = "vrui/light-maps";
+constexpr const char* kDesktopDynamicResolution = "vrui/desktop-dynamic-resolution";
 constexpr const char* kReflections = "vrui/reflections";
 constexpr const char* kPerfProfile = "vrui/perf-profile";
 
@@ -583,7 +625,6 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Display:
       return {
-         Section { ""s, kPerfPanel, {}, true },
          Section { "VR rendering"s, kVR, { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Label("Render resolution status"s) }, false, false },
          Section { "Desktop mirror"s, kVR, { Prop(Settings::m_propPlayerVR_DesktopDisplay), Prop(Settings::m_propPlayerVR_ShrinkDesktopDisplay) }, false, false },
          Section { ""s, kGraphics, {}, true },
@@ -591,6 +632,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::SteamFrame:
       return {
+         Section { ""s, kPerfPanel, {}, true },
          Section { ""s, kPerfProfile, {}, true },
          Section { "Dynamic resolution"s, kVR,
             { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
@@ -598,6 +640,7 @@ static vector<Section> GetSections(Screen screen)
                Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale),
                Label("Dynamic resolution status"s) },
             false, false },
+         Section { "Dynamic resolution"s, kDesktopDynamicResolution, {}, true }, // Outside VR
          Section { "Foveated rendering"s, kVR, { Prop(Settings::m_propPlayerVR_Foveation), Prop(Settings::m_propPlayerVR_FoveationEyeTracked), Prop(Settings::m_propPlayerVR_FoveateTonemapping),
                Prop(Settings::m_propPlayerVR_FoveateAntialiasing), Label("Foveation status"s),
                Label("Foveated anti-aliasing status"s) }, false, false },
@@ -647,6 +690,7 @@ bool IsScreenAvailable(Screen screen)
    switch (screen)
    {
    case Screen::ThisTable: return g_pplayer && !g_pplayer->m_isLobby;
+   case Screen::Screens: return g_pplayer && g_pplayer->m_vrDevice == nullptr;
    case Screen::WiFi:
       #ifdef VPX_TABLE_WEBSERVER
       return true;
@@ -689,6 +733,7 @@ const char* GetScreenIcon(Screen screen)
    case Screen::ThisTable: return ICON_FK_PLAY;
    case Screen::Scores: return ICON_FK_TROPHY;
    case Screen::Room: return ICON_FK_CUBE;
+   case Screen::Screens: return ICON_FK_DESKTOP;
    case Screen::Performance: return ICON_FK_TACHOMETER;
    case Screen::Display: return ICON_FK_TACHOMETER;
    case Screen::SteamFrame: return kSteamFrameLogo;
@@ -711,6 +756,7 @@ const char* GetScreenName(Screen screen)
    case Screen::ThisTable: return "This table";
    case Screen::Scores: return "Scores";
    case Screen::Room: return g_pplayer && g_pplayer->m_vrDevice ? "VR & Room" : "Point of view";
+   case Screen::Screens: return "Screens";
    case Screen::Performance: return "Performance";
    case Screen::Display: return "VPX Performance";
    case Screen::SteamFrame: return "Device Performance";
@@ -745,22 +791,23 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kMenuAndLobby, std::make_unique<MenuAndLobbyPage>()));
       return CreateComposed(screen, "VR & Room"s, "Where the table and the cabinet stand in the room"s, std::move(sources));
+   case Screen::Screens: return std::make_unique<DisplayHomePage>(); // Upstream's display settings: one page per window
    case Screen::Performance: return std::make_unique<PerformanceChoicePage>();
    case Screen::Display:
       if (vr)
-      {
-         sources.push_back(source(kPerfPanel, std::make_unique<PerformancePanelPage>()));
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
-      }
       sources.push_back(source(kGraphics, std::make_unique<GraphicSettingsPage>()));
       return CreateComposed(screen, "VPX Performance"s, ""s, std::move(sources));
    case Screen::SteamFrame:
    {
+      sources.push_back(source(kPerfPanel, std::make_unique<PerformancePanelPage>())); // In VR left of the cabinet, else over the backglass or the playfield
       auto profile = std::make_unique<PerfProfilePage>();
       PerfProfilePage* const profilePage = profile.get();
       sources.push_back(source(kPerfProfile, std::move(profile)));
       if (vr)
          sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
+      else
+         sources.push_back(source(kDesktopDynamicResolution, std::make_unique<DesktopDynamicResolutionPage>()));
       sources.push_back(source(kSimplifiedMeshes, std::make_unique<SimplifiedMeshesPage>()));
       sources.push_back(source(kLightMaps, std::make_unique<LightMapsPage>()));
       sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
