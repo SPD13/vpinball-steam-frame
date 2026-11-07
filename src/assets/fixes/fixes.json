@@ -152,6 +152,26 @@
           "replace": "\tDMD.visible = 1 : DMD.X = 474 : DMD.Y = -62 : DMD.Height = 402 ' Position added by the Steam Frame Edition (fix sonic-hedgehog-vr-dmd): the DMD stood on the playfield, it goes into the window of the backglass\n"
         }
       ]
+    },
+    {
+      "id": "batman66-vr-scores",
+      "version": 1,
+      "title": "Batman 66 (Original 2018): scores on the cabinet's DMD",
+      "symptom": "In VR the DMD of the cabinet stays black and no score shows anywhere: the score windows of the backglass picture are empty.",
+      "cause": "The table plays the ROM of Williams' Flash (1978), which has score displays of 7 segments and no DMD. The script shows the digits on reels of the desktop backglass only, which VR does not draw, and hides its DMD, kept for a PuP pack.",
+      "change": "In VR, the DMD of the cabinet shows the four players' scores, the ball in play and the credits, drawn with FlexDMD from the digits the script reads. Desktop and cabinet modes are unchanged.",
+      "doc": "batman66-vr-scores",
+      "match": { "files": ["batman 66"], "roms": ["flash_l1"] },
+      "script": [
+        {
+          "find": "dmd.visible=0\t'change to 0 if no pup pack\n",
+          "replace": "dmd.visible=0\t'change to 0 if no pup pack\n' Added by the Steam Frame Edition (fix batman66-vr-scores): in VR the scores only had the reels of the desktop backglass,\n' they are shown on the DMD of the cabinet with FlexDMD (players 1 to 4, ball in play, credits)\nDim SFScores, SFDigitText(27), SFScoreLabels(5)\nIf RenderingMode = 2 Then SFScoresInit\n\nSub SFScoresInit\n\tDim i, fScore, fWord, fStatus, lbl\n\tSet SFScores = CreateObject(\"FlexDMD.FlexDMD\")\n\tWith SFScores\n\t\t.Width = 128 : .Height = 32 : .RenderMode = 1 ' 4 shades, tinted by the color of the DMD flasher\n\t\t.Clear = True : .Run = True ' Clear: the labels change size, the stage is redrawn from black\n\t\tSet fScore = .NewFont(\"FlexDMD.Resources.udmd-f6by12.fnt\", vbWhite, vbWhite, 0)\n\t\tSet fWord = .NewFont(\"FlexDMD.Resources.udmd-f4by5.fnt\", vbWhite, vbWhite, 0)\n\t\tSet fStatus = .NewFont(\"FlexDMD.Resources.udmd-f5by7.fnt\", vbWhite, vbWhite, 0)\n\t\t.LockRenderThread\n\t\tFor i = 0 To 5\n\t\t\tIf i < 4 Then\n\t\t\t\tSet SFScoreLabels(i) = .NewLabel(\"SFScore\" & i, fScore, \"\")\n\t\t\tElse\n\t\t\t\tSet SFScoreLabels(i) = .NewLabel(\"SFScore\" & i, fStatus, \"\")\n\t\t\tEnd If\n\t\t\t.Stage.AddActor SFScoreLabels(i)\n\t\tNext\n\t\tSet lbl = .NewLabel(\"SFBall\", fWord, \"BALL\") : .Stage.AddActor lbl : lbl.SetAlignedPosition 64, 1, 1\n\t\tSet lbl = .NewLabel(\"SFCredits\", fWord, \"CREDITS\") : .Stage.AddActor lbl : lbl.SetAlignedPosition 64, 17, 1\n\t\t.UnlockRenderThread\n\tEnd With\n\tDMD.Visible = 1\nEnd Sub\n\nFunction SFSegChar(stat) ' the 7 segments of a digit, as UpdateLEDs reads them\n\tSelect Case stat And 127\n\t\tCase 63:SFSegChar = \"0\"\n\t\tCase 6:SFSegChar = \"1\"\n\t\tCase 91:SFSegChar = \"2\"\n\t\tCase 79:SFSegChar = \"3\"\n\t\tCase 102:SFSegChar = \"4\"\n\t\tCase 109:SFSegChar = \"5\"\n\t\tCase 124, 125:SFSegChar = \"6\"\n\t\tCase 7:SFSegChar = \"7\"\n\t\tCase 127:SFSegChar = \"8\"\n\t\tCase 103, 111:SFSegChar = \"9\"\n\t\tCase Else:SFSegChar = \" \"\n\tEnd Select\n\tIf stat = 768 Or stat = 832 Or stat = 896 Then SFSegChar = \"1\"\nEnd Function\n\nSub SFScoresDigit(n, stat) ' digits 0-23: players 1 to 4 (6 each), 24-25: credits, 26-27: ball in play\n\tDim g, i, t\n\tIf n < 0 Or n > 27 Then Exit Sub\n\tSFDigitText(n) = SFSegChar(stat)\n\tg = n \\ 6\n\tIf g > 4 Then g = 4\n\tSFScores.LockRenderThread\n\tIf g < 4 Then\n\t\tt = \"\"\n\t\tFor i = g * 6 To g * 6 + 5 : t = t & SFDigitText(i) : Next\n\t\tSFScoreLabels(g).Text = Trim(t)\n\t\tSelect Case g\n\t\t\tCase 0:SFScoreLabels(0).SetAlignedPosition 42, 1, 2\n\t\t\tCase 1:SFScoreLabels(1).SetAlignedPosition 127, 1, 2\n\t\t\tCase 2:SFScoreLabels(2).SetAlignedPosition 42, 31, 8\n\t\t\tCase 3:SFScoreLabels(3).SetAlignedPosition 127, 31, 8\n\t\tEnd Select\n\tElse\n\t\tSFScoreLabels(4).Text = Trim(SFDigitText(26) & SFDigitText(27)) : SFScoreLabels(4).SetAlignedPosition 64, 8, 1\n\t\tSFScoreLabels(5).Text = Trim(SFDigitText(24) & SFDigitText(25)) : SFScoreLabels(5).SetAlignedPosition 64, 24, 1\n\tEnd If\n\tSFScores.UnlockRenderThread\nEnd Sub\n"
+        },
+        {
+          "find": "\t\t\tchg = chgLED(ii, 1):stat = chgLED(ii, 2)\n",
+          "replace": "\t\t\tchg = chgLED(ii, 1):stat = chgLED(ii, 2)\n\t\t\tIf IsObject(SFScores) Then SFScoresDigit chgLED(ii, 0), stat ' Added by the Steam Frame Edition (fix batman66-vr-scores)\n"
+        }
+      ]
     }
   ]
 }
