@@ -216,6 +216,9 @@ public:
 
    vector<std::shared_ptr<SharedIndexBuffer>> m_pendingSharedIndexBuffers;
    vector<std::shared_ptr<SharedVertexBuffer>> m_pendingSharedVertexBuffers;
+   // Guards the pending lists above and the shared blocks: the render thread uploads them (on first draw) while the main thread creates and
+   // frees buffers outside of the frame preparation (table loading, while the loading screen is drawn). Recursive for the delegating constructors.
+   std::recursive_mutex m_sharedBuffersMutex;
 
    std::atomic<bool> m_framePending = false; // A frame was submitted by the logic thread and is waiting to be executed by the render thread
    std::atomic<bool> m_frameRequested = true; // The render thread is waiting for a frame with a valid output target bound (XR swapchain acquire window)
