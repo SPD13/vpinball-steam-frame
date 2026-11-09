@@ -5,9 +5,10 @@
 This article describes every performance improvement of the Steam Frame Edition of Visual Pinball X: what each one does, how it works,
 what it was measured to save on the Frame, and how to adjust it when it can be adjusted. The last part is a reference of the
 performance settings of the menu, with screenshots taken on the Frame.
+The illustrations of the improvements were made for the video below, on a Mac with a simulated headset; each caption says what is a real render and what is drawn.
 
-**▶ [Watch the tech deep-dive](https://youtu.be/WXHtyRk26lo)**: the video of the foveation, the simpler meshes and the culling, and how
-heavy tables keep 72 Hz.
+**▶ [Watch the tech deep-dive](https://youtu.be/Kwp0HPKuwCI)**: the video of the foveation, the simpler meshes, the culling, the light-map pruning,
+the reflections, the compact scene buffer and the dynamic resolution, and how heavy tables keep 72 Hz.
 
 The Steam Frame renders the table natively, on its Adreno 750 GPU, at 2160 × 2160 pixels per eye and 72 frames per second: a frame
 has 13.9 ms. When the October 2026 work started, a heavy table such as Addams Family needed **18.0 ms per frame** at that resolution
@@ -180,6 +181,10 @@ thread, after each frame, `VRDevice::UpdateDynamicResolution` reads the GPU time
 - The frame budget is the display's refresh rate (`XR_FB_display_refresh_rate`), not the period the runtime predicts for each frame: a
   table opened from the lobby predicted 11.1 ms for its first frame, which had lowered the budget, and the resolution, for the whole table.
 
+![The cabinet of Addams Family next to graphs of GPU time, frame rate and resolution, with the GPU at its limit and the resolution falling](img/performance-dr-graphs.jpg)
+
+*The principle, not a measurement: the values of the graphs are modelled. The GPU reaches the top of the frame period, frames come late, the resolution falls and the GPU is back under its target. The picture is really rendered at that scale.*
+
 **Measured.** The climbing rule of 2026-10-28 took Addams (3-minute headless runs) from 2092² on average, at full size 27–33 % of the
 time, to **2150² on average, at full size 88–91 % of the time**, for a few frames missed per 3 minutes (1 in 2000 to 4000). A 15-minute
 run from a cool device held 72.0 fps without throttling, the GPU levelling at 85–86 °C. Early runs at fixed 2160² had 24 % of their
@@ -193,6 +198,10 @@ to the next table started); the Display & Performance screen shows it. See [sect
 
 The eye sees sharply only a few degrees around the point it looks at. The Frame has eye tracking: the scene is shaded at full rate
 only around the gaze, and more coarsely further out, where the eye cannot see the difference.
+
+![A frame of Addams Family tinted green around the gaze, yellow in a ring around it and red beyond](img/performance-foveation.jpg)
+
+*The pattern, colored for this illustration over a frame of Addams Family: full shading in green around the gaze (the small ring), one shade per 2 × 2 pixels in yellow, one per 4 × 4 pixels in red.*
 
 **How it works on the Frame.** The scene pass gets a *fragment shading rate image* (`VK_KHR_fragment_shading_rate`, through a bgfx patch
 of the fork): one byte per 8 × 8 block of the image (270 × 270 at 2160²), a single image for both eyes, telling the GPU to run the pixel
@@ -266,6 +275,10 @@ for both eyes, all its corners are beyond the same side of the view or behind th
 boxes across a corner of the view are kept) and also applies in the mirrored view of the reflection probe. Animated meshes and grouped
 parts are excluded. It is generic: all renderers and modes, a candidate for upstream.
 
+![A figure of the player at the cabinet of Lord of the Rings, its field of view in yellow, the statues out of view in gray](img/performance-culling.jpg)
+
+*Lord of the Rings seen from outside. The player and the field of view (yellow) are added for this illustration, and the parts entirely out of that view are painted gray: VPX does not draw them at all.*
+
 **Measured** (A/B alternated, fixed 2160²): **Lord of the Rings 18.02 → 17.43 ms (−0.6 ms)**, 1.58 → 1.34 million triangles (16 % of its
 triangles are outside both eyes' view from the player's place); Addams, Iron Man and Ghostbusters unchanged (their parts are all in
 view). No visual change.
@@ -284,6 +297,14 @@ becomes finer at once and coarser only well within the limit, so that the switch
 mesh. Not simplified: animated meshes, grouped parts, the playfield, additive parts and light maps (unless they coincide with a
 simplified part), small meshes. Meshes that coincide (a part and its "off" layer) share their versions, so stacked layers stay exactly
 on top of each other.
+
+![Three versions of a flipper with their triangles: 2,274, 1,468 and 863](img/performance-flipper-versions.jpg)
+
+*The left flipper of Addams Family, rendered in Blender with its triangles over it: the full mesh and two of its versions, made by the fork's level chain with the same meshoptimizer.*
+
+![Close-up of the simplest flipper, with fewer and larger triangles](img/performance-flipper-close.jpg)
+
+*The 863-triangle version up close, where the difference shows. VPX only uses it from far enough that it stays under the allowed error.*
 
 **Measured** (headless, fixed 2160², 2026-10-29):
 
@@ -327,14 +348,34 @@ A reflection draws the scene again every frame, in a mirrored view, with its own
 the render thread, far more than its size: on Darkest Dungeon its pass only goes from 1.39 to 1.79 ms between 1296² and 2160², and a reflection at half size saves about 0.5 to 0.8 ms ([section 13](#13-what-was-measured-and-not-done)). So
 two settings leave parts out rather than lower the quality of the rest, and a third, *Reflection size*, makes the reflection smaller where nothing can be left out. The playfield's reflection itself stays, with the table, the cabinet, the balls and a topper in it.
 
+![Seen from the side, the line of sight from the eye bounces on the playfield towards a part; the same line continues to the eye mirrored under the playfield](img/performance-mirror-diagram.jpg)
+
+*Drawn for this article. To get a reflection, VPX draws the table from the mirrored point of view, into a picture the player never sees directly.*
+
 **Extra mirrors.** A table can have planar reflections of its own besides the playfield's, usually on the walls of a cabinet, and each one is a whole further render of the scene. Robot Invasion has three, for three surfaces of a few triangles,
 two of them shown at only 5 % and 50 %: they draw 2,330 draws per frame instead of 990, and keep the render thread busy for 15 ms per frame instead of 7. With the setting off, a planar reflection other than the playfield's is not rendered, and
 the surfaces that showed it stay in place without a reflection. A horizontal one is kept, as it is the reflection of another playfield (the upper playfield of Game of Thrones). Few tables have such mirrors: 4 of the 94 surveyed. On one of them, Last
 Action Hero, they cost little, so leaving them out gains nothing there.
 
+![The four hidden pictures of one frame of Robot Invasion: the table seen from the playfield, the left wall, the right wall and the back wall](img/performance-ri-hidden.jpg)
+
+*The four hidden pictures of one frame of Robot Invasion, real renders: the contents of its reflection probes, drawn before the picture the player sees.*
+
+![The left wall of Robot Invasion with Extra mirrors on, showing the table mirrored, and off, showing its printed decoration](img/performance-ri-wall.jpg)
+
+*The same frame, real renders. On, the left wall mirrors the table; Off, it shows its printed decoration.*
+
 **Room reflection.** With a large VR room, most of what the playfield reflects can be the room: 570,000 of the triangles of WildWest's room are in its reflection. The [culling of the reflection](#74-parts-that-cannot-appear-in-the-reflection-are-not-drawn-in-it) cannot
 leave out a mesh as large as the room, as its box reaches the playfield. With the setting off, a part is left out of the reflections when its box, as placed in the table, reaches more than 300 units beside the playfield, 600 behind it or 700 in front of it (about 16, 32 and
 38 cm): further than the side rails, the backbox and the lockbar. Height is not looked at, which keeps a topper or a tall backbox. These parts stay in the room around you. Parts merged by a group (drawn from one buffer) and animated meshes are not looked at, as for the culling.
+
+![The hidden picture of the playfield of WildWest with the room filling it, and without the room](img/performance-ww-hidden.jpg)
+
+*The hidden picture of the playfield of WildWest, real renders. On, the room fills what is around the table; Off, the table is alone in it.*
+
+![WildWest from above: the cabinet, a dotted line around it, and the boxes of parts inside it in green and across it in red](img/performance-ww-plan.jpg)
+
+*WildWest seen from above, with the real boxes of the parts drawn in its reflection: in green, those kept; in red, those reaching past the dotted line. 18 parts, 571,000 triangles, are left out; most of their boxes span the whole room, far beyond this view.*
 
 **Off, On or Automatic.** Both settings are **Off** in the Frame build, the fast choice, whether a table needs the time or not. **On** gives the reflections back. **Automatic** leaves a table as it is while it holds its full resolution. Once it was below it for 10 of the last 60 seconds, the first minute of
 the table not counted, the extra mirrors go; after 10 more such seconds, the room; for the rest of the table, and it decides again at the next play. Only what the table has counts, so a table with neither loses no time. The foveated anti-aliasing, set to Automatic too, waits for these, as it shows more.
@@ -353,9 +394,17 @@ time at full resolution and WildWest from 0 % to 98.5 % (plays of 47 and 53 s), 
 
 In Automatic mode, Robot Invasion stayed at the 1512² floor until the mirrors went, then held 2160² at 9.5 ms; WildWest about 2000², then 2160² at 10.8 ms.
 
+![Pixels per eye over 170 seconds for Robot Invasion and WildWest: both low during the first minute, then at full size once their mirrors or their room go](img/performance-auto-graph.jpg)
+
+*Both settings on Automatic, measured on the Frame (headless, one run of each table, a reading every 5 seconds): each table climbs to full size once its mirrors or its room go.*
+
 Most tables have nothing to leave out, and do not change: on Addams, Darkest Dungeon and World Joker Tour no part is left out, and on Game of Thrones its upper playfield keeps its reflection. Masters of the Universe and Ace of Speed, measured with the same parts removed by script, gained 0.2 ms or less.
 
 **What it changes on screen.** The wall surfaces of a table with extra mirrors look flatter, as they no longer reflect the table. A glossy playfield no longer shows the room, which may be noticed in a bright room. If a table looks better with them, set them to *On* or *Automatic* for that table: **Save** in this section stores them for the table being played or for all.
+
+![WildWest with what changes between Room reflection on and off amplified: a patch of the playfield glows pink, the room stays dark](img/performance-ww-difference.jpg)
+
+*What changes on WildWest between Room reflection On and Off, real renders, amplified 8 times over a faint copy of the picture: a part of the glossy playfield. The differences under 3 levels of 255, the grain of the renders, are left out, and the picture is shifted upward.*
 
 **Reflection size.** On tables where nothing can be left out, the reflection can still be made smaller: at *Half*, the playfield's reflection is rendered at half the size per axis (a quarter of the pixels) and stretched over the playfield. On Darkest Dungeon at 2160² it saves about 0.45 ms per frame and halves the frames over the whole period, so the table spends more time at full resolution (95.5 → 98.7 %) and misses fewer frames (0.22 → 0.035 per second, headless). The reflection is softer; the render thread's work does not change. *Half* is the default in the Frame build, for all tables (owner's choice, 2026-11-02); its look in the headset was not reviewed table by table, so set *Full* for a table whose glossy playfield matters more than the time.
 
@@ -376,6 +425,18 @@ flashers write a negative color into a reverse subtract blend, whose result stay
 for red and green, 5 for blue, against 10, a step of 1.6 % and 3.1 %, about one step of the 8-bit output in mid-tones, under the tone
 mapping's dither. Switching it rebuilds the targets at the start of the next frame (one frame of about 12 ms).
 
+![The 64 cells of a pixel in RGBA16F above its 32 cells in RG11B10F](img/performance-sb-bits.jpg)
+
+*One pixel in both formats, drawn for this article: the alpha goes, and each color loses its sign and its lowest digits.*
+
+![Gradients from half white to white with 1,024 shades, 64 in red and green, and 32 in blue](img/performance-sb-shades.jpg)
+
+*What the digits cost, from half white to white: 1,024 shades in the usual format, 64 in red and green and 32 in blue in the compact one, computed from the formats.*
+
+![The GPU and the memory joined by two lanes: longer 8-byte parcels above, shorter 4-byte parcels below](img/performance-sb-traffic.jpg)
+
+*Why it is faster, drawn for this article: half the bytes on the same road to the memory. 75 and 37 MB are the raw size of one picture for both eyes, without any memory compression of the GPU.*
+
 **Measured** (headless, fixed 2160², foveated post-processing on, 2026-10-31):
 
 | Table | Off | On | Saved | Per pass |
@@ -386,6 +447,10 @@ mapping's dither. Switching it rebuilds the targets at the start of the next fra
 Together with the foveated post-processing, the GPU ran 12 °C cooler (Addams 92 → 80 °C) and 15–20 points less busy. What may show:
 faint banding in smooth blue gradients, and where many additive layers stack. Checked in the headset on 2026-10-31 and turned on by
 default.
+
+![The differences between both formats, amplified 32 times: faint noise, almost black](img/performance-sb-difference.jpg)
+
+*The same frozen frame of Addams Family in both formats, real renders on a Mac: differences amplified 32 times. Over three points of view, 94.4 to 96.7 % of the pixels change by less than 2 levels of 255 (means of 24 frames per format, as the frames differ by a random dither).*
 
 **Setting** (Steam Frame screen, section *Scene buffer*; live, per table or for all): *Compact scene buffer* (on in the Frame build, off
 in the desktop builds), with a status line giving the format in use.
