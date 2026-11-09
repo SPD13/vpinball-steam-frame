@@ -275,9 +275,9 @@ The Frame renders the tables natively, on the headset's own GPU, at 2160 × 2160
 Addams Family VR room needed 18.0 ms per frame at that resolution when this work started (36 fps); it now needs about 7.2 to 8.2 ms (72 fps),
 and the reference tables run at 72 fps, at or close to the panel's full resolution.
 
-[![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/WXHtyRk26lo)
+[![Performance upgrades: the tech deep-dive video](/docs/img/performance-upgrades-video.jpg)](https://youtu.be/Kwp0HPKuwCI)
 
-**▶ [Watch the tech deep-dive](https://youtu.be/WXHtyRk26lo)**: foveation, simpler meshes, culling: how heavy tables keep 72 Hz.
+**▶ [Watch the tech deep-dive](https://youtu.be/Kwp0HPKuwCI)**: foveation, simpler meshes, culling, light-map pruning, reflections, compact scene buffer, dynamic resolution: how heavy tables keep 72 Hz.
 
 **▶ [Read the full article](/docs/steam-frame/Performance%20of%20the%20Steam%20Frame%20Edition.md)**: how each upgrade works, its measurements on the Frame, and every performance setting of the menu, with screenshots.
 
