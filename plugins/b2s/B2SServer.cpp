@@ -604,6 +604,10 @@ std::shared_ptr<B2STable> B2SServer::AcquireB2STable()
    if (!m_b2s && m_loadedB2S.valid() && m_loadedB2S.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
    {
       m_b2s = m_loadedB2S.get();
+      // A file that failed to load (not XML, like the old executable backglasses renamed .directb2s) gives no table:
+      // no backglass, and the invalidated future is not retried
+      if (!m_b2s)
+         return m_b2s;
       // Document editing: the live configuration starts from the loaded file
       m_overlayDoc.displays = m_b2s->m_dmdDisplays;
       for (auto& display : m_overlayDoc.displays)
