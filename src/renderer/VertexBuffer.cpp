@@ -202,6 +202,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
    , m_size(vertexCount * VertexFormatSize(fmt))
 {
    assert(m_count > 0);
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    // Disabled since OpenGL ES does not support glDrawElementsBaseVertex, but now that we remap the indices when creating the index buffer it should be good
    for (std::shared_ptr<SharedVertexBuffer> block : m_rd->m_pendingSharedVertexBuffers)
    {
@@ -230,6 +231,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
 
 VertexBuffer::~VertexBuffer()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    if (m_sharedBuffer->Remove(this))
       RemoveFromVectorSingle(m_rd->m_pendingSharedVertexBuffers, m_sharedBuffer);
 }
@@ -265,17 +267,20 @@ void VertexBuffer::Bind() const
 
 void VertexBuffer::LockUntyped(void*& data, const unsigned int offset, const unsigned int size)
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex);
    m_rd->m_curLockCalls++;
    m_sharedBuffer->Lock(this, m_offset + offset, size == 0 ? m_size : size, data);
 }
 
 void VertexBuffer::Unlock()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex);
    m_sharedBuffer->Unlock();
 }
 
 void VertexBuffer::Upload()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    if (!m_sharedBuffer->IsCreated())
       RemoveFromVectorSingle(m_rd->m_pendingSharedVertexBuffers, m_sharedBuffer);
    m_sharedBuffer->Upload();

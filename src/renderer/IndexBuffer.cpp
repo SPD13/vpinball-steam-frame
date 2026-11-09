@@ -177,6 +177,7 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
    assert(m_count > 0);
    const unsigned int maxCount = format == IndexBuffer::FMT_INDEX16 ? UINT16_MAX : UINT32_MAX;
    assert(numIndices <= maxCount);
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    for (std::shared_ptr<SharedIndexBuffer> block : m_rd->m_pendingSharedIndexBuffers)
    {
       if (block->m_format == m_indexFormat && block->m_isStatic == m_isStatic && (block->GetCount() + numIndices) <= maxCount)
@@ -197,6 +198,7 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
 IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const unsigned int* indices, const bool isDynamic)
    : IndexBuffer(rd, numIndices, isDynamic, IndexBuffer::FMT_INDEX32)
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    void* buf;
    Lock(buf);
    memcpy(buf, indices, numIndices * sizeof(indices[0]));
@@ -206,6 +208,7 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
 IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const WORD* indices, const bool isDynamic)
    : IndexBuffer(rd, numIndices, isDynamic, IndexBuffer::FMT_INDEX16)
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    void* buf;
    Lock(buf);
    memcpy(buf, indices, numIndices * sizeof(indices[0]));
@@ -224,6 +227,7 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices, 
 
 IndexBuffer::~IndexBuffer()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    if (m_sharedBuffer->Remove(this))
       RemoveFromVectorSingle(m_rd->m_pendingSharedIndexBuffers, m_sharedBuffer);
 }
@@ -253,17 +257,20 @@ void IndexBuffer::Bind() const
 
 void IndexBuffer::LockUntyped(void*& data, const unsigned int offset, const unsigned int size)
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex);
    m_rd->m_curLockCalls++;
    m_sharedBuffer->Lock(this, m_offset + offset, size == 0 ? m_size : size, data);
 }
 
 void IndexBuffer::Unlock()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex);
    m_sharedBuffer->Unlock();
 }
 
 void IndexBuffer::ApplyOffset(std::shared_ptr<VertexBuffer> vb)
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex);
    const unsigned int offset = vb->GetVertexOffset();
    if (offset == 0)
       return;
@@ -291,6 +298,7 @@ void IndexBuffer::ApplyOffset(std::shared_ptr<VertexBuffer> vb)
 
 void IndexBuffer::Upload()
 {
+   const std::lock_guard sharedBuffersLock(m_rd->m_sharedBuffersMutex); // The render thread uploads pending blocks while other threads create and free buffers
    if (!m_sharedBuffer->IsCreated())
       RemoveFromVectorSingle(m_rd->m_pendingSharedIndexBuffers, m_sharedBuffer);
    m_sharedBuffer->Upload();
