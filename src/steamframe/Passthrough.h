@@ -32,7 +32,9 @@ bool Toggle(); // The input action: returns the new state
 void SetRuntimeSupport(bool alphaBlend);
 bool IsKnown(); // A headset was started, IsSupported is meaningful
 bool IsSupported();
-bool IsActive(); // Wanted and supported: frames blended over the passthrough, room left out (in VR)
+bool IsActive(); // Wanted (or forced) and supported: frames blended over the passthrough, room left out (in VR)
+// The cabinet positioning mode shows the passthrough while the cabinet is placed, whatever the setting, which it does not change
+void SetForced(bool forced);
 bool IsPreview(); // VPX_PASSTHROUGH_PREVIEW: room left out on a desktop
 
 // The rules by name, shared with the lobby (Launcher::GetRoomParts): a part in a part group using the room space reference or named after the

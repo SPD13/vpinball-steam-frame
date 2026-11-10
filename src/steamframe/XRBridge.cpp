@@ -175,12 +175,12 @@ void VRDevice::AddLoadingLayer(std::vector<XrCompositionLayerBaseHeader*>& layer
    {
       // The scene orientation is the yaw of the table's forward direction (see UpdateUIPanel); the quad faces +Z of its pose, turned to face the player
       constexpr float belowEyes = 0.1f; // meters, as the UI panel
-      const float orientation = ANGTORAD(m_orientation);
+      const float orientation = ANGTORAD(m_roomYaw);
       const vec3 forward(-sinf(orientation), 0.f, -cosf(orientation));
       const vec3 center = m_uiHeadPos + forward * m_loadingLayerDistance - vec3(0.f, belowEyes, 0.f);
       m_loadingLayerPose = { { 0.f, sinf(orientation * 0.5f), 0.f, cosf(orientation * 0.5f) }, { center.x, center.y, center.z } };
       m_loadingLayerPlaced = true;
-      PLOGI << std::format("Loading message placed at {:.2f},{:.2f},{:.2f} (reference space), facing the table's forward direction ({:.0f} degrees)", center.x, center.y, center.z, m_orientation);
+      PLOGI << std::format("Loading message placed at {:.2f},{:.2f},{:.2f} (reference space), facing the table's forward direction ({:.0f} degrees)", center.x, center.y, center.z, m_roomYaw);
    }
    m_loadingLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
    m_loadingLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT | XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;

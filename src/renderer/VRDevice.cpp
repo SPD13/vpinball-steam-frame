@@ -219,6 +219,11 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       // Steam Frame Edition: the performance panel, on or off for all tables (Standalone/PerfPanel, saved by the menu as soon as it is changed)
       VPX::PerfPanel::Get().SetEnabled(g_settingsService.GetAppSettings().GetStandalone_PerfPanel());
       VPX::PerfPanel::Get().OnTableStart();
+      if (m_placing) // The cabinet positioning mode ends with its table (cancelled by Player::~Player, this in case it was not)
+      {
+         m_placing = false;
+         VPX::Passthrough::SetForced(false);
+      }
       #endif
 
       // State of the previous table
@@ -1605,6 +1610,9 @@ void VRDevice::OpenSession()
          viewSpaceSupported = true;
    referenceSpaceCI.poseInReferenceSpace = { { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
    OPENXR_CHECK(xrCreateReferenceSpace(m_session, &referenceSpaceCI, &m_referenceSpace), "Failed to create ReferenceSpace.");
+#if defined(VPX_STEAM_FRAME)
+   m_referenceSpaceType = referenceSpaceCI.referenceSpaceType; // Steam Frame Edition: the play area of the cabinet positioning mode is the stage's
+#endif
    delete[] referenceSpaces;
    if (viewSpaceSupported)
    {
@@ -2757,6 +2765,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          if (const TableCaptureView captureView = m_tableCaptureView; captureView != TableCaptureView::None)
             SetTableCaptureViewPoses(views, vpuToWorldScale, captureView);
 
+#if defined(VPX_STEAM_FRAME)
+         ApplyCabinetPlacement(); // Steam Frame Edition: a placement fixed or cancelled by the logic thread (src/steamframe/CabinetPlacement.cpp)
+#endif
          // Continuous space positioning based on controller pose (for setup where controllers can be placed along a VR cabinet and used for XR play)
          // The controllers physically define the lockbar: they adjust the room positioning (offset and yaw), and when a
          // custom lockbar width is defined, the distance between them also sets the lockbar width. The lockbar height
@@ -2786,7 +2797,11 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
 
                // When scaling to a custom lockbar, the horizontal distance between the controllers measures the physical
                // lockbar width, plus a user offset to compensate where the controllers rest relative to its ends
+#if defined(VPX_STEAM_FRAME)
+               if (m_overrideLockbarWidth && !IsPlacementWidthFixed()) // Steam Frame Edition: the cabinet positioning mode may keep the size of the cabinet (src/steamframe/CabinetPlacement.cpp)
+#else
                if (m_overrideLockbarWidth)
+#endif
                {
                   m_customLockbarWidth = sqrtf(lockbarAxis.x * lockbarAxis.x + lockbarAxis.z * lockbarAxis.z) * 100.f + m_controllerCabWidthOffset;
                   m_lockbarWidthMeasured = true;
@@ -2808,6 +2823,10 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
                m_roomOffset.z = -centerPos.y - targetLockbarHeight - m_tableOffset.z + m_controllerCabZOffset;
                m_worldDirty = true;
             }
+#if defined(VPX_STEAM_FRAME)
+            UpdateCabinetPlacement(leftControllerActive && rightControllerActive, vec3(leftSpaceLocation.pose.position.x, leftSpaceLocation.pose.position.y, leftSpaceLocation.pose.position.z),
+               vec3(rightSpaceLocation.pose.position.x, rightSpaceLocation.pose.position.y, rightSpaceLocation.pose.position.z));
+#endif
          }
 
          // Space positioning based on head pose (not continuous)

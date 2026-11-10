@@ -77,7 +77,7 @@ void VRDevice::UpdateUIPanel(const std::vector<XrView>& views, XrTime time)
       // Upright panel in the forward direction of the table (the way the player faces it at the lockbar), wherever the head looks, so that
       // the player turns to the table, or moves, to read the menu. The scene orientation is the yaw of that direction (see the table
       // centering in RenderFrame: looking along -Z gives 0, turned left towards -X gives +90 degrees).
-      const float orientation = ANGTORAD(m_orientation);
+      const float orientation = ANGTORAD(m_roomYaw);
       const vec3 forward(-sinf(orientation), 0.f, -cosf(orientation));
       const vec3 up(0.f, 1.f, 0.f);
       const vec3 right = CrossProduct(forward, up);

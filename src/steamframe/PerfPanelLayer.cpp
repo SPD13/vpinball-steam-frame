@@ -176,11 +176,11 @@ void VRDevice::AddPerfPanelLayer(std::vector<XrCompositionLayerBaseHeader*>& lay
    // (which puts that point at the lockbar, see RenderFrame), from VPX units to meters
    const PinTable* const table = g_pplayer->m_ptable;
    Vertex3Ds lockbar((table->m_right - table->m_left) * 0.5f, table->m_bottom - table->m_top, table->m_glassBottomHeight);
-   m_pfWorld.m_toWorld.MultiplyVector(lockbar);
+   m_spaces[static_cast<int>(PartGroupData::SpaceReference::SR_PLAYFIELD)].m_toWorld.MultiplyVector(lockbar);
    const vec3 lockbarPos(lockbar.x * kVpuToMeters, lockbar.y * kVpuToMeters, lockbar.z * kVpuToMeters);
 
    // Forward direction of the table (the way the player faces it at the lockbar, see UpdateUIPanel) and its right
-   const float orientation = ANGTORAD(m_orientation);
+   const float orientation = ANGTORAD(m_roomYaw);
    const vec3 forward(-sinf(orientation), 0.f, -cosf(orientation));
    const vec3 right(cosf(orientation), 0.f, -sinf(orientation));
    const vec3 center = lockbarPos - right * kPanelLeft - forward * kPanelBack + vec3(0.f, kPanelUp, 0.f);

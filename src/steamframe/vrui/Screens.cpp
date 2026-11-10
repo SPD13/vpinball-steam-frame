@@ -10,8 +10,11 @@
 #include "Widgets.h"
 
 #include "core/TournamentFile.h"
-#include "fonts/IconsForkAwesome.h"
+#include "steamframe/fonts/IconsForkAwesome.h"
 #include "renderer/Renderer.h"
+#ifdef ENABLE_XR
+#include "renderer/VRDevice.h"
+#endif
 #include "steamframe/DesktopDynamicResolution.h"
 #include "steamframe/NaN.h"
 #include "steamframe/Passthrough.h"
@@ -173,6 +176,42 @@ private:
          {
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(VPX::Passthrough::GetStatus().c_str());
+         }));
+   }
+};
+
+// Cabinet positioning mode (VR & Room screen, src/steamframe/CabinetPlacement.cpp): the lockbar placed on a real edge with the two controllers
+class CabinetPlacementPage final : public InGameUIPage
+{
+public:
+   CabinetPlacementPage()
+      : InGameUIPage("Cabinet positioning"s, ""s, SaveMode::None)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>("Cabinet positioning mode"s,
+         "Closes the menu and shows your room: hold the two controllers on a real edge (a desk, a shelf), the lockbar of the cabinet follows them. "
+         "Press the 'Align VR view using controllers' button (left thumbstick click) to fix it there, inside the play area. Open the menu to cancel"s,
+         [this]()
+         {
+            #ifdef ENABLE_XR
+            if (m_player->m_vrDevice == nullptr)
+               return;
+            m_player->m_liveUI->m_inGameUI.Close();
+            m_player->m_vrDevice->StartCabinetPlacement();
+            #endif
+         }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propStandalone_PlacementFixedSize, //
+         []() { return g_settingsService.GetAppSettings().GetStandalone_PlacementFixedSize(); }, //
+         [](bool v)
+         {
+            Settings& settings = g_settingsService.GetAppSettings();
+            settings.SetStandalone_PlacementFixedSize(v, false);
+            settings.Save();
          }));
    }
 };
@@ -612,6 +651,7 @@ constexpr const char* kTableMisc = "table/general";
 constexpr const char* kThisTable = "vrui/table";
 constexpr const char* kMenuAndLobby = "vrui/menu-lobby";
 constexpr const char* kPassthrough = "vrui/passthrough";
+constexpr const char* kCabinetPlacement = "vrui/cabinet-placement";
 constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
@@ -637,14 +677,17 @@ static vector<Section> GetSections(Screen screen)
       return {
          Section { "Passthrough"s, kPassthrough, {}, true },
          Section { "Menu and lobby"s, kMenuAndLobby, {}, true },
-         // Upstream 64a480a96 (2026-11-01): the headset's place is the same for all tables, the table offsets are this table's
+         // Upstream 2ad1916b2 (2026-11-06): the room positioning is the same for all tables (a correction of the headset's tracking), the table
+         // offsets are this table's
+         Section { "Cabinet positioning"s, kCabinetPlacement, {}, true },
          Section { "Position"s, kVR,
-            { Prop(Settings::m_propPlayerVR_HeadSetOrientation), Prop(Settings::m_propPlayerVR_HeadSetX), Prop(Settings::m_propPlayerVR_HeadSetY),
-               Prop(Settings::m_propPlayerVR_TableOffsetY), Prop(Settings::m_propPlayerVR_TableOffsetZ) } },
+            { Prop(Settings::m_propPlayerVR_RoomYaw), Prop(Settings::m_propPlayerVR_RoomOffsetX), Prop(Settings::m_propPlayerVR_RoomOffsetY),
+               Prop(Settings::m_propPlayerVR_RoomOffsetZ), Prop(Settings::m_propPlayerVR_TableOffsetY), Prop(Settings::m_propPlayerVR_TableOffsetZ) } },
          Section { "Cabinet"s, kVR,
-            { Prop(Settings::m_propPlayerVR_ScaleToLockbar), Prop(Settings::m_propPlayer_LockbarWidth), Prop(Settings::m_propPlayerVR_MatchLockbarHeight),
+            { Prop(Settings::m_propPlayerVR_OverrideLockbarWidth), Prop(Settings::m_propPlayer_LockbarWidth), Prop(Settings::m_propPlayerVR_OverrideLockbarHeight),
                Prop(Settings::m_propPlayer_LockbarHeight), Prop(Settings::m_propPlayer_ScreenPlayerX), Prop(Settings::m_propPlayer_ScreenPlayerY),
-               Prop(Settings::m_propPlayerVR_ControllerCabYOffset), Prop(Settings::m_propPlayerVR_ControllerLockbarScale) } },
+               Prop(Settings::m_propPlayerVR_ControllerCabYOffset), Prop(Settings::m_propPlayerVR_ControllerCabZOffset),
+               Prop(Settings::m_propPlayerVR_ControllerCabWidthOffset) } },
          Section { "Room"s, kVR,
             { Prop(Settings::m_propPlayerVR_UsePassthroughColor), Prop(Settings::m_propPlayerVR_LockFeetToGround), Prop(Settings::m_propPlayerVR_AddBackglass),
                Prop(Settings::m_propPlayerVR_ShowControllers) } },
@@ -818,6 +861,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
          return std::make_unique<PointOfViewSettingsPage>();
       sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
       sources.push_back(source(kPassthrough, std::make_unique<PassthroughPage>()));
+      sources.push_back(source(kCabinetPlacement, std::make_unique<CabinetPlacementPage>()));
       sources.push_back(source(kMenuAndLobby, std::make_unique<MenuAndLobbyPage>()));
       return CreateComposed(screen, "VR & Room"s, "Where the table and the cabinet stand in the room"s, std::move(sources));
    case Screen::Screens: return std::make_unique<DisplayHomePage>(); // Upstream's display settings: one page per window

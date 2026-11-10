@@ -137,8 +137,11 @@
    #include "input/XRInputHandler.h"
 
    #if defined(VPX_STEAM_FRAME)
+   #include <chrono>
    #include <condition_variable>
+   #include <deque>
    #include <mutex>
+   #include <optional>
    #include <thread>
 
    #include "steamframe/Passthrough.h"
@@ -407,6 +410,18 @@ public:
    // runtime shows black around the loading message instead of the passthrough. A static image, acquired by the render thread until a frame clears it.
    RenderTarget* GetPassthroughBackdropRenderTarget() const { return m_backdropRenderTarget; }
    void SetPassthroughBackdropDrawn() { m_backdropDrawn = true; }
+   // Cabinet positioning mode (src/steamframe/CabinetPlacement.cpp): the lockbar follows the two controllers (the controller view centering), held
+   // on a real edge, with the passthrough shown, until the player fixes it. Refused while the lockbar is outside the play area.
+   enum class PlacementZone { Unknown, Inside, NearEdge, Outside };
+   void StartCabinetPlacement(); // From the menu, or the controller view centering action
+   bool FinishCabinetPlacement(); // The action again: false while the lockbar is outside the play area (the mode goes on)
+   void CancelCabinetPlacement(); // The menu opened, or the table closing: the previous placement back
+   bool IsPlacingCabinet() const { return m_placing; }
+   PlacementZone GetPlacementZone() const { return m_placementZone; }
+   float GetPlacementEdgeDistance() const { return m_placementEdgeDistance; } // Meters from the lockbar to the edge of the play area (negative outside)
+   bool IsPlacementTracked() const { return m_placementTracked; } // Both controllers located
+   // The bar between the controllers, and the lockbar on it, as quads of unit size seen from the head (see LiveUI::RenderCabinetPlacementBar)
+   bool GetPlacementBarTransforms(Matrix3D (&barToClip)[2], Matrix3D (&lockbarToClip)[2]) const;
    // The bridge keeps the session fed with frames while no table is played, from the end of a table (ReleaseSession, when the session is kept) to
    // the first frame of the next one: the main thread says when the next table is about to draw it (OnTableReadyForFrames), and the render thread
    // of that table takes the frame loop back before its first frame (EndBridge)
@@ -745,6 +760,34 @@ private:
    void AcquirePassthroughBackdropImage(class RenderDevice* rd);
    void ReleasePassthroughBackdropImage();
    void AddPassthroughBackdrop(std::vector<XrCompositionLayerBaseHeader*>& layers, XrTime displayTime);
+
+   XrReferenceSpaceType m_referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL; // Of m_referenceSpace: the play area is known for the stage only
+   std::atomic<bool> m_placing = false;
+   bool m_placementFixedSize = true;
+   std::atomic<PlacementZone> m_placementZone = PlacementZone::Unknown;
+   std::atomic<float> m_placementEdgeDistance = 0.f;
+   std::atomic<bool> m_placementTracked = false;
+   XrExtent2Df m_playArea = { 0.f, 0.f }; // Size of the play area, centered on the origin of the stage (0 when unknown)
+   vec3 m_placementLeft { 0.f, 0.f, 0.f }, m_placementRight { 0.f, 0.f, 0.f }; // The controllers, in the reference space (meters)
+   struct Placement
+   {
+      float orientation; // Room yaw
+      Vertex3Ds headsetPos; // Room offset (z: the lockbar on the real edge, see the controller recenter in RenderFrame)
+      float lockbarWidth, lockbarHeight;
+      PlacementZone zone;
+      float edgeDistance;
+      std::chrono::steady_clock::time_point time;
+   };
+   Placement m_placementBefore {}; // For the cancel
+   std::mutex m_placementMutex; // The history and the placement to apply, shared by the render thread and the logic thread
+   std::deque<Placement> m_placementHistory; // The last second of placements, the one fixed being from before the button press moved the controller
+   std::optional<Placement> m_placementToApply; // Fixed or cancelled by the logic thread, applied by the render thread before the next frame
+   // From the controller view centering (render thread): the controllers seen this frame, and whether the lockbar width follows them
+   void UpdateCabinetPlacement(bool tracked, const vec3& left, const vec3& right);
+   void ApplyCabinetPlacement();
+   void EndCabinetPlacement(const Placement& placement, bool save);
+   Placement GetCurrentPlacement() const;
+   bool IsPlacementWidthFixed() const { return m_placing && m_placementFixedSize; }
 
    std::thread m_bridgeThread;
    std::atomic<bool> m_bridgeStop = false;

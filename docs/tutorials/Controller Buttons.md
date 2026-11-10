@@ -23,7 +23,7 @@ Jurassic Park (Sega 1997)*.
 | Grip | Left / right | Left / right magna-save | |
 | Bumper | Left / right | Nudge the table to the left / to the right | |
 | Thumbstick | Left | Nudge the table: the further it is tilted, the harder | Up / down: move the selection |
-| Thumbstick click | Left | Align the view using the controllers (on / off) | |
+| Thumbstick click | Left | Cabinet positioning: the lockbar follows the two controllers, press again to fix it | |
 | Thumbstick | Right | Plunger: pull it towards you, then let go | Left / right: change a value |
 | Thumbstick click | Right | Launch button, on the tables that have one instead of a plunger | Settings pages: back to the defaults |
 | D-pad | Left | | Move the selection; left / right changes a value |

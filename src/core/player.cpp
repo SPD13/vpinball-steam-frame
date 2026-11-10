@@ -1571,6 +1571,9 @@ Player::~Player()
    // Save adjusted VR settings
    if (m_renderer->m_stereo3D == STEREO_VR)
    {
+#if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
+      m_vrDevice->CancelCabinetPlacement(); // Steam Frame Edition: a cabinet positioning not fixed is not kept (src/steamframe/CabinetPlacement.cpp)
+#endif
       m_vrDevice->SaveVRSettings(g_settingsService.GetAppSettings());
       // Restore SDL's default of suppressing joystick events while unfocused (enabled for VR in the constructor)
       SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");

@@ -7,6 +7,9 @@
 #include "core/VPXPluginAPIImpl.h"
 #include "IconsLucide.h"
 #include "LucideFont.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/fonts/ForkAwesomeIcons.h"
+#endif
 #include "fonts/DroidSans.h"
 #include "fonts/DroidSansBold.h"
 #include "math/matrix.h"
@@ -74,6 +77,10 @@ LiveUI::LiveUI(RenderDevice *const rd)
    lucide_config.GlyphOffset = ImVec2(0.f, 1.5f * m_uiScale);
    static constexpr ImWchar lucide_ranges[] = { ICON_MIN_LC, ICON_MAX_LC, 0 };
    io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char *>(lucide_subset_ttf), static_cast<int>(sizeof(lucide_subset_ttf)), 15.0f * m_uiScale, &lucide_config, lucide_ranges);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the Fork Awesome icons of its menus and table picker (src/steamframe/fonts, kept when upstream moved to Lucide)
+   VPX::AddForkAwesomeIcons(m_uiScale);
+#endif
 
    const float overlaySize = 13.0f * m_uiScale;
    m_overlayFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, overlaySize);
@@ -514,6 +521,7 @@ void LiveUI::RenderUI()
    {
       #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
       RenderVRPointerDot(); // Steam Frame Edition: where the VR controller points (src/steamframe/vrui/Pointer.cpp)
+      RenderCabinetPlacementMessage(); // and the message of the cabinet positioning mode (src/steamframe/CabinetPlacement.cpp)
       #endif
 
       if (!m_player->IsPlaying() && !m_player->m_isLoading && !m_editorUI.IsOpened())
@@ -623,12 +631,16 @@ void LiveUI::RenderUI()
    if (m_player->m_vrDevice && m_rd->m_nEyes == 2)
    {
       if (m_inGameUI.IsOpened() && !m_vrInGameUIWasOpened)
+      {
          m_player->m_vrDevice->RecenterUIPanel();
+         m_player->m_vrDevice->CancelCabinetPlacement(); // Opening the menu cancels the cabinet positioning mode (src/steamframe/CabinetPlacement.cpp)
+      }
       m_vrInGameUIWasOpened = m_inGameUI.IsOpened();
       // With the in-game UI closed, the panel stays in front of the head, so that a new notification appears in the middle of the view; it then
       // stays there in the room until it disappears, the panel following the head again for the next one
       const unsigned int notification = m_notificationOverlay.GetNewestId();
-      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && (notification == 0 || notification != m_vrNotificationPlaced));
+      // and while the cabinet is placed, for its message
+      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && (m_player->m_vrDevice->IsPlacingCabinet() || notification == 0 || notification != m_vrNotificationPlaced));
       m_vrNotificationPlaced = notification;
       onVRPanel = m_player->m_vrDevice->GetUIPanelTransforms(right, bottom, matView);
    }
@@ -782,6 +794,7 @@ void LiveUI::RenderUI()
       m_player->m_vrDevice->SetShowUILayer(hasContent);
    #if defined(VPX_STEAM_FRAME) && defined(ENABLE_XR)
    RenderVRPointerRay(onVRPanel, depthSort); // Steam Frame Edition: ray from the pointing VR controller to the dot (src/steamframe/vrui/Pointer.cpp)
+   RenderCabinetPlacementBar(depthSort); // and the bar between the controllers of the cabinet positioning mode (src/steamframe/CabinetPlacement.cpp)
    if (perfPanelDrawList && m_player->m_vrDevice && m_player->m_vrDevice->GetPerfPanelRenderTarget()
       && VPX::PerfPanel::Get().Render(m_rd, m_player->m_vrDevice->GetPerfPanelRenderTarget(), perfPanelDrawList, m_perfPanelMeshBuffer))
       m_player->m_vrDevice->SetPerfPanelDrawn();

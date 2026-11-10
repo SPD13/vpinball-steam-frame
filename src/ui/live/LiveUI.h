@@ -170,6 +170,10 @@ private:
    void UpdateVRPointer();
    void RenderVRPointerDot();
    void RenderVRPointerRay(bool onVRPanel, int depthSort);
+   // Cabinet positioning mode (Steam Frame Edition, src/steamframe/CabinetPlacement.cpp): the message, and the bar between the controllers
+   void RenderCabinetPlacementMessage();
+   void RenderCabinetPlacementBar(int depthSort);
+   std::shared_ptr<MeshBuffer> m_placementBarMeshes[2];
    bool m_vrPointerVisible = false;
    bool m_vrPointerPressed = false;
    ImVec2 m_vrPointerPos;
