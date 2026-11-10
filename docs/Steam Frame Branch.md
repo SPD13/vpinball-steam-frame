@@ -44,6 +44,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Thread placement** (no menu entry, `Player.ThreadPlacement`, Frame build): while a table is played, the render thread runs on core 7, the logic thread on cores 5 and 6 and the others on cores 2 to 4. Worn, Darkest Dungeon spends 62 % of its time at full resolution with it (two plays) against 1.9 to 19.4 % without (three plays); headless with Steam's cores it gains little (section 23).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
 - **Passthrough** (Y on the right controller, or VR & Room > Passthrough, saved at once, so the application starts as it was left): the headset shows your own room around the cabinet instead of the virtual room of the table and of the lobby, switched live. The parts of each table's room are found when it starts (by their part group or collection, and by their size and place around the cabinet) and left out; tables made with a mixed reality room show it. Needs a runtime that blends the game over its passthrough (alpha blend mode, offered by SteamVR on the Frame); otherwise the switch says so and nothing changes (section 26).
+- **Cabinet positioning** (VR & Room > Cabinet positioning, or the left thumbstick click): hold the two controllers on a real edge (a desk, a shelf, a real cabinet) and the lockbar follows them, with your room shown, then press the button again to fix the cabinet there, for all tables. Its size stays as it is by default (*Fixed cabinet size when placing*); the place is refused while the lockbar is outside the play area (section 27).
 - **No passthrough between tables**: from choosing a table to its first frame, and back to the lobby, the "Loading <table>..." message stands in front of the player, in the table's forward direction (not where the head looks), on a black background, instead of the headset falling back to SteamVR's own scene (the passthrough on the Frame) while the previous table closes and the next one loads.
 
 ## Status
@@ -551,6 +552,35 @@ The real room of the player around the cabinet, instead of the virtual room of t
 - **Known limits.** Objects standing near the cabinet (a stool, a speaker) stay and float in the room; a room merged with the cabinet in one mesh
   cannot be split; a table without a cabinet model shows a bare playfield floating in the room (accepted). Glows and bloom past the outline of
   the cabinet are cut, and its edges may show a dark fringe (the alpha is all or nothing per pixel, after the anti-aliasing).
+
+## 27. Cabinet positioning (2026-11-10)
+
+The cabinet is fixed in the play area, where the player wants it, and the player walks around it: the lockbar is lined up with a real edge.
+Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` members), hooks in `src/renderer/VRDevice.h/.cpp`,
+`src/ui/live/LiveUI.h/.cpp`, `src/input/InputManager.cpp`, `src/core/player.cpp`, `src/steamframe/vrui/Screens.cpp`, `src/steamframe/Passthrough.h/.cpp`,
+`src/core/Settings_properties.inl`.
+
+- **The mode reuses upstream's controller view centering** (`VRDevice::RenderFrame`): the middle of the two controllers (grip poses) is the
+  middle of the lockbar, their direction its orientation, their height its height. The cabinet follows them live (drag and drop).
+- **Fixed cabinet size when placing** (`Standalone.PlacementFixedSize`, on by default): the lockbar width, and so the scale of the cabinet, does
+  not follow the distance between the controllers; only the place, height and orientation do (the legs stretch to the floor with *Lock Feet to
+  Ground*). Off: upstream's behaviour, the width between the controllers is the lockbar width.
+- **Start:** the *Cabinet positioning mode* item of VR & Room > Cabinet positioning (it closes the menu), or the *Align VR view using controllers*
+  action (left thumbstick click by default), which the fork turns into this mode. The passthrough is forced on while placing
+  (`Passthrough::SetForced`, not saved), then back to the setting: on if it was on, off otherwise.
+- **Feedback:** a thin white bar from one controller to the other, the lockbar on it (its width, centered), colored by the play area check, and a
+  message in the lower middle of the view, following the head: "Move the lockbar to the desired position and press a button", the state of the
+  check, and the button that fixes it (its mapping in Controls).
+- **Play area check:** the stage bounds of OpenXR (`xrGetReferenceSpaceBoundsRect`, a rectangle centered on the origin of the stage), for a stage
+  reference space. Both ends of the lockbar are checked: green 30 cm or more inside, orange closer, red outside. Unknown bounds (no stage, or no
+  play area set) are not checked (grey).
+- **Fix:** the same button again. Refused in the red (a notification says why, the mode goes on). The placement kept is the one of 250 ms before
+  the press, as clicking the thumbstick moves the controller. It is saved at once (`SaveVRSettings`: orientation, X/Y, lockbar height and width),
+  for all tables. The values are written by the logic thread and again by the render thread before its next frame (`ApplyCabinetPlacement`).
+- **Cancel:** opening the menu, or closing the table: the previous placement back.
+- **Range:** the X/Y offsets (`PlayerVR.HeadSetX/Y`) go to ±500 cm in the Frame build (±100 upstream), so that the cabinet may stand anywhere in a
+  large play area.
+- **Recenter first:** the placement is relative to the origin of the stage; a Steam recenter afterwards may move it, the cabinet with it.
 
 ## Effects on existing builds
 

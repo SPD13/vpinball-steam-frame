@@ -172,6 +172,10 @@ private:
    void UpdateVRPointer();
    void RenderVRPointerDot();
    void RenderVRPointerRay(bool onVRPanel, int depthSort);
+   // Cabinet positioning mode (Steam Frame Edition, src/steamframe/CabinetPlacement.cpp): the message, and the bar between the controllers
+   void RenderCabinetPlacementMessage();
+   void RenderCabinetPlacementBar(int depthSort);
+   std::shared_ptr<MeshBuffer> m_placementBarMeshes[2];
    bool m_vrPointerVisible = false;
    bool m_vrPointerPressed = false;
    ImVec2 m_vrPointerPos;
@@ -179,6 +183,7 @@ private:
    bool m_vrPointerScrollBlocked = false; // The thumbstick was used for button navigation and is not back to its center yet
    bool m_vrInGameUIWasOpened = false; // To place the VR UI panel in front of the player each time the in-game UI opens
    unsigned int m_vrNotificationPlaced = 0; // Newest notification the VR UI panel was placed for
+   bool m_vrPlacingCabinet = false; // To place the VR UI panel when the cabinet positioning mode starts
    ImFont *m_baseFont = nullptr;
    ImFont *m_overlayBoldFont = nullptr;
    ImFont *m_overlayFont = nullptr;

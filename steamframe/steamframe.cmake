@@ -70,6 +70,8 @@ target_sources(vpinball PRIVATE
    # Passthrough: the real room around the cabinet, the parts of the virtual room left out, switched live
    src/steamframe/Passthrough.h
    src/steamframe/Passthrough.cpp
+   # Cabinet positioning mode: the lockbar placed on a real edge with the two controllers, inside the play area
+   src/steamframe/CabinetPlacement.cpp
 
    # Which cores the threads run on, on the Steam Frame
    src/steamframe/ThreadPlacement.h
@@ -78,10 +80,16 @@ target_sources(vpinball PRIVATE
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
 
+   # Fork Awesome icons of the menus, merged into LiveUI's font (upstream moved to a subset of Lucide on 2026-11-09)
+   src/steamframe/fonts/ForkAwesomeIcons.h
+   src/steamframe/fonts/ForkAwesomeIcons.cpp
+   src/steamframe/fonts/ForkAwesome.h
+   src/steamframe/fonts/IconsForkAwesome.h
+
    # Loading message in the headset between two tables, and the frames submitted meanwhile on the session kept from one table to the next
    src/steamframe/XRBridge.cpp
 
-   # Web server to manage the tables from a browser (upstream only builds it for the mobile library)
+   # Web server to manage the tables from a browser (upstream only builds it for the mobile library; its ZipUtils use the miniz that VPX builds)
    lib/src/WebServer.h
    lib/src/WebServer.cpp
    lib/src/ZipUtils.h
@@ -142,25 +150,15 @@ endif()
 # Each platform section of make/CMakeLists_app.txt uses one signature of target_link_libraries, which can't be mixed
 if(PLATFORM STREQUAL "windows-mingw")
    target_link_libraries(vpinball
-      zip64 # Web server
       ws2_32
       iphlpapi
       ${STEAMFRAME_ARCHIVE_LIBS}
    )
    if(POST_BUILD_COPY_EXT_LIBS)
       add_custom_command(TARGET vpinball POST_BUILD
-         COMMAND "${CMAKE_COMMAND}" -E copy "${RUNTIME_LIBS_DIR}/libzip64.dll" "$<TARGET_FILE_DIR:vpinball>"
          COMMAND "${CMAKE_COMMAND}" -E copy "${RUNTIME_LIBS_DIR}/zlib1.dll" "$<TARGET_FILE_DIR:vpinball>"
       )
    endif()
-elseif(PLATFORM STREQUAL "macos")
-   target_link_libraries(vpinball PUBLIC zip ${STEAMFRAME_ARCHIVE_LIBS})
-elseif(PLATFORM STREQUAL "linux")
-   target_link_libraries(vpinball PUBLIC zip ${STEAMFRAME_ARCHIVE_LIBS})
-   if(POST_BUILD_COPY_EXT_LIBS)
-      add_custom_command(TARGET vpinball POST_BUILD
-         COMMAND cp -a "${RUNTIME_LIBS_DIR}/libzip.so" "$<TARGET_FILE_DIR:vpinball>"
-         COMMAND cp -a "${RUNTIME_LIBS_DIR}/libzip.so.*" "$<TARGET_FILE_DIR:vpinball>"
-      )
-   endif()
+elseif(PLATFORM STREQUAL "macos" OR PLATFORM STREQUAL "linux")
+   target_link_libraries(vpinball PUBLIC ${STEAMFRAME_ARCHIVE_LIBS})
 endif()

@@ -1047,12 +1047,27 @@ void InputManager::CreateInputActions()
    auto vrControllerCalibration = AddAction(std::make_unique<InputAction>(this, "VRControllerCalibration"s, "Align VR view using controllers"s, ""s,
       [this](InputAction& action, bool wasPressed, bool isPressed)
       {
+#if defined(VPX_STEAM_FRAME)
+         // Steam Frame Edition: the cabinet positioning mode (src/steamframe/CabinetPlacement.cpp), started here or from the menu, fixed by the same
+         // button while the lockbar is inside the play area
+         if (isPressed && !wasPressed && m_player->IsVR())
+         {
+            if (!m_player->m_vrDevice->IsPlacingCabinet())
+               m_player->m_vrDevice->StartCabinetPlacement();
+            else if (!m_player->m_vrDevice->FinishCabinetPlacement())
+               m_player->m_liveUI->PushNotification(m_player->m_vrDevice->IsPlacementTracked() ? "The lockbar must be inside the play area to fix it there"s
+                                                                                              : "The controllers must be tracked to fix the cabinet"s, 3000);
+            else
+               m_player->m_liveUI->PushNotification("Cabinet placed"s, 2000);
+         }
+#else
          if (isPressed && m_player->IsVR())
          {
             m_player->m_vrDevice->EnableControllerRecenter(!m_player->m_vrDevice->IsControllerRecenterEnabled());
             if (m_player->m_liveUI)
                m_player->m_liveUI->m_inGameUI.RequestRebuildAll(); // The VR settings page shows whether the lockbar width is measured
          }
+#endif
       }));
    m_vrControllerViewCenteringActionId = vrControllerCalibration->GetActionId();
    #endif

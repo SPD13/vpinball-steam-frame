@@ -45,6 +45,7 @@ static constexpr float kCollectionFront = 700.f;
 static std::atomic<bool> s_wanted = false;
 static std::atomic<bool> s_known = false;
 static std::atomic<bool> s_supported = false;
+static std::atomic<bool> s_forced = false;
 static int s_preview = -1;
 
 static std::unordered_set<const IEditable*> s_roomParts;
@@ -96,7 +97,12 @@ bool IsSupported() { return s_supported; }
 bool IsActive()
 {
    EnsureLoaded();
-   return s_wanted && s_supported;
+   return (s_wanted || s_forced) && s_supported;
+}
+
+void SetForced(bool forced)
+{
+   s_forced = forced;
 }
 
 bool IsPreview()
