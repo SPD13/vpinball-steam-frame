@@ -23,7 +23,7 @@ class PinTable;
 namespace VPX::Passthrough
 {
 
-void Load(); // The setting, read when the first table starts (ClassifyTable)
+void Load(); // The saved setting: read by the first query (at the latest when the first table starts), so the application starts as it was left
 bool IsWanted(); // The setting
 void SetWanted(bool wanted); // From the menu or the input action: applied at once, saved
 bool Toggle(); // The input action: returns the new state
