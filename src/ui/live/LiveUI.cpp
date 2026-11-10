@@ -787,6 +787,15 @@ void LiveUI::RenderUI()
       m_player->m_vrDevice->SetPerfPanelDrawn();
    if (loadingDrawList && VPX::PerfPanel::RenderDrawList(m_rd, m_player->m_vrDevice->GetLoadingLayerRenderTarget(), loadingDrawList, m_loadingLayerMeshBuffer, "LoadingLayer"s))
       m_player->m_vrDevice->SetLoadingLayerDrawn(m_loadingLayerWindowSize[0], m_loadingLayerWindowSize[1]);
+   // Passthrough: the transparent image the bridge shows in place of the scene between two tables, cleared once (src/steamframe/XRBridge.cpp)
+   if (RenderTarget* const backdrop = m_player->m_vrDevice ? m_player->m_vrDevice->GetPassthroughBackdropRenderTarget() : nullptr; backdrop && m_rd->GetCurrentPass())
+   {
+      RenderTarget* const previous = m_rd->GetCurrentPass()->m_rt;
+      m_rd->SetRenderTarget("PassthroughBackdrop"s, backdrop, false, true);
+      m_rd->Clear(clearType::TARGET, 0x00000000);
+      m_rd->SetRenderTarget("LiveUI"s, previous, true, true);
+      m_player->m_vrDevice->SetPassthroughBackdropDrawn();
+   }
    #endif
 
    NewFrame();

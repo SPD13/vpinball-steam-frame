@@ -403,6 +403,10 @@ public:
    }
    void SetLoadingLayerShown(bool shown) { m_loadingShown = shown; } // By the logic thread, for each frame it prepares
    bool IsLoadingLayerUsable() const { return m_loadingLayerUsable; } // The message is drawn into the layer (else on the UI panel)
+   // Passthrough (src/steamframe/Passthrough.h): the bridge has no image of the scene, a small transparent image stands for it in a projection layer, else the
+   // runtime shows black around the loading message instead of the passthrough. A static image, acquired by the render thread until a frame clears it.
+   RenderTarget* GetPassthroughBackdropRenderTarget() const { return m_backdropRenderTarget; }
+   void SetPassthroughBackdropDrawn() { m_backdropDrawn = true; }
    // The bridge keeps the session fed with frames while no table is played, from the end of a table (ReleaseSession, when the session is kept) to
    // the first frame of the next one: the main thread says when the next table is about to draw it (OnTableReadyForFrames), and the render thread
    // of that table takes the frame loop back before its first frame (EndBridge)
@@ -723,6 +727,24 @@ private:
    void AcquireLoadingLayerImage(class RenderDevice* rd); // Before the frame is prepared
    void ReleaseLoadingLayerImage(); // After the frame is submitted
    void AddLoadingLayer(std::vector<XrCompositionLayerBaseHeader*>& layers);
+
+   SwapchainInfo m_backdropSwapchainInfo = {}; // Passthrough: the transparent image of the bridge (see GetPassthroughBackdropRenderTarget)
+   std::unique_ptr<RenderTarget> m_backdropTarget;
+   RenderTarget* m_backdropRenderTarget = nullptr; // As m_loadingRenderTarget
+   bool m_backdropImageAcquired = false;
+   uint32_t m_backdropImageIndex = 0;
+   std::atomic<bool> m_backdropDrawn = false;
+   bool m_backdropHasImage = false; // Released once cleared: the bridge can show it
+   std::vector<XrView> m_backdropXrViews;
+   std::vector<XrCompositionLayerProjectionView> m_backdropViews;
+   XrCompositionLayerProjection m_backdropLayer = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+   static constexpr uint32_t kBackdropSize = 16;
+   void CreatePassthroughBackdrop();
+   void DestroyPassthroughBackdropViews();
+   void DestroyPassthroughBackdrop();
+   void AcquirePassthroughBackdropImage(class RenderDevice* rd);
+   void ReleasePassthroughBackdropImage();
+   void AddPassthroughBackdrop(std::vector<XrCompositionLayerBaseHeader*>& layers, XrTime displayTime);
 
    std::thread m_bridgeThread;
    std::atomic<bool> m_bridgeStop = false;

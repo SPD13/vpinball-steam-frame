@@ -525,7 +525,9 @@ The real room of the player around the cabinet, instead of the virtual room of t
 - **Transparent background.** The post pass of upstream's color keyed passthrough (`fs_pp_passthrough.sc`) runs: alpha 0 where nothing was
   drawn (depth cleared), opaque elsewhere; the projection layer already blends on alpha. The part groups use the mixed reality visibility mask,
   as with color keying, so tables made with a mixed reality room show it. While a table loads, the projection layer is cleared transparent, so the
-  loading message floats in the room.
+  loading message floats in the room. Between two tables, the XR bridge (section 20) has no image of the scene: without a projection layer the
+  runtime shows black, not the passthrough, so the bridge submits a projection layer of a 16x16 transparent static image (cleared once by the
+  first frame of a table, `XRBridge.cpp` `AddPassthroughBackdrop`) under the message while the passthrough is on.
 - **The room left out.** `Passthrough::ClassifyTable` (Renderer constructor) finds the room parts of the played table, visible or not (scripts
   show the room of the option chosen); `Renderer::RenderItem` skips them while the switch is on, reflections included. A part is a room part:
   - in a part group using the room space reference or named after the room, the rule of the lobby (`Launcher::GetRoomParts`);
