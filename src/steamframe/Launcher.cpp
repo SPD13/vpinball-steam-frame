@@ -8,6 +8,7 @@
 #include "steamframe/CabinetBackglass.h"
 #include "steamframe/CabinetLauncherPage.h"
 #include "steamframe/CabinetDisplays.h"
+#include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/PupPacks.h"
 #include "core/VPApp.h"
@@ -323,26 +324,12 @@ void Launcher::SetLobbyRoomChoice(int value)
 //   to their options (for example VR_MinimalRoom, VR_PoolBar and VR_Sphere, beside VR_Table for the cabinet)
 vector<IEditable*> Launcher::GetRoomParts(PinTable* table)
 {
-   const auto isRoomGroup = [](const IEditable* part)
-   {
-      for (const PartGroup* group = part->GetPartGroup(); group != nullptr; group = group->GetPartGroup())
-         if (group->m_d.m_spaceReference == PartGroupData::SpaceReference::SR_ROOM || lowerCase(group->GetName()).find("room") != string::npos)
-            return true;
-      return false;
-   };
-   const auto isRoomCollection = [](const string& collectionName)
-   {
-      const string name = lowerCase(collectionName);
-      return name.starts_with("vr") && !std::ranges::any_of(std::initializer_list<const char*> { "cab", "table", "backglass", "bg" },
-         [&name](const char* cabinetWord) { return name.find(cabinetWord) != string::npos; });
-   };
-
    vector<IEditable*> parts;
    for (IEditable* part : table->GetParts())
-      if (part->GetItemType() != ItemTypeEnum::eItemPartGroup && isRoomGroup(part))
+      if (part->GetItemType() != ItemTypeEnum::eItemPartGroup && VPX::Passthrough::IsInRoomGroup(part))
          parts.push_back(part);
    for (CComObject<Collection>* collection : table->GetCollections())
-      if (isRoomCollection(collection->m_name))
+      if (VPX::Passthrough::IsRoomCollectionName(collection->m_name))
          for (IEditable* part : collection->GetParts())
             if (part->GetItemType() != ItemTypeEnum::eItemPartGroup && std::ranges::find(parts, part) == parts.end())
                parts.push_back(part);
@@ -732,29 +719,68 @@ WebServer& Launcher::GetWebServer()
 
 void Launcher::MigrateSettings()
 {
-   // Upstream 64a480a96 (2026-11-01) split the VR placement between the place of the headset, the same for all tables, and offsets of each table:
-   // Orientation, TableX and TableY, set by the view centering, became HeadSetOrientation, HeadSetX and HeadSetY, and the height (TableZ) is now an
-   // adjustment of the lockbar height (VRDevice::OffsetTable). Without this, an update loses the placement of the room and the table.
-   // The old values are cleared once moved (saved as empty, read as 0), so this is done once.
+   // Upstream renamed the VR placement settings twice without moving the values, which would lose the placement of the room and the table at an update:
+   // - 64a480a96 (2026-11-01) split it between the place of the headset, the same for all tables, and offsets of each table: Orientation, TableX and
+   //   TableY, set by the view centering, became HeadSetOrientation, HeadSetX and HeadSetY, and the height (TableZ) an adjustment of the lockbar height;
+   // - 2ad1916b2 (2026-11-06) made them a correction of the room positioning: HeadSetOrientation, HeadSetX and HeadSetY became RoomYaw, RoomOffsetX
+   //   and RoomOffsetY, and ScaleToLockbar and MatchLockbarHeight became OverrideLockbarWidth and OverrideLockbarHeight.
+   // The old values are cleared once moved (saved as empty, read as their default), so this is done once.
    Settings& settings = g_settingsService.GetAppSettings();
-   const auto oldProp = [](const string& propId)
+   const auto oldFloat = [](const string& propId)
    {
       return Settings::GetRegistry().Register(std::make_unique<VPX::Properties::FloatPropertyDef>(
-         "PlayerVR"s, propId, propId, "Replaced by the settings of upstream 64a480a96 (see Launcher::MigrateSettings)"s, false, -1000.f, 1000.f, 0.f, 0.f));
+         "PlayerVR"s, propId, propId, "Replaced by the settings of upstream (see Launcher::MigrateSettings)"s, false, -1000.f, 1000.f, 0.f, 0.f));
    };
-   const auto orientation = oldProp("Orientation"s), tableX = oldProp("TableX"s), tableY = oldProp("TableY"s), tableZ = oldProp("TableZ"s);
-   const float o = settings.GetFloat(orientation), x = settings.GetFloat(tableX), y = settings.GetFloat(tableY), z = settings.GetFloat(tableZ);
-   if (o == 0.f && x == 0.f && y == 0.f && z == 0.f)
-      return;
-   settings.SetPlayerVR_HeadSetOrientation(Settings::GetPlayerVR_HeadSetOrientation_Property()->GetClamped(o), false);
-   settings.SetPlayerVR_HeadSetX(Settings::GetPlayerVR_HeadSetX_Property()->GetClamped(x), false);
-   settings.SetPlayerVR_HeadSetY(Settings::GetPlayerVR_HeadSetY_Property()->GetClamped(y), false);
-   if (z != 0.f)
-      settings.SetPlayer_LockbarHeight(Settings::GetPlayer_LockbarHeight_Property()->GetClamped(settings.GetPlayer_LockbarHeight() + z), false);
-   for (const auto& id : { orientation, tableX, tableY, tableZ })
-      settings.Reset(id);
-   settings.Save();
-   PLOGI << "VR placement settings moved to their new names: orientation " << o << ", X " << x << ", Y " << y << ", height " << z << " (added to the lockbar height)";
+   const auto oldBool = [](const string& propId)
+   {
+      return Settings::GetRegistry().Register(std::make_unique<VPX::Properties::BoolPropertyDef>(
+         "PlayerVR"s, propId, propId, "Replaced by the settings of upstream (see Launcher::MigrateSettings)"s, false, true));
+   };
+   bool changed = false;
+
+   const auto orientation = oldFloat("Orientation"s), tableX = oldFloat("TableX"s), tableY = oldFloat("TableY"s), tableZ = oldFloat("TableZ"s);
+   const auto headsetOrientation = oldFloat("HeadSetOrientation"s), headsetX = oldFloat("HeadSetX"s), headsetY = oldFloat("HeadSetY"s);
+   // The latest names first: a placement made after the first rename replaces an older one
+   float o = settings.GetFloat(headsetOrientation), x = settings.GetFloat(headsetX), y = settings.GetFloat(headsetY);
+   if (o == 0.f && x == 0.f && y == 0.f)
+   {
+      o = settings.GetFloat(orientation);
+      x = settings.GetFloat(tableX);
+      y = settings.GetFloat(tableY);
+   }
+   const float z = settings.GetFloat(tableZ);
+   if (o != 0.f || x != 0.f || y != 0.f || z != 0.f)
+   {
+      settings.SetPlayerVR_RoomYaw(Settings::GetPlayerVR_RoomYaw_Property()->GetClamped(o), false);
+      settings.SetPlayerVR_RoomOffsetX(Settings::GetPlayerVR_RoomOffsetX_Property()->GetClamped(x), false);
+      settings.SetPlayerVR_RoomOffsetY(Settings::GetPlayerVR_RoomOffsetY_Property()->GetClamped(y), false);
+      if (z != 0.f)
+         settings.SetPlayer_LockbarHeight(Settings::GetPlayer_LockbarHeight_Property()->GetClamped(settings.GetPlayer_LockbarHeight() + z), false);
+      for (const auto& id : { orientation, tableX, tableY, tableZ, headsetOrientation, headsetX, headsetY })
+         settings.Reset(id);
+      changed = true;
+      PLOGI << "VR placement settings moved to their new names: room yaw " << o << ", X " << x << ", Y " << y << ", height " << z << " (added to the lockbar height)";
+   }
+
+   // On by default, before and after: only a switch turned off is moved
+   const auto scaleToLockbar = oldBool("ScaleToLockbar"s), matchLockbarHeight = oldBool("MatchLockbarHeight"s);
+   if (!settings.GetBool(scaleToLockbar))
+   {
+      settings.SetPlayerVR_OverrideLockbarWidth(false, false);
+      settings.Reset(scaleToLockbar);
+      changed = true;
+      PLOGI << "VR setting ScaleToLockbar (off) moved to OverrideLockbarWidth";
+   }
+   if (!settings.GetBool(matchLockbarHeight))
+   {
+      settings.SetPlayerVR_OverrideLockbarHeight(false, false);
+      settings.Reset(matchLockbarHeight);
+      changed = true;
+      PLOGI << "VR setting MatchLockbarHeight (off) moved to OverrideLockbarHeight";
+   }
+
+   if (changed)
+      settings.Save();
 }
 
 void Launcher::StartWebServerIfAlwaysOn()

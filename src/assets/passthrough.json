@@ -1,0 +1,4 @@
+{
+  "about": "Steam Frame Edition, passthrough (src/steamframe/Passthrough.h): parts of tables wrongly taken for the room or the cabinet. Each entry matches tables by parts of their file name (any of them, case ignored), 'hide' lists parts of the room the rules keep, 'keep' parts of the cabinet the rules hide (part names, case ignored). A passthrough.json in the preferences folder adds entries.",
+  "tables": []
+}

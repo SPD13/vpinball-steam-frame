@@ -43,6 +43,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic, and *Reflection size*, Full or Half (Half by default in the Frame build, since 2026-11-02). Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
 - **Thread placement** (no menu entry, `Player.ThreadPlacement`, Frame build): while a table is played, the render thread runs on core 7, the logic thread on cores 5 and 6 and the others on cores 2 to 4. Worn, Darkest Dungeon spends 62 % of its time at full resolution with it (two plays) against 1.9 to 19.4 % without (three plays); headless with Steam's cores it gains little (section 23).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
+- **Passthrough** (Y on the right controller, or VR & Room > Passthrough, saved at once): the headset shows your own room around the cabinet instead of the virtual room of the table and of the lobby, switched live. The parts of each table's room are found when it starts (by their part group or collection, and by their size and place around the cabinet) and left out; tables made with a mixed reality room show it. Needs a runtime that blends the game over its passthrough (alpha blend mode, offered by SteamVR on the Frame); otherwise the switch says so and nothing changes (section 26).
 - **No passthrough between tables**: from choosing a table to its first frame, and back to the lobby, the "Loading <table>..." message stands in front of the player, in the table's forward direction (not where the head looks), on a black background, instead of the headset falling back to SteamVR's own scene (the passthrough on the Frame) while the previous table closes and the next one loads.
 
 ## Status
@@ -207,7 +208,7 @@ Files: `CMakeLists.txt`, `make/CMakeLists_app.txt`, `platforms/linux-x64/externa
 
 - **Linux.** `ENABLE_XR` is offered for `PLATFORM=linux` (BGFX renderer only); the Linux dependency scripts build the Khronos OpenXR loader and install its headers; `VRDevice` selects the Vulkan renderer on Linux and shares Android's timespec timing code. As on Android, the Wine headers make bgfx report the Windows platform, which is corrected for Linux too. `XRVulkanBackend` loads `libvulkan.so.1` at run time.
 - **Vulkan instance extensions.** The backend now requests only the extensions the driver reports. Upstream always requests `VK_EXT_debug_utils` and `VK_EXT_debug_report`, which fails instance creation on drivers without them. This applies to all platforms.
-- **Valve Frame controller.** `XR_VALVE_frame_controller_interaction` is enabled when available and bindings are suggested for `/interaction_profiles/valve/frame_controller_valve`. New inputs appended to the handler's list (indices 32 to 42, existing indices unchanged): right X/Y, left d-pad, left view, both bumpers, both aim poses. Added to the default mapping: view = open menu, right menu = quit table, d-pad = menu navigation, bumpers = nudge. Users with an existing VR mapping will be offered the new layout once.
+- **Valve Frame controller.** `XR_VALVE_frame_controller_interaction` is enabled when available and bindings are suggested for `/interaction_profiles/valve/frame_controller_valve`. New inputs appended to the handler's list (indices 32 to 42, existing indices unchanged): right X/Y, left d-pad, left view, both bumpers, both aim poses. Added to the default mapping: view = open menu, right menu = quit table, d-pad = menu navigation, bumpers = nudge. Users with an existing VR mapping will be offered the new layout once. Since 2026-11-09, right Y = Toggle Passthrough (section 26), added without that: the action has Y as its own default mapping, and the layout check leaves it out.
 - **VR menu panel.** The in-game menu is drawn on a panel fixed in the room (`VRDevice::UpdateUIPanel`), placed in front of the player, 10 cm below the eyes, when the menu opens. It faces the table's forward direction (the scene orientation set by centering the table), not where the head looks, so the player turns to the table, or moves, to read it. It is 2.8 m wide, so a closer panel looks bigger.
 - **Menu distance.** New setting `Standalone/VRMenuDistance`: distance between the player and the panel, 0.3 m to 3 m, default 1.5 m. In VR, the MENU tab of the picker shows "Menu distance" with − and + buttons that move the panel by 10 cm and place it again at once. The buttons are used with the pointer; flipper-button navigation does not change them.
 - **VR pointer.** `VRDevice::UpdateUIPanel` intersects a controller's aim ray with the panel; `LiveUI::NewFrame` feeds the hit point to ImGui as the mouse position, with the trigger as the left button (press at 0.7, release at 0.4), draws the ray (a translucent ribbon, most opaque at the controller and fading towards the tip, with soft edges, like the pointer of SteamVR) and a dot, and scrolls with the thumbstick. The right hand is preferred.
@@ -502,6 +503,52 @@ The log file and the console were written by the thread that logs, so a line log
 - **Cost.** The sort adds to the loading of a baked table (4.9 s on Medieval Madness on a Mac). With the setting Off when the table loads,
   nothing is sorted and a level chosen then applies to the next table (the status line and the panel say so). The sort could be kept in the
   table's cache.
+
+## 26. Passthrough (2026-11-09)
+
+The real room of the player around the cabinet, instead of the virtual room of the lobby and the tables. Files: `src/steamframe/Passthrough.h/.cpp`
+(classification of the room parts, state), hooks in `src/renderer/Renderer.cpp` and `VRDevice.h/.cpp`, `src/steamframe/XRBridge.cpp`,
+`src/input/InputManager.cpp` and `XRInputHandler.h`, `src/steamframe/vrui/Screens.cpp`, `src/assets/passthrough.json`.
+
+- **Switch.** `Standalone.Passthrough` (off by default), saved at once, for all tables. Toggled by the **Toggle Passthrough** input action
+  (Controls screen, any key or button) and by VR & Room > Passthrough, which has a status line. The action works in the lobby too, where the
+  table picker is always open. A notification says what it did.
+- **Y by default.** The action's own default mapping is `OpenXR;33` (right Y on the Frame controller, unmapped until now), so existing players
+  get it without their controller mappings being reset: a new entry in the OpenXR default layout would make `SetDeviceDefaultMapping` apply the
+  whole layout again, which clears the player's remaps. The layout gives Y to the action only when it is applied (first start, Defaults), not
+  when it is checked. When the player had already given Y to another action, the Passthrough action starts unmapped
+  (`InputManager::CheckPassthroughDefaultMapping`), so that Y does not do both.
+- **Blend mode.** The supported environment blend modes are logged at info level. While the switch is on and the runtime offers
+  `XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND`, every frame is submitted with it (`VRDevice::GetFrameBlendMode`, also used by the XR bridge between
+  tables); otherwise the mode chosen at start (opaque). Steam Frame: offered by SteamVR to applications on the headset (community report,
+  OpenVR issue 1926), not documented by Valve.
+- **Transparent background.** The post pass of upstream's color keyed passthrough (`fs_pp_passthrough.sc`) runs: alpha 0 where nothing was
+  drawn (depth cleared), opaque elsewhere; the projection layer already blends on alpha. The part groups use the mixed reality visibility mask,
+  as with color keying, so tables made with a mixed reality room show it. While a table loads, the projection layer is cleared transparent, so the
+  loading message floats in the room.
+- **The room left out.** `Passthrough::ClassifyTable` (Renderer constructor) finds the room parts of the played table, visible or not (scripts
+  show the room of the option chosen); `Renderer::RenderItem` skips them while the switch is on, reflections included. A part is a room part:
+  - in a part group using the room space reference or named after the room, the rule of the lobby (`Launcher::GetRoomParts`);
+  - wider or deeper than 3000 VP units (1.5 m: a cabinet is about 2500 long with its backbox), or higher than 3000 without standing over the
+    cabinet (the playfield and the margins of the `VR...` collections below; a cabinet with its legs and backbox is about 3500 high, as are the other machines of a game room): a primitive, a wall, a ramp or a
+    flasher (a flasher as a cube of its largest side, they are often turned);
+  - a primitive of 200 units or more entirely outside the volume of the cabinet: the playfield with 400 units on the sides, 1000 behind
+    (backglasses stand up to 900 behind the playfield) and 600 in front, or below -900 (the floor is about -1700) away from the cabinet, whose casters are on the floor. Flashers, walls and lights are
+    not judged by where they are: tables park them out of the cabinet (lights of the desktop backglass, helpers moved by their scripts), and so are
+    small primitives (ball shadows waiting for a ball);
+  - in a collection named `VR...` that is not the cabinet, when it reaches beyond the playfield by more than the margins of the room reflection
+    (section 22): such collections also hold parts of the cabinet, like the plunger or the buttons.
+  Parts of the desktop backdrop are left alone (not drawn in VR). Primitives drawn together (a collection grouping its elements: the 3D
+  meshes, not static, of the material and image of the first one) stay unless all of them are room parts. The lights of the room keep lighting
+  the cabinet. The preview log also names the part groups shown in VR but not in mixed reality, which disappear with the passthrough.
+- **Lobby.** All its parts are the room (a room made in Blender, the room of a table, or the floor of the empty room): the table picker floats in
+  the player's room.
+- **Exceptions.** `assets/passthrough.json`, and `passthrough.json` of the preferences folder: entries matching tables by parts of their file
+  name, with `hide` (room parts the rules keep) and `keep` (cabinet parts the rules hide) part names.
+- **Test hook.** `VPX_PASSTHROUGH_PREVIEW=1` leaves the room out on a desktop too and logs each room part with its reason.
+- **Known limits.** Objects standing near the cabinet (a stool, a speaker) stay and float in the room; a room merged with the cabinet in one mesh
+  cannot be split; a table without a cabinet model shows a bare playfield floating in the room (accepted). Glows and bloom past the outline of
+  the cabinet are cut, and its edges may show a dark fringe (the alpha is all or nothing per pixel, after the anti-aliasing).
 
 ## Effects on existing builds
 

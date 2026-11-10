@@ -280,7 +280,7 @@ void VRDevice::BridgeLoop()
          AddLoadingLayer(layers);
       XrFrameEndInfo frameEndInfo { XR_TYPE_FRAME_END_INFO };
       frameEndInfo.displayTime = frameState.predictedDisplayTime;
-      frameEndInfo.environmentBlendMode = m_environmentBlendMode;
+      frameEndInfo.environmentBlendMode = GetFrameBlendMode(); // Over the passthrough when it is on
       frameEndInfo.layerCount = static_cast<uint32_t>(layers.size());
       frameEndInfo.layers = layers.data();
       OPENXR_CHECK(xrEndFrame(m_session, &frameEndInfo), "Failed to end the XR frame of the bridge.");

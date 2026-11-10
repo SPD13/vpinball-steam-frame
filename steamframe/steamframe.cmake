@@ -67,6 +67,10 @@ target_sources(vpinball PRIVATE
    src/steamframe/Reflections.h
    src/steamframe/Reflections.cpp
 
+   # Passthrough: the real room around the cabinet, the parts of the virtual room left out, switched live
+   src/steamframe/Passthrough.h
+   src/steamframe/Passthrough.cpp
+
    # Which cores the threads run on, on the Steam Frame
    src/steamframe/ThreadPlacement.h
    src/steamframe/ThreadPlacement.cpp

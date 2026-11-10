@@ -42,7 +42,7 @@
 <path class="halo" d="M1080,76 L1080,176"/>
 <path class="arrow" d="M1080,76 L1080,176"/>
 <text class="name" x="1258" y="174" text-anchor="start">Y, X</text>
-<text class="role" x="1258" y="198" text-anchor="start">not used (free to map)</text>
+<text class="role" x="1258" y="198" text-anchor="start">passthrough on/off, free</text>
 <path class="halo" d="M1250,168 L1164,196"/>
 <path class="arrow" d="M1250,168 L1164,196"/>
 <path class="halo" d="M1250,168 L1128,236"/>

@@ -8,6 +8,7 @@
 
 #include "core/VPApp.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/ScoreStore.h"
 #include "steamframe/TableFixes.h"
@@ -25,7 +26,7 @@
 #include "steamframe/vrui/Theme.h"
 #include "steamframe/vrui/Widgets.h"
 
-#include "fonts/IconsForkAwesome.h"
+#include "steamframe/fonts/IconsForkAwesome.h"
 #include "imgui/imgui_stdlib.h"
 
 using LibraryTable = VPinballLib::Table; // 'Table' alone is ambiguous with VPX parts
@@ -1031,6 +1032,8 @@ void AddLobbyRoomItems(InGameUIPage& page)
       return;
    const std::optional<Launcher::LobbyRoom> room = g_launcher->GetLobbyRoom();
    page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, room ? "Lobby room: the room of " + room->tableName : "Lobby room: " + Launcher::GetLobbyRoomName()));
+   if (VPX::Passthrough::IsWanted())
+      page.AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Hidden while the passthrough is on: your own room is shown"s));
    page.AddItem(std::make_unique<InGameUIItem>("Choose a lobby room"s, "Pick the room of the lobby among the rooms of Visual Pinball. The room of a table can also be used, from the menu of that table."s, "lobby/rooms"s));
    if (room)
       page.AddItem(std::make_unique<InGameUIItem>("Use the default lobby room"s, "Show the table picker in the room chosen for the lobby again"s,
