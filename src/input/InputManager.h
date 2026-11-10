@@ -50,6 +50,7 @@ public:
 #if defined(VPX_STEAM_FRAME)
    unsigned int GetUIRowUpActionId() const { return m_uiRowUpActionId; } // Steam Frame Edition: UI: Up and UI: Down, for a full D-pad
    unsigned int GetUIRowDownActionId() const { return m_uiRowDownActionId; }
+   unsigned int GetPassthroughActionId() const { return m_passthroughActionId; } // Steam Frame Edition: passthrough on and off (src/steamframe/Passthrough.h)
 #endif
    unsigned int GetExitGameActionId() const { return m_exitGameActionId; }
    unsigned int GetOpenInGameUIActionId() const { return m_openInGameUIActionId; }
@@ -239,6 +240,8 @@ private:
 #if defined(VPX_STEAM_FRAME)
    unsigned int m_uiRowUpActionId;
    unsigned int m_uiRowDownActionId;
+   unsigned int m_passthroughActionId;
+   void CheckPassthroughDefaultMapping();
 #endif
    unsigned int m_exitGameActionId;
    unsigned int m_openInGameUIActionId;

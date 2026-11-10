@@ -36,6 +36,7 @@
 #include "steamframe/SceneBufferFormat.h"
 #include "steamframe/Reflections.h"
 #include "steamframe/DesktopDynamicResolution.h"
+#include "steamframe/Passthrough.h"
 #endif
 
 // MSVC Concurrency Viewer support
@@ -355,6 +356,10 @@ void Renderer::ApplyTableSettings()
       m_decalImage = BaseTexture::CreateFromFile(m_table->GetSettings().GetPlayer_DecalImage(), m_table->GetSettings().GetPlayer_MaxTexDimension());
    }
    m_vrApplyColorKey = m_stereo3D == STEREO_VR && m_table->GetSettings().GetPlayerVR_UsePassthroughColor();
+#if defined(VPX_STEAM_FRAME)
+   // Passthrough: the parts of the room of the table, left out while it is on (src/steamframe/Passthrough.h)
+   VPX::Passthrough::ClassifyTable(m_table);
+#endif
    m_visualNudgeStrength = m_table->GetSettings().GetPlayer_NudgeStrength();
 
    // HDR2020 output disables bloom and boosts exposure
@@ -430,6 +435,9 @@ void Renderer::SetTable(PinTable* const table)
 Renderer::~Renderer()
 {
    m_gpu_profiler.Shutdown();
+   #if defined(VPX_STEAM_FRAME)
+   VPX::Passthrough::Clear(); // The parts of the table are freed after the renderer
+   #endif
    #if defined(ENABLE_XR)
    m_vrControllerModels = nullptr; // Releases its textures from the render device
    #endif
@@ -567,7 +575,7 @@ bool Renderer::IsTonemapLastPostProcess() const
    const bool hasSharpenPass = m_sharpen != 0;
    const bool hasUpscalerPass = view->GetBackBufferTexture()->GetWidth() < view->m_renderWidth;
    #ifdef ENABLE_XR
-   const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && m_vrApplyColorKey);
+   const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && IsVRAlphaOutput());
    #else
    const bool hasStereoPass = m_stereo3Denabled && (m_stereo3D != STEREO_OFF);
    #endif
@@ -1502,7 +1510,11 @@ void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
    if (editable->GetIRenderable() == nullptr // Not renderable
       || (editable->m_desktopBackdrop && isNoBackdrop) // Don't render backdrop items in reflections or VR & cabinet modes
       || (!m_activeView->m_editorView // Apply player mode visibility mask (superseded by the editor's UI visibility in editor views)
-         && editable->GetPartGroup() != nullptr && (editable->GetPartGroup()->GetPlayerModeVisibilityMask() & m_activeView->m_visibilityMask) == 0))
+         && editable->GetPartGroup() != nullptr && (editable->GetPartGroup()->GetPlayerModeVisibilityMask() & m_activeView->m_visibilityMask) == 0)
+#if defined(VPX_STEAM_FRAME)
+      || ((m_vrPassthrough || (m_stereo3D != STEREO_VR && VPX::Passthrough::IsPreview())) && VPX::Passthrough::IsRoom(editable)) // Passthrough: the room is left out
+#endif
+      )
       return;
 
    const PartGroupData::SpaceReference spaceReference = editable->GetPartGroup() ? editable->GetPartGroup()->GetReferenceSpace() : PartGroupData::SpaceReference::SR_PLAYFIELD;
@@ -1596,7 +1608,11 @@ void Renderer::RenderUIScene()
    {
       // The projection layer below the UI quad has no scene content while loading, so clear it to black
       m_renderDevice->SetRenderTarget("Loading"s, backBuffer, false, true);
+#if defined(VPX_STEAM_FRAME)
+      m_renderDevice->Clear(clearType::TARGET, VPX::Passthrough::IsActive() ? 0x00000000 : 0xFF000000); // Transparent over the passthrough
+#else
       m_renderDevice->Clear(clearType::TARGET, 0xFF000000);
+#endif
    }
    m_renderDevice->SetRenderTarget("Loading"s, uiRT, false, true);
    m_renderDevice->Clear(clearType::TARGET, xrUILayer != nullptr ? 0x00000000 : 0xFF000000); // The XR UI quad layer is alpha blended over the projection layer

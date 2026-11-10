@@ -17,11 +17,12 @@
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/VRDevice.h"
-#if defined(VPX_STEAM_FRAME)
-#include "steamframe/DesktopDynamicResolution.h"
-#endif
 #if defined(ENABLE_XR)
 #include "renderer/VRControllerModels.h"
+#endif
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/DesktopDynamicResolution.h"
+#include "steamframe/Passthrough.h"
 #endif
 #include "renderer/Window.h"
 #include "renderer/trace.h"
@@ -1965,7 +1966,7 @@ RenderTarget* RenderView::ApplyStereo(RenderTarget* renderedRT, RenderTarget* ou
          }
       }
 
-      if (r->m_vrApplyColorKey)
+      if (r->IsVRAlphaOutput())
       {
          // Apply a color mask for color keying. For the time being, this is the only way we have to support mixed reality
          // as HMD does not expose passthrough layers to PCVR (at least Meta Quest 3, used for development).
@@ -2145,7 +2146,13 @@ void RenderView::Render()
       m_noBackdrop = !m_editorBackdropEdit // Force backdrop rendering if its being edited
          && ((g_pplayer->m_vrDevice != nullptr) || ((m_viewModeOverride != BG_INVALID ? m_viewModeOverride : r->m_table->GetViewMode()) == BG_FULLSCREEN) || m_editorView);
       if (g_pplayer->m_vrDevice)
-         m_visibilityMask = r->m_vrApplyColorKey ? PartGroupData::PlayerModeVisibilityMask::PMVM_MIXED_REALITY : PartGroupData::PlayerModeVisibilityMask::PMVM_VIRTUAL_REALITY;
+      {
+#if defined(VPX_STEAM_FRAME)
+         // Passthrough, switched live (src/steamframe/Passthrough.h): frames blended over the passthrough by the runtime, room left out
+         r->m_vrPassthrough = r->m_stereo3D == STEREO_VR && VPX::Passthrough::IsActive();
+#endif
+         m_visibilityMask = r->IsVRAlphaOutput() ? PartGroupData::PlayerModeVisibilityMask::PMVM_MIXED_REALITY : PartGroupData::PlayerModeVisibilityMask::PMVM_VIRTUAL_REALITY;
+      }
       else if ((m_viewModeOverride != BG_INVALID ? m_viewModeOverride : r->m_table->GetViewMode()) == BG_FULLSCREEN)
          m_visibilityMask = PartGroupData::PlayerModeVisibilityMask::PMVM_CABINET;
       else if ((m_viewModeOverride != BG_INVALID ? m_viewModeOverride : r->m_table->GetViewMode()) == BG_FSS)
@@ -2257,7 +2264,7 @@ void RenderView::Render()
 // Stereo depends on the render device capabilities and if all the needed buffers and shaders are available
 #ifdef ENABLE_XR
    const bool hasStereoPass
-      = m_applyPostFX && ((r->m_stereo3Denabled && (r->m_stereo3D != STEREO_OFF) && (r->m_stereo3D != STEREO_VR)) || ((r->m_stereo3D == STEREO_VR) && r->m_vrApplyColorKey));
+      = m_applyPostFX && ((r->m_stereo3Denabled && (r->m_stereo3D != STEREO_OFF) && (r->m_stereo3D != STEREO_VR)) || ((r->m_stereo3D == STEREO_VR) && r->IsVRAlphaOutput()));
 #else
    const bool hasStereoPass = m_applyPostFX && r->m_stereo3Denabled && (r->m_stereo3D != STEREO_OFF);
 #endif

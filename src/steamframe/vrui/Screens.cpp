@@ -14,6 +14,7 @@
 #include "renderer/Renderer.h"
 #include "steamframe/DesktopDynamicResolution.h"
 #include "steamframe/NaN.h"
+#include "steamframe/Passthrough.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
 #include "steamframe/LightMapPruning.h"
@@ -148,6 +149,31 @@ private:
                m_player->SetCloseState(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
             }));
       AddQuitItem(*this);
+   }
+};
+
+// Passthrough, the real room around the cabinet (VR & Room screen), switched live and saved at once for all the tables, like the Passthrough input action
+class PassthroughPage final : public InGameUIPage
+{
+public:
+   PassthroughPage()
+      : InGameUIPage("Passthrough"s, ""s, SaveMode::None)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propStandalone_Passthrough, //
+         []() { return VPX::Passthrough::IsWanted(); }, //
+         [](bool v) { VPX::Passthrough::SetWanted(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Passthrough status"s, "Whether the headset shows your room, and the button that switches it (Controls screen)"s,
+         [](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(VPX::Passthrough::GetStatus().c_str());
+         }));
    }
 };
 
@@ -585,6 +611,7 @@ constexpr const char* kInput = "settings/input";
 constexpr const char* kTableMisc = "table/general";
 constexpr const char* kThisTable = "vrui/table";
 constexpr const char* kMenuAndLobby = "vrui/menu-lobby";
+constexpr const char* kPassthrough = "vrui/passthrough";
 constexpr const char* kMoreControls = "vrui/more-controls";
 constexpr const char* kPerfPanel = "vrui/perf-panel";
 constexpr const char* kSimplifiedMeshes = "vrui/simplified-meshes";
@@ -608,6 +635,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Room:
       return {
+         Section { "Passthrough"s, kPassthrough, {}, true },
          Section { "Menu and lobby"s, kMenuAndLobby, {}, true },
          // Upstream 64a480a96 (2026-11-01): the headset's place is the same for all tables, the table offsets are this table's
          Section { "Position"s, kVR,
@@ -789,6 +817,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       if (!vr)
          return std::make_unique<PointOfViewSettingsPage>();
       sources.push_back(source(kVR, std::make_unique<VRSettingsPage>()));
+      sources.push_back(source(kPassthrough, std::make_unique<PassthroughPage>()));
       sources.push_back(source(kMenuAndLobby, std::make_unique<MenuAndLobbyPage>()));
       return CreateComposed(screen, "VR & Room"s, "Where the table and the cabinet stand in the room"s, std::move(sources));
    case Screen::Screens: return std::make_unique<DisplayHomePage>(); // Upstream's display settings: one page per window

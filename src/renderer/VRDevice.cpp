@@ -16,6 +16,7 @@
 #include "renderer/VertexBuffer.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
+#include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/Reflections.h"
 #endif
@@ -676,7 +677,15 @@ void VRDevice::SetupHMD()
    OPENXR_CHECK(xrEnumerateEnvironmentBlendModes(m_xrInstance, m_systemID, m_viewConfiguration, 0, &environmentBlendModeCount, nullptr), "Failed to enumerate EnvironmentBlend Modes.");
    m_environmentBlendModes.resize(environmentBlendModeCount);
    OPENXR_CHECK(xrEnumerateEnvironmentBlendModes(m_xrInstance, m_systemID, m_viewConfiguration, environmentBlendModeCount, &environmentBlendModeCount, m_environmentBlendModes.data()), "Failed to enumerate EnvironmentBlend Modes.");
-   #ifdef DEBUG
+   #if defined(VPX_STEAM_FRAME)
+      // Steam Frame Edition: logged in all builds, the passthrough needs the alpha blend mode (src/steamframe/Passthrough.h)
+      for (const auto environmentBlendMode : m_environmentBlendModes)
+      {
+         static const char* blendModeNames[] = { "Opaque", "Additive", "Alpha" };
+         PLOGI << "OpenXR supported blend mode: " << (1 <= environmentBlendMode && environmentBlendMode < 4 ? blendModeNames[environmentBlendMode - 1] : std::to_string(environmentBlendMode).c_str());
+      }
+      VPX::Passthrough::SetRuntimeSupport(std::ranges::find(m_environmentBlendModes, XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND) != m_environmentBlendModes.end());
+   #elif defined(DEBUG)
       for (const auto environmentBlendMode : m_environmentBlendModes)
       {
          static const char* blendModeNames[] = { "Opaque", "Additive", "Alpha" };
@@ -2206,7 +2215,7 @@ void VRDevice::EndSession()
          break;
       XrFrameEndInfo frameEndInfo { XR_TYPE_FRAME_END_INFO };
       frameEndInfo.displayTime = frameState.predictedDisplayTime;
-      frameEndInfo.environmentBlendMode = m_environmentBlendMode;
+      frameEndInfo.environmentBlendMode = GetFrameBlendMode();
       frameEndInfo.layerCount = 0;
       frameEndInfo.layers = nullptr;
       OPENXR_CHECK(xrEndFrame(m_session, &frameEndInfo), "Failed to end the XR frame while stopping the session.");
@@ -3176,7 +3185,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
    // Tell OpenXR that we are finished with this frame; specifying its display time, environment blending and layers.
    XrFrameEndInfo frameEndInfo { XR_TYPE_FRAME_END_INFO };
    frameEndInfo.displayTime = frameState.predictedDisplayTime;
-   frameEndInfo.environmentBlendMode = m_environmentBlendMode;
+   frameEndInfo.environmentBlendMode = GetFrameBlendMode();
    frameEndInfo.layerCount = static_cast<uint32_t>(renderLayerInfo.layers.size());
    frameEndInfo.layers = renderLayerInfo.layers.data();
    OPENXR_CHECK(xrEndFrame(m_session, &frameEndInfo), "Failed to end the XR Frame.");

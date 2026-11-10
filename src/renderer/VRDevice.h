@@ -140,6 +140,8 @@
    #include <condition_variable>
    #include <mutex>
    #include <thread>
+
+   #include "steamframe/Passthrough.h"
    #endif
 #endif
 
@@ -374,6 +376,12 @@ public:
    void PollEvents();
    void RenderFrame(class RenderDevice* rd, const std::function<void(RenderTarget* vrRenderTarget)>& submitFrame);
    RenderTarget* GetUIRenderTarget() const { return m_uiRenderTarget; } // Acquired swapchain target for the UI composition layer (or nullptr if unsupported/not acquired yet)
+   #if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the blend mode of the frame submitted, alpha blended over the passthrough of the headset while it is on (src/steamframe/Passthrough.h)
+   XrEnvironmentBlendMode GetFrameBlendMode() const { return VPX::Passthrough::IsActive() ? XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND : m_environmentBlendMode; }
+   #else
+   XrEnvironmentBlendMode GetFrameBlendMode() const { return m_environmentBlendMode; }
+   #endif
    #if defined(VPX_STEAM_FRAME)
    // Steam Frame Edition: the performance panel (src/steamframe/PerfPanel.h), drawn in a quad layer standing left of the cabinet (see PerfPanelLayer.cpp).
    // Acquired swapchain target of the panel for the frame being prepared, only when the panel has new content (nullptr otherwise): the logic thread

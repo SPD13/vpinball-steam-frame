@@ -193,6 +193,13 @@ public:
          map.MapAction(ButtonMapping::Create(joyId, 37), pininput->GetUIRightActionId());
          map.MapAction(ButtonMapping::Create(joyId, 39), pininput->GetLeftNudgeActionId()); // Bumpers
          map.MapAction(ButtonMapping::Create(joyId, 40), pininput->GetRightNudgeActionId());
+         #if defined(VPX_STEAM_FRAME)
+         // Steam Frame Edition: Y toggles the passthrough (src/steamframe/Passthrough.h). Left out of the check of the layout: a new entry there makes the
+         // whole layout apply again, which drops the player's own mappings of the controllers. The action has Y as its own default mapping instead
+         // (see InputManager::CheckPassthroughDefaultMapping), and the layout gives it when it is applied (first start, Defaults)
+         if (!map.IsTestingMapping())
+            map.MapAction(ButtonMapping::Create(joyId, 33), pininput->GetPassthroughActionId()); // Right Y button
+         #endif
          std::unique_ptr<PlungerSensor> plunger = std::make_unique<PlungerSensor>(pininput);
          plunger->GetPositionSensor()->SetMapping(SensorMapping::Create(joyId, 23, SensorMapping::Type::Position)); // Right stick Y
          plunger->GetPositionSensor()->GetMapping().SetScale(-1.f);

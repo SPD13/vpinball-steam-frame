@@ -14,6 +14,7 @@
 #include "ui/live/LiveUI.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
+#include "steamframe/Passthrough.h"
 #include "steamframe/vrui/UpdateCheck.h"
 #endif
 
@@ -87,6 +88,9 @@ InputManager::InputManager(Player* player, Settings& appSettings)
 
    for (const auto& action : m_inputActions)
       action->LoadMapping(settings);
+#if defined(VPX_STEAM_FRAME)
+   CheckPassthroughDefaultMapping();
+#endif
 
    m_nudgeHandler = std::make_unique<VPX::Physics::NudgeHandler>(this, m_appSettings);
 
@@ -717,6 +721,30 @@ void InputManager::PushTouchEvent(float relativeX, float relativeY, uint64_t tim
 
 #pragma region Action Management
 
+#if defined(VPX_STEAM_FRAME)
+// Steam Frame Edition: the Passthrough action comes mapped to Y of the right controller (its default mapping), unless the player already gave Y to
+// another action (docs/tutorials/Controller Buttons.md suggests it): it then starts unmapped, saved as such, so that Y does not do both
+void InputManager::CheckPassthroughDefaultMapping()
+{
+   InputAction* const passthrough = m_inputActions[m_passthroughActionId].get();
+   if (!passthrough->IsMapped() || passthrough->GetMappingString() != passthrough->GetDefaultMappingString())
+      return;
+   const uint16_t xrId = GetDeviceId("OpenXR"s);
+   const vector<ButtonMapping> y = ButtonMapping::Create(xrId, 33);
+   for (const auto& action : m_inputActions)
+   {
+      if (action.get() != passthrough && action->HasMapping(y))
+      {
+         PLOGI << "Y of the right controller is mapped to '" << action->GetLabel() << "': the Passthrough action is left unmapped";
+         passthrough->ClearMapping();
+         passthrough->SaveMapping(m_appSettings);
+         m_appSettings.Save();
+         return;
+      }
+   }
+}
+#endif
+
 void InputManager::CreateInputActions()
 {
 
@@ -865,6 +893,26 @@ void InputManager::CreateInputActions()
             if (isPressed)
                m_player->m_liveUI->ToggleFPS();
          }))->GetActionId();
+
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: passthrough on and off, the real room around the cabinet (src/steamframe/Passthrough.h). In the lobby too, where the table picker is
+   // always open. Y of the Steam Frame's right controller by default, which is free (see XRInputHandler::Bind, and CheckPassthroughDefaultMapping)
+   m_passthroughActionId = AddAction(
+      std::make_unique<InputAction>(this, "Passthrough"s, "Toggle Passthrough"s,
+   #ifdef ENABLE_XR
+         "OpenXR;33"s,
+   #else
+         ""s,
+   #endif
+         [this](const InputAction&, bool, bool isPressed)
+         {
+            if (!isPressed)
+               return;
+            VPX::Passthrough::Toggle();
+            static unsigned int notificationId = 0;
+            notificationId = m_player->m_liveUI->PushNotification("Passthrough: "s + VPX::Passthrough::GetStatus(), 2000, notificationId);
+         }))->GetActionId();
+#endif
 
    m_exitGameActionId = AddAction(
       std::make_unique<InputAction>(this, "ExitGame"s, "Exit Game"s, keyMapping(SDL_SCANCODE_ESCAPE),

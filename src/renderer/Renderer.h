@@ -499,6 +499,12 @@ private:
 
 public:
    bool m_vrApplyColorKey = false;
+#if defined(VPX_STEAM_FRAME)
+   bool m_vrPassthrough = false; // Steam Frame Edition: frames blended over the passthrough of the headset, room left out (src/steamframe/Passthrough.h), per frame
+   bool IsVRAlphaOutput() const { return m_vrApplyColorKey || m_vrPassthrough; } // Transparent where nothing was drawn (fs_pp_passthrough.sc)
+#else
+   bool IsVRAlphaOutput() const { return m_vrApplyColorKey; }
+#endif
    bool m_vrDesktopShrink = false;
 
    float GetVisualNudgeStrength() const { return m_visualNudgeStrength; }

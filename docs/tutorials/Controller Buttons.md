@@ -31,7 +31,8 @@ Jurassic Park (Sega 1997)*.
 | Menu button | Right | Quit the table, back to the lobby | |
 | A | Right | Start a game | Settings pages: save the changes |
 | B | Right | Insert a coin | Settings pages: undo the changes |
-| X, Y | Right | Not used: free for the action you want | |
+| Y | Right | Passthrough on / off: your own room around the cabinet | Also in the lobby |
+| X | Right | Not used: free for the action you want | |
 | Steam button | Left / right | Kept by SteamOS, not used by the game | |
 
 ### Triggers: the flippers
@@ -96,11 +97,14 @@ The menu button, the small button below Y on the right controller, quits the tab
 
 ### Steam buttons, X and Y
 
-The Steam buttons are kept by SteamOS: the game does not use them. X and Y do nothing by default: give them the action you want (step 2).
+The Steam buttons are kept by SteamOS: the game does not use them. Y switches the passthrough on and off: the headset shows your own room around
+the cabinet instead of the virtual room of the table and of the lobby (also in VR & Room > Passthrough). X does nothing by default: give it the
+action you want (step 2). If you had already given Y another action, Y keeps it and the passthrough has no button: give it one in Controls
+("Toggle Passthrough").
 
 ![The Steam buttons](img/controls-12-steam.jpg)
 
-![X and Y, free](img/controls-13-xy.jpg)
+![X, free, and Y, passthrough](img/controls-13-xy.jpg)
 
 ## 2. Give a button another action
 

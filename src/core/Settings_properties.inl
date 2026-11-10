@@ -1462,6 +1462,7 @@ PropBool(Standalone, WebServerAlwaysOn, "Wi-Fi upload always on"s, "Start the we
 PropBool(Standalone, WebServerPairing, "Wi-Fi upload pairing code"s, "Ask the browsers for the code displayed by the application before giving them access to the tables folder. When disabled, any device on the local network can add, change or delete tables."s, true);
 PropBool(Standalone, NewVRUI, "New UI"s, "Use the new menu (one menu with big icon buttons on the left) instead of the classic one. The VPX_VRUI environment variable (new or classic) overrides it."s, true);
 PropBool(Standalone, PerfPanel, "Performance panel"s, "The table's rating every 30 seconds against the native resolution and frame rate, with the frame rate, resolution, CPU and GPU use of the last 3 minutes. In VR, a panel left of the cabinet, facing the player; on a desktop or a cabinet, over the backglass window (over the playfield without one). Saved as soon as it is changed"s, false);
+PropBool(Standalone, Passthrough, "Passthrough"s, "Show the real room around you (the passthrough of the headset) instead of the virtual room of the lobby and the tables: only the cabinet is drawn. Needs a headset whose runtime blends the application over its passthrough. Toggled with the Passthrough action (Y on the Steam Frame). Saved as soon as it is changed"s, false);
 #endif
 PropFloat(Standalone, VRMenuDistance, "VR menu distance"s, "Distance in meters between the player and the menu window in VR"s, 0.3f, 3.f, 1.5f);
 
