@@ -36,6 +36,7 @@ constexpr float kUIPanelWidth = 2.8f;
 
 void VRDevice::CreateLoadingLayerSwapchain()
 {
+   CreatePassthroughBackdrop();
    m_loadingSwapchainInfo.backendFormat = m_backend->SelectColorSwapchainFormat(m_swapchainFormats);
    m_loadingSwapchainInfo.width = kLoadingLayerWidth;
    m_loadingSwapchainInfo.height = kLoadingLayerHeight;
@@ -64,6 +65,8 @@ void VRDevice::CreateLoadingLayerSwapchain()
 
 void VRDevice::CreateLoadingLayerViews()
 {
+   if (m_backdropSwapchainInfo.swapchain != XR_NULL_HANDLE && !m_backdropHasImage)
+      m_backend->CreateImageViews(m_backdropSwapchainInfo);
    if (m_loadingSwapchainInfo.swapchain == XR_NULL_HANDLE)
       return;
    m_backend->CreateImageViews(m_loadingSwapchainInfo);
@@ -76,6 +79,7 @@ void VRDevice::CreateLoadingLayerViews()
 // An image acquired and not drawn yet stays acquired (see ReleaseLoadingLayerImage), for the next table
 void VRDevice::DestroyLoadingLayerViews()
 {
+   DestroyPassthroughBackdropViews();
    m_loadingRenderTarget = nullptr;
    m_loadingRenderTargets.clear();
    m_loadingLayerUsable = false;
@@ -86,6 +90,7 @@ void VRDevice::DestroyLoadingLayerViews()
 
 void VRDevice::DestroyLoadingLayerSwapchain()
 {
+   DestroyPassthroughBackdrop();
    assert(m_loadingSwapchainInfo.imageViews.empty());
    if (m_loadingSwapchainInfo.swapchain != XR_NULL_HANDLE)
    {
@@ -106,6 +111,7 @@ bool VRDevice::IsLoadingLayerAvailable() const
 // released without being drawn would be the one the layer shows (it holds what an earlier frame drew, or nothing)
 void VRDevice::AcquireLoadingLayerImage(RenderDevice* rd)
 {
+   AcquirePassthroughBackdropImage(rd);
    m_loadingRenderTarget = nullptr;
    if (!m_loadingShown || !IsLoadingLayerAvailable())
       return;
@@ -137,6 +143,7 @@ void VRDevice::AcquireLoadingLayerImage(RenderDevice* rd)
 
 void VRDevice::ReleaseLoadingLayerImage()
 {
+   ReleasePassthroughBackdropImage();
    m_loadingRenderTarget = nullptr;
    if (!m_loadingImageAcquired || !m_loadingDrawn)
       return;
@@ -185,6 +192,136 @@ void VRDevice::AddLoadingLayer(std::vector<XrCompositionLayerBaseHeader*>& layer
    m_loadingLayer.pose = m_loadingLayerPose;
    m_loadingLayer.size = m_loadingLayerSize;
    layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&m_loadingLayer));
+}
+
+// Passthrough: the bridge submits no image of the scene, only the loading message. Blended over the passthrough, the runtime still shows black where
+// no projection layer says what is there: a projection layer of a small transparent image, cleared once by the first frame of a table (a static image),
+// stands for the scene between two tables.
+void VRDevice::CreatePassthroughBackdrop()
+{
+   m_backdropSwapchainInfo.backendFormat = m_backend->SelectColorSwapchainFormat(m_swapchainFormats);
+   m_backdropSwapchainInfo.width = kBackdropSize;
+   m_backdropSwapchainInfo.height = kBackdropSize;
+   m_backdropSwapchainInfo.arraySize = 1;
+   XrSwapchainCreateInfo swapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
+   swapchainCreateInfo.createFlags = XR_SWAPCHAIN_CREATE_STATIC_IMAGE_BIT;
+   swapchainCreateInfo.arraySize = 1;
+   swapchainCreateInfo.format = m_backdropSwapchainInfo.backendFormat;
+   swapchainCreateInfo.width = kBackdropSize;
+   swapchainCreateInfo.height = kBackdropSize;
+   swapchainCreateInfo.mipCount = 1;
+   swapchainCreateInfo.faceCount = 1;
+   swapchainCreateInfo.sampleCount = 1;
+   swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+   if (!XR_SUCCEEDED(xrCreateSwapchain(m_session, &swapchainCreateInfo, &m_backdropSwapchainInfo.swapchain)))
+   {
+      PLOGE << "Passthrough: the swapchain of the transparent image could not be created, black around the loading message between two tables";
+      m_backdropSwapchainInfo = {};
+      return;
+   }
+   uint32_t imageCount = 0;
+   OPENXR_CHECK(xrEnumerateSwapchainImages(m_backdropSwapchainInfo.swapchain, 0, &imageCount, nullptr), "Failed to enumerate passthrough backdrop Swapchain Images.");
+   XrSwapchainImageBaseHeader* images = m_backend->AllocateSwapchainImageData(m_backdropSwapchainInfo.swapchain, SwapchainType::COLOR, imageCount);
+   OPENXR_CHECK(xrEnumerateSwapchainImages(m_backdropSwapchainInfo.swapchain, imageCount, &imageCount, images), "Failed to enumerate passthrough backdrop Swapchain Images.");
+   m_backdropImageAcquired = false;
+   m_backdropHasImage = false;
+}
+
+void VRDevice::DestroyPassthroughBackdropViews()
+{
+   m_backdropRenderTarget = nullptr;
+   m_backdropTarget.reset();
+   for (const auto& imageView : m_backdropSwapchainInfo.imageViews)
+      bgfx::destroy(imageView);
+   m_backdropSwapchainInfo.imageViews.clear();
+}
+
+void VRDevice::DestroyPassthroughBackdrop()
+{
+   assert(m_backdropSwapchainInfo.imageViews.empty());
+   if (m_backdropSwapchainInfo.swapchain != XR_NULL_HANDLE)
+   {
+      m_backend->FreeSwapchainImageData(m_backdropSwapchainInfo.swapchain);
+      OPENXR_CHECK(xrDestroySwapchain(m_backdropSwapchainInfo.swapchain), "Failed to destroy the passthrough backdrop Swapchain");
+   }
+   m_backdropSwapchainInfo = {};
+   m_backdropImageAcquired = false;
+   m_backdropHasImage = false;
+}
+
+// Until a frame cleared it: the logic thread clears it with the UI (LiveUI::RenderUI)
+void VRDevice::AcquirePassthroughBackdropImage(RenderDevice* rd)
+{
+   m_backdropRenderTarget = nullptr;
+   if (m_backdropHasImage || m_backdropSwapchainInfo.swapchain == XR_NULL_HANDLE || m_backdropSwapchainInfo.imageViews.empty())
+      return;
+   if (!m_backdropImageAcquired)
+   {
+      constexpr XrSwapchainImageAcquireInfo acquireInfo { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO, nullptr };
+      if (!XR_SUCCEEDED(xrAcquireSwapchainImage(m_backdropSwapchainInfo.swapchain, &acquireInfo, &m_backdropImageIndex)))
+         return;
+      XrSwapchainImageWaitInfo waitInfo = { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
+      waitInfo.timeout = XR_INFINITE_DURATION;
+      OPENXR_CHECK(xrWaitSwapchainImage(m_backdropSwapchainInfo.swapchain, &waitInfo), "Failed to wait for Image from the passthrough backdrop Swapchain");
+      m_backdropImageAcquired = true;
+   }
+   if (m_backdropImageIndex >= m_backdropSwapchainInfo.imageViews.size())
+      return;
+   if (m_backdropTarget == nullptr)
+   {
+      bgfx::Attachment attachment;
+      attachment.init(m_backdropSwapchainInfo.imageViews[m_backdropImageIndex], bgfx::Access::Write, 0, 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      bgfx::TextureHandle depthHandle = BGFX_INVALID_HANDLE;
+      m_backdropTarget = std::make_unique<RenderTarget>(rd, SurfaceType::RT_DEFAULT, fbh, attachment.handle, m_backdropSwapchainInfo.format, depthHandle,
+         bgfx::TextureFormat::Enum::Unknown, "VRPassthroughBackdrop"s, kBackdropSize, kBackdropSize, colorFormat::RGBA);
+   }
+   m_backdropDrawn = false;
+   m_backdropRenderTarget = m_backdropTarget.get();
+}
+
+void VRDevice::ReleasePassthroughBackdropImage()
+{
+   m_backdropRenderTarget = nullptr;
+   if (!m_backdropImageAcquired || !m_backdropDrawn)
+      return;
+   m_backdropImageAcquired = false;
+   constexpr XrSwapchainImageReleaseInfo releaseInfo { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO, nullptr };
+   OPENXR_CHECK(xrReleaseSwapchainImage(m_backdropSwapchainInfo.swapchain, &releaseInfo), "Failed to release Image back to the passthrough backdrop Swapchain");
+   m_backdropHasImage = true;
+   PLOGI << "Passthrough: transparent image of the bridge ready";
+}
+
+// From the bridge: the transparent image in front of the eyes, for the frame
+void VRDevice::AddPassthroughBackdrop(std::vector<XrCompositionLayerBaseHeader*>& layers, XrTime displayTime)
+{
+   if (!m_backdropHasImage || m_referenceSpace == XR_NULL_HANDLE || m_viewConfigurationViews.empty() || !VPX::Passthrough::IsActive())
+      return;
+   XrViewLocateInfo viewLocateInfo { XR_TYPE_VIEW_LOCATE_INFO };
+   viewLocateInfo.viewConfigurationType = m_viewConfiguration;
+   viewLocateInfo.displayTime = displayTime;
+   viewLocateInfo.space = m_referenceSpace;
+   XrViewState viewState { XR_TYPE_VIEW_STATE };
+   m_backdropXrViews.assign(m_viewConfigurationViews.size(), { XR_TYPE_VIEW });
+   uint32_t viewCount = 0;
+   if (xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(m_backdropXrViews.size()), &viewCount, m_backdropXrViews.data()) != XR_SUCCESS
+      || viewCount == 0 || (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
+      return;
+   m_backdropViews.assign(viewCount, { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW });
+   for (uint32_t i = 0; i < viewCount; i++)
+   {
+      m_backdropViews[i].pose = m_backdropXrViews[i].pose;
+      m_backdropViews[i].fov = m_backdropXrViews[i].fov;
+      m_backdropViews[i].subImage.swapchain = m_backdropSwapchainInfo.swapchain;
+      m_backdropViews[i].subImage.imageRect = { { 0, 0 }, { static_cast<int32_t>(kBackdropSize), static_cast<int32_t>(kBackdropSize) } };
+      m_backdropViews[i].subImage.imageArrayIndex = 0;
+   }
+   m_backdropLayer = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+   m_backdropLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+   m_backdropLayer.space = m_referenceSpace;
+   m_backdropLayer.viewCount = viewCount;
+   m_backdropLayer.views = m_backdropViews.data();
+   layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&m_backdropLayer));
 }
 
 // From the render thread, once the table is detached from the session (see ReleaseSession): the bridge submits the frames until the render thread of
@@ -277,7 +414,10 @@ void VRDevice::BridgeLoop()
          continue;
       std::vector<XrCompositionLayerBaseHeader*> layers;
       if (frameState.shouldRender)
+      {
+         AddPassthroughBackdrop(layers, frameState.predictedDisplayTime); // Under the message, while the passthrough is on
          AddLoadingLayer(layers);
+      }
       XrFrameEndInfo frameEndInfo { XR_TYPE_FRAME_END_INFO };
       frameEndInfo.displayTime = frameState.predictedDisplayTime;
       frameEndInfo.environmentBlendMode = GetFrameBlendMode(); // Over the passthrough when it is on
