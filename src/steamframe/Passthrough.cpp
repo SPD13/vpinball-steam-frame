@@ -49,15 +49,27 @@ static int s_preview = -1;
 
 static std::unordered_set<const IEditable*> s_roomParts;
 
+// The state saved when it was last changed, so that the application starts as it was left: read once, by the first query (the settings are not
+// loaded yet when the application object is made, they are when the first table starts), then only changed by SetWanted, which saves it
+static std::once_flag s_loaded;
+
+static void EnsureLoaded() { std::call_once(s_loaded, Load); }
+
 void Load()
 {
    s_wanted = g_settingsService.GetAppSettings().GetStandalone_Passthrough();
+   PLOGI << "Passthrough " << (s_wanted ? "on" : "off") << " (saved setting)";
 }
 
-bool IsWanted() { return s_wanted; }
+bool IsWanted()
+{
+   EnsureLoaded();
+   return s_wanted;
+}
 
 void SetWanted(bool wanted)
 {
+   std::call_once(s_loaded, [] { }); // A change before the first query: the saved state is replaced, not read
    s_wanted = wanted;
    Settings& settings = g_settingsService.GetAppSettings();
    settings.SetStandalone_Passthrough(wanted, false);
@@ -67,7 +79,7 @@ void SetWanted(bool wanted)
 
 bool Toggle()
 {
-   SetWanted(!s_wanted);
+   SetWanted(!IsWanted());
    return s_wanted;
 }
 
@@ -81,7 +93,11 @@ bool IsKnown() { return s_known; }
 
 bool IsSupported() { return s_supported; }
 
-bool IsActive() { return s_wanted && s_supported; }
+bool IsActive()
+{
+   EnsureLoaded();
+   return s_wanted && s_supported;
+}
 
 bool IsPreview()
 {
@@ -276,10 +292,7 @@ void LoadExceptions(const std::filesystem::path& path, const string& tableFile, 
 
 void ClassifyTable(PinTable* table)
 {
-   // The setting is read when the first table starts (the settings are not loaded yet when the application object is made); it is only changed
-   // by SetWanted afterwards, which saves it
-   static std::once_flag loaded;
-   std::call_once(loaded, Load);
+   EnsureLoaded(); // At the latest when the first table starts
    s_roomParts.clear();
    if (table == nullptr)
       return;
@@ -397,7 +410,7 @@ string GetStatus()
 {
    if (s_known && !s_supported)
       return "Not offered by the runtime of this headset"s;
-   return s_wanted ? "On: your room around the cabinet"s : "Off: the room of the table"s;
+   return IsWanted() ? "On: your room around the cabinet"s : "Off: the room of the table"s;
 }
 
 }
