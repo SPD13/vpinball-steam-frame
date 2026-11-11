@@ -34,7 +34,7 @@
 <text class="name" x="700" y="195" text-anchor="start">Thumbstick</text>
 <text class="role" x="700" y="219" text-anchor="start">tilt: nudge</text>
 <text class="role" x="700" y="243" text-anchor="start">menu: up / down</text>
-<text class="role" x="700" y="267" text-anchor="start">click: align the view</text>
+<text class="role" x="700" y="267" text-anchor="start">click: cabinet positioning</text>
 <path class="halo" d="M694,189 L613,247"/>
 <path class="arrow" d="M694,189 L613,247"/>
 <text class="name" x="1080" y="26" text-anchor="middle">Menu button</text>
@@ -42,7 +42,8 @@
 <path class="halo" d="M1080,76 L1080,176"/>
 <path class="arrow" d="M1080,76 L1080,176"/>
 <text class="name" x="1258" y="174" text-anchor="start">Y, X</text>
-<text class="role" x="1258" y="198" text-anchor="start">passthrough on/off, free</text>
+<text class="role" x="1258" y="198" text-anchor="start">Y: passthrough on / off</text>
+<text class="role" x="1258" y="222" text-anchor="start">X: free</text>
 <path class="halo" d="M1250,168 L1164,196"/>
 <path class="arrow" d="M1250,168 L1164,196"/>
 <path class="halo" d="M1250,168 L1128,236"/>
