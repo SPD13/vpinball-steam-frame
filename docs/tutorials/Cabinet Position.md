@@ -8,6 +8,10 @@ with the two controllers, then changes its height in the menu, and saves both fo
 
 **▶ [Watch the video](https://youtu.be/77ja0ALSwuw)** (1:23): the same steps in the headset. The text below follows it, with more details.
 
+This tutorial was made before the **cabinet positioning mode**: the left thumbstick now shows your room and puts the lockbar on a
+real edge, a desk or a shelf, inside your play area. See [Cabinet positioning mode](Cabinet%20Positioning%20Mode.md) for it; the menu
+settings below are the same.
+
 The examples are *VR ROOM Addams Family (Bally 1992) v2.0* and *Ready Player One*. Everything happens in the headset: no browser is
 needed.
 
