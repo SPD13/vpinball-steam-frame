@@ -1608,14 +1608,16 @@ void Renderer::RenderUIScene()
    {
       // The projection layer below the UI quad has no scene content while loading, so clear it to black
       m_renderDevice->SetRenderTarget("Loading"s, backBuffer, false, true);
-#if defined(VPX_STEAM_FRAME)
-      m_renderDevice->Clear(clearType::TARGET, VPX::Passthrough::IsActive() ? 0x00000000 : 0xFF000000); // Transparent over the passthrough
-#else
       m_renderDevice->Clear(clearType::TARGET, 0xFF000000);
-#endif
    }
    m_renderDevice->SetRenderTarget("Loading"s, uiRT, false, true);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: no UI quad layer (the UI panel is drawn with the scene), the loading frames go straight to the headset image: transparent over
+   // the passthrough when it is on (src/steamframe/Passthrough.h), the loading message being in a layer of its own (src/steamframe/XRBridge.cpp)
+   m_renderDevice->Clear(clearType::TARGET, xrUILayer != nullptr || (m_stereo3D == STEREO_VR && VPX::Passthrough::IsActive()) ? 0x00000000 : 0xFF000000);
+#else
    m_renderDevice->Clear(clearType::TARGET, xrUILayer != nullptr ? 0x00000000 : 0xFF000000); // The XR UI quad layer is alpha blended over the projection layer
+#endif
    g_pplayer->m_liveUI->RenderUI();
    if (uiRT != backBuffer && xrUILayer == nullptr)
    {

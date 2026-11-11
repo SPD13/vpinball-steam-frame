@@ -137,7 +137,8 @@ Files: `lib/src/WebServer.h/.cpp`, `src/assets/web/app.js`, `src/assets/web/vpx.
 
 The web server and its page are upstream's. Changes:
 
-- `WebServer`, `ZipUtils` and mongoose compiled into the macOS, Linux and windows-mingw executables by `steamframe/steamframe.cmake` (`VPX_TABLE_WEBSERVER` compile definition, `zip` linked, `libzip.so*` copied on Linux). `Launcher::GetWebServer()` owns the instance. The routes of the tables and scores pages are in `src/steamframe/WebServerLibrary.cpp`.
+- `WebServer`, `ZipUtils` and mongoose compiled into the macOS, Linux and windows-mingw executables by `steamframe/steamframe.cmake` (`VPX_TABLE_WEBSERVER` compile definition; `ZipUtils` uses the miniz that VPX builds since upstream 4492fc616, the libzip that the fork built
+  for it until then was dropped). `Launcher::GetWebServer()` owns the instance. The routes of the tables and scores pages are in `src/steamframe/WebServerLibrary.cpp`.
 - No longer depends on the mobile library: events go through two functions that raise the mobile events or, on desktop, ask the table library to rescan.
 - On desktop it only exposes the table library folder, and any change made from the browser triggers a rescan.
 - **Pairing code** (desktop): API routes answer 401 until the browser has posted the 6-digit code shown in the picker to `/pair`; it then holds a random session token in an HttpOnly cookie. Five wrong codes replace the code. Codes and tokens are dropped when the server stops. `SetPairingRequired()` controls it; the mobile builds keep it off. The page asks for the code when it receives a 401, so with pairing off it opens directly.
@@ -525,8 +526,9 @@ The real room of the player around the cabinet, instead of the virtual room of t
   OpenVR issue 1926), not documented by Valve.
 - **Transparent background.** The post pass of upstream's color keyed passthrough (`fs_pp_passthrough.sc`) runs: alpha 0 where nothing was
   drawn (depth cleared), opaque elsewhere; the projection layer already blends on alpha. The part groups use the mixed reality visibility mask,
-  as with color keying, so tables made with a mixed reality room show it. While a table loads, the projection layer is cleared transparent, so the
-  loading message floats in the room. Between two tables, the XR bridge (section 20) has no image of the scene: without a projection layer the
+  as with color keying, so tables made with a mixed reality room show it. While a table loads, its frames (`Renderer::RenderUIScene`) are cleared transparent, so the
+  loading message floats in the room: the Frame build has no UI quad layer (the UI panel is drawn with the scene), so this is the clear of the
+  headset image itself, upstream's opaque black otherwise. Between two tables, the XR bridge (section 20) has no image of the scene: without a projection layer the
   runtime shows black, not the passthrough, so the bridge submits a projection layer of a 16x16 transparent static image (cleared once by the
   first frame of a table, `XRBridge.cpp` `AddPassthroughBackdrop`) under the message while the passthrough is on.
 - **The room left out.** `Passthrough::ClassifyTable` (Renderer constructor) finds the room parts of the played table, visible or not (scripts
@@ -560,11 +562,13 @@ Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` membe
 `src/ui/live/LiveUI.h/.cpp`, `src/input/InputManager.cpp`, `src/core/player.cpp`, `src/steamframe/vrui/Screens.cpp`, `src/steamframe/Passthrough.h/.cpp`,
 `src/core/Settings_properties.inl`.
 
-- **The mode reuses upstream's controller view centering** (`VRDevice::RenderFrame`): the middle of the two controllers (grip poses) is the
-  middle of the lockbar, their direction its orientation, their height its height. The cabinet follows them live (drag and drop).
+- **The mode reuses upstream's controller view centering** (`VRDevice::RenderFrame`, the controller recenter since upstream 2ad1916b2): the middle
+  of the two controllers (grip poses) is the middle of the lockbar, their direction its orientation, their height its height (through the room
+  offset Z since upstream 2ae5f89e3, the lockbar height setting is left as it is). The cabinet follows them live (drag and drop).
 - **Fixed cabinet size when placing** (`Standalone.PlacementFixedSize`, on by default): the lockbar width, and so the scale of the cabinet, does
   not follow the distance between the controllers; only the place, height and orientation do (the legs stretch to the floor with *Lock Feet to
-  Ground*). Off: upstream's behaviour, the width between the controllers is the lockbar width.
+  Ground*). Off: upstream's behaviour, the width between the controllers (plus `PlayerVR.ControllerCabWidthOffset`) is the lockbar width, when
+  the lockbar width is custom (`PlayerVR.OverrideLockbarWidth`, on by default).
 - **Start:** the *Cabinet positioning mode* item of VR & Room > Cabinet positioning (it closes the menu), or the *Align VR view using controllers*
   action (left thumbstick click by default), which the fork turns into this mode. The passthrough is forced on while placing
   (`Passthrough::SetForced`, not saved), then back to the setting: on if it was on, off otherwise.
@@ -575,11 +579,11 @@ Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` membe
   reference space. Both ends of the lockbar are checked: green 30 cm or more inside, orange closer, red outside. Unknown bounds (no stage, or no
   play area set) are not checked (grey).
 - **Fix:** the same button again. Refused in the red (a notification says why, the mode goes on). The placement kept is the one of 250 ms before
-  the press, as clicking the thumbstick moves the controller. It is saved at once (`SaveVRSettings`: orientation, X/Y, lockbar height and width),
-  for all tables. The values are written by the logic thread and again by the render thread before its next frame (`ApplyCabinetPlacement`).
+  the press, as clicking the thumbstick moves the controller. It is saved at once (`SaveVRSettings`: room yaw and offset X/Y/Z, and the lockbar
+  width when the controllers measured it), for all tables. The values are written by the logic thread and again by the render thread before its next frame (`ApplyCabinetPlacement`).
 - **Cancel:** opening the menu, or closing the table: the previous placement back.
-- **Range:** the X/Y offsets (`PlayerVR.HeadSetX/Y`) go to ±500 cm in the Frame build (±100 upstream), so that the cabinet may stand anywhere in a
-  large play area.
+- **Range:** the room offsets (`PlayerVR.RoomOffsetX/Y/Z`) go to ±1000 cm upstream since 2ad1916b2, enough for a large play area (the fork widened
+  the former `HeadSetX/Y` to ±500 cm until then). `Launcher::MigrateSettings` moves the former settings to the new names once.
 - **Recenter first:** the placement is relative to the origin of the stage; a Steam recenter afterwards may move it, the cabinet with it.
 
 ## Effects on existing builds
@@ -610,13 +614,14 @@ New:
 steamframe/README.md                    how the fork is organized, and how to sync with upstream
 steamframe/steamframe.cmake             build of the fork (sources, VPX_STEAM_FRAME, libraries)
 steamframe/deps/libarchive.sh           xz + libarchive, run by platforms/*/external.sh
-steamframe/deps/libzip.sh               libzip (web server), run by platforms/*/external.sh (upstream builds it for Android only)
 steamframe/patches/bgfx/                bgfx patches (see below)
 steamframe/patches/pinmame/             libpinmame patches: memory maps of 4-bit memory, nibble before mask (docs/PinMAME Memory Maps on 4-bit Memory.md); banks followed (docs/PinMAME Memory Maps on Banked Memory.md)
 steamframe/tools/                       sync-upstream.sh, fold-fixups.py, upstream-report.sh
 src/steamframe/Launcher.h
 src/steamframe/Launcher.cpp             table library, scores, web server, lobby and launcher mode (g_launcher, owned by VPApp)
 src/steamframe/PlayerTableImage.cpp     Player members for the table images
+src/steamframe/fonts/                   Fork Awesome icons of the fork's menus (upstream's LiveUI moved to a subset of Lucide on 2026-11-09),
+                                        merged into LiveUI's base font by VPX::AddForkAwesomeIcons (SIL Open Font License 1.1)
 src/steamframe/XRBridge.cpp             VRDevice members: the loading message in a layer of its own, and the frames submitted between two tables (section 20)
 src/steamframe/WebServerLibrary.cpp     WebServer routes of the tables and scores pages
 src/steamframe/WebServerBackup.cpp      WebServer routes of the backup page (section 16)
@@ -679,7 +684,6 @@ CMakeLists.txt                          ENABLE_XR option for Linux and windows-m
 make/CMakeLists_sources.txt             VRControllerModels, MessagePage
 make/vpx-core.vcxitems, .filters        VRControllerModels, MessagePage
 platforms/linux-aarch64/external.sh     bgfx patches of steamframe/patches/bgfx, steamframe/deps scripts
-platforms/macos-*/external.sh           steamframe/deps/libzip.sh
 platforms/{macos-*,linux-*,windows-mingw-x64}/external.sh   libpinmame patch of steamframe/patches/pinmame (cache tag -memmap2)
 steamframe/patches/pinmame/02-memmap-follow-banks.patch   memory maps and main CPU reads follow the banks (Williams System 7)
 steamframe/patches/bgfx/01-turnip-descriptor-pool.patch   descriptor pools without the free-set flag (section 7)
