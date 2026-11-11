@@ -1493,12 +1493,14 @@ bool Renderer::NeedsUpscaling(const RenderView* view) const
    // scene is rendered into a part of its buffers (see RenderView::Render), stretched to the window here with a filtered copy (the last pass
    // before would stretch it with its own sampling, unfiltered for the tonemapping without supersampling). In VR, the runtime is told
    // which part of the swapchain image was drawn.
-   return view->GetBackBufferTexture()->GetWidth() < view->m_renderWidth || (m_stereo3D != STEREO_VR && m_renderDevice->GetRenderScale() < 1.f);
+   int renderWidth, renderHeight;
+   view->GetRenderSize(renderWidth, renderHeight);
+   return view->GetBackBufferTexture()->GetWidth() < renderWidth || (m_stereo3D != STEREO_VR && m_renderDevice->GetRenderScale() < 1.f);
 }
 
 bool Renderer::IsFXAALumaInAlpha(const RenderView* view, const RenderTarget* tonemapRT) const
 {
-   return (m_FXAA == Fast_FXAA || m_FXAA == Standard_FXAA || m_FXAA == Quality_FXAA) && tonemapRT == view->m_pPostProcessRenderTarget1
+   return (m_FXAA == Fast_FXAA || m_FXAA == Standard_FXAA || m_FXAA == Quality_FXAA) && tonemapRT == view->PeekPostProcessRenderTarget1()
       && tonemapRT->GetColorFormat() == colorFormat::RGBA8 && g_pplayer->GetInfoMode() != IF_AO_ONLY;
 }
 
@@ -1536,14 +1538,16 @@ void Renderer::RenderUIScene()
    {
       // The projection layer below the UI quad has no scene content while loading, so clear it to black
       m_renderDevice->SetRenderTarget("Loading"s, backBuffer, false, true);
-#if defined(VPX_STEAM_FRAME)
-      m_renderDevice->Clear(clearType::TARGET, VPX::Passthrough::IsActive() ? 0x00000000 : 0xFF000000); // Transparent over the passthrough
-#else
       m_renderDevice->Clear(clearType::TARGET, 0xFF000000);
-#endif
    }
    m_renderDevice->SetRenderTarget("Loading"s, uiRT, false, true);
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: no UI quad layer (the UI panel is drawn with the scene), the loading frames go straight to the headset image: transparent over
+   // the passthrough when it is on (src/steamframe/Passthrough.h), the loading message being in a layer of its own (src/steamframe/XRBridge.cpp)
+   m_renderDevice->Clear(clearType::TARGET, xrUILayer != nullptr || (m_stereo3D == STEREO_VR && VPX::Passthrough::IsActive()) ? 0x00000000 : 0xFF000000);
+#else
    m_renderDevice->Clear(clearType::TARGET, xrUILayer != nullptr ? 0x00000000 : 0xFF000000); // The XR UI quad layer is alpha blended over the projection layer
+#endif
    g_pplayer->m_liveUI->RenderUI();
    if (uiRT != backBuffer && xrUILayer == nullptr)
    {
