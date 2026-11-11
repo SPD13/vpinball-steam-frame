@@ -46,6 +46,8 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** (see [PinMAME ROM aliases](#pinmame-rom-aliases)).
 - **Fixes for broken tables and ROMs**: some tables and games do not work as they are, because of a bug in their script or a setting of their ROM. The game ships fixes for the ones found so far, each with the record of what it changes and why. Tables you add get the fixes they need by themselves; the ones already on the Frame get them with **Patch table** in their menu, in the headset or in the browser. The table files themselves are never changed (see [How to patch a broken table?](#how-to-patch-a-broken-table)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
+- **Passthrough, exclusive to this fork**: play in your own room. The headset shows your real room around the cabinet instead of the virtual room of the table and of the lobby: the walls, floors and scenery of every table are left out, its cabinet and backglass stay. **Y** switches it on and off at any time, in a table or in the lobby, and the game starts again as you left it; also in **VR & Room > Passthrough**. The loading message between two tables floats in your room too. Tables without a cabinet model show their playfield floating in the room ([see below](#passthrough)).
+- **Cabinet positioning mode, exclusive to this fork**: stand the cabinet against a real piece of furniture. The headset shows your room, a bar joins the two controllers with the lockbar drawn on it, and the lockbar follows them as you hold them on a real edge, a desk or a shelf; a press fixes the cabinet there, for every table. The cabinet keeps its size, and it can't be fixed outside the play area set in SteamVR: the lockbar turns orange near its edge and red outside ([see below](#cabinet-position)).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
@@ -488,7 +490,7 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 
 **▶ [See instructions](/docs/tutorials/Controller%20Buttons.md)**
 
-![The Steam Frame controllers with the role of each control: on the left controller, the view button opens the menu, the d-pad navigates the menu, the thumbstick nudges, the grip is the left magna-save; on the right controller, the menu button quits the table, B inserts a coin, A starts a game, X and Y are free, the thumbstick is the plunger, the grip is the right magna-save; the Steam buttons stay with SteamOS; underneath, the triggers are the flippers and the bumpers nudge](/docs/img/steam-frame-controllers.svg)
+![The Steam Frame controllers with the role of each control: on the left controller, the view button opens the menu, the d-pad navigates the menu, the thumbstick nudges and its click starts the cabinet positioning mode, the grip is the left magna-save; on the right controller, the menu button quits the table, B inserts a coin, A starts a game, Y switches the passthrough on and off, X is free, the thumbstick is the plunger, the grip is the right magna-save; the Steam buttons stay with SteamOS; underneath, the triggers are the flippers and the bumpers nudge](/docs/img/steam-frame-controllers.svg)
 
 | Control | Controller | During a game | In the menu |
 | --- | --- | --- | --- |
@@ -497,7 +499,7 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 | Bumper | Left / right | Nudge the table to the left / to the right | |
 | Grip | Left / right | Left / right magna-save | |
 | Thumbstick | Left | Tilt it to nudge the table (the further, the harder) | Up / down: move the selection |
-| Thumbstick click | Left | Align the view using the controllers (on / off) | |
+| Thumbstick click | Left | Cabinet positioning mode: press to start, press again to fix the cabinet (see [Cabinet position](#cabinet-position)) | |
 | Thumbstick | Right | Plunger: pull the stick down (towards you) and let go | Left / right: change a value |
 | Thumbstick click | Right | Launch ball (tables with a launch button) | Settings pages: reset to the defaults |
 | D-pad | Left | | Move the selection; left / right changes a value |
@@ -505,12 +507,52 @@ The Steam Frame controllers work out of the box. Each button has a default role,
 | Menu button | Right | Quit the table, back to the lobby | |
 | A | Right | Start a game | Settings pages: save the changes |
 | B | Right | Insert a coin | Settings pages: undo the changes |
-| X, Y | Right | Not used: free to map to another action | |
+| Y | Right | Passthrough on / off: your own room around the cabinet (see [Passthrough](#passthrough)) | Also in the lobby |
+| X | Right | Not used: free to map to another action | |
 | Steam button | Left / right | Kept by SteamOS, not used by the game | |
+
+## Passthrough
+
+Press **Y** to see your own room around the cabinet: the headset shows the real room instead of the virtual room of the table, and of the lobby. The cabinet, its backglass and the table stay; the walls, floors and scenery of the table are left out. Press **Y** again to get the virtual room back. The same switch is in the menu, under **VR & Room > Passthrough**, with a line saying whether the headset shows your room. The choice is kept for every table and for the next starts of the game.
+
+Good to know:
+
+- Tables made with no cabinet show their playfield floating in your room.
+- If you had already given **Y** another action, Y keeps it and the passthrough has no button: give it one in **Controls**, "Toggle Passthrough".
+- Combined with the cabinet positioning mode below, the cabinet can stand against a real desk or table of your room.
 
 ## Cabinet position
 
-The cabinet can stand wherever suits the place where you play: a free spot of your room, or a real table under your hands. Hold the two controllers where the two ends of the lockbar should be and press the **left thumbstick**: the cabinet follows the controllers until the next press. Fine-tune its height and position in the menu, under **VR & Room**. The position belongs to your room, not to a table, so every table starts at the same place.
+The cabinet can stand wherever suits the place where you play: a free spot of your room, or a real piece of furniture under your hands. The **cabinet positioning mode** puts its lockbar, the front rail of the cabinet where your hands rest, on a real edge that you show with the two controllers. The position belongs to your room, not to a table, so every table starts at the same place.
+
+### Before you start
+
+- **Set your play area in SteamVR** and stand in it, as for any VR game. The game checks that the cabinet stands inside it, so that you can walk around it.
+- **Recenter with Steam** if needed, facing the way you want to play. The cabinet is placed relative to the play area: recentering after placing it may move it along.
+
+### Place the cabinet
+
+1. Open the menu, choose **VR & Room** (the cube icon in the rail), then **Cabinet positioning > Cabinet positioning mode**. Or simply press the **left thumbstick** (push it in until it clicks), during a table.
+2. The menu closes and the headset shows your room, even when the passthrough was off. A thin white bar joins the two controllers, with the lockbar of the cabinet drawn on it at its real width, and a message: *Move the lockbar to the desired position and press a button*.
+3. Hold the two controllers on the real edge where the lockbar should be, a desk, a table or a shelf, one at each end. The lockbar follows them: their middle, their height, and the direction of the line between them. The cabinet keeps its size: holding the controllers closer or further apart does not change it.
+4. Watch the color of the lockbar, and the line under the message:
+   - **green**: inside the play area;
+   - **orange**: inside, but closer than 30 cm to its edge;
+   - **red**: outside the play area. The cabinet can't be fixed there; move it back inside.
+5. Press the **left thumbstick** again. The cabinet stands there, *Cabinet placed* is shown, and the passthrough goes back to what it was before: off if it was off.
+
+To cancel, open the menu: the cabinet goes back to where it was.
+
+The position is saved at once for every table: the next table starts at the same place, turned the same way, at the same height.
+
+### Fine-tuning
+
+- The **Position** and **Cabinet** sections of **VR & Room** show where the cabinet was placed: its orientation, its offsets, and the height of its lockbar. Change them there to move it by a few centimeters.
+- **Fixed cabinet size when placing**, under **VR & Room > Cabinet positioning**, is on by default. Turn it off to let the distance between the controllers set the width of the lockbar, and so the size of the table: hold them about 70 cm apart for a real cabinet.
+- **Lock Feet to Ground**, in the **Room** section (on by default), keeps the feet of the cabinet on the floor at any lockbar height. Turn it off to play a small table seated at a desk.
+- When SteamVR has no play area, the check is skipped: the lockbar stays grey and the cabinet can be fixed anywhere.
+
+The video and the instructions below were made before the cabinet positioning mode: the cabinet follows the controllers in the virtual room, and the distance between them sets its size, as with **Fixed cabinet size when placing** turned off. The menu settings they show are the same.
 
 **▶ [See this in video](https://youtu.be/77ja0ALSwuw)**
 
