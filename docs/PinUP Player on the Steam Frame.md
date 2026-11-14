@@ -60,8 +60,12 @@ Every part is described file by file in section 8.
 ## 3. The cabinet surfaces (`CabinetDisplays`)
 
 Created when the table uses PuP and runs in VR (`VPX_CABINET_DISPLAYS=1` forces them on a desktop, to test on the Mac), in
-`Player::InitTableSession`, after the parts are loaded and **before the table script runs**: what the script moves at init (DMD
-flashers of the VR room, `VR_PupBackglass` made visible) is not seen yet.
+`Player::InitTableSession`, after the parts are loaded and **before the table script runs**. Many VR rooms move their parts at init
+(Total Nuclear Annihilation's `SetBackglass` moves its DMD flasher `BGDMD` 190 units toward the player), so the surfaces are **placed
+again at the first frame**, from the parts as the script left them (`[CabinetDisplays] DMD placed again, the table script moved the
+parts of the cabinet at its init` in the log, only when a place changed). After that, they follow the table's DMD and backglass
+flashers they stand on when the script moves them (checked at each frame, placed again 4 times a second at most); the primitives of
+the cabinet are not followed after the first frame.
 
 - **Backglass**: the table's backglass flasher (*External renderer*, style Backglass) when it has one. Otherwise the glass of the VR
   cabinet, a primitive named like a backglass (`PinCab_Backglass`, `VR_Backglass`...), trimmed above a DMD standing on it and moved
@@ -285,6 +289,12 @@ section 9, which are generic.
   context comes from `Renderer::GetAncillaryRenderContext` with the canvas of `GetCanvasSize` (960 pixels on the long side). PuP
   claims its windows as soon as its screens exist, even when nothing plays, so whether it drew is told by the commands of the render
   pass (`RenderPass::GetCommandCount` before and after). `OnRendered` keeps the surface shown `kShownHoldMs` (1 s) after the last draw.
+- **Placed again** (`PlaceAnchors`, `PlaceAgain`, `AnchorsMoved`): `CreateSurfaces` computes the anchors with `PlaceAnchors`, which
+  `Update` calls again at the first frame (after the script's init), then whenever `AnchorsMoved` sees the DMD anchor flasher
+  (`m_dmdAnchorFlasher`) or the table's backglass flasher change place. A surface whose anchor changed is applied again with its
+  placement settings, which stay offsets from the new anchor. `PlaceAnchors` also finds the table's DMD flashers again (`m_tableDMDs`),
+  showing the ones no longer found. The placement details are logged at creation only (`m_logPlacement`); a re-placement logs one
+  line per surface that moved, 10 at most.
 - **Settings** (section `CabinetDisplays` of the table settings, `GetPropIds`): `<Surface>Show` (Auto, Off), `<Surface>OffsetX`,
   `OffsetY`, `OffsetZ` (VPX units: right, up, toward the player), `<Surface>Size` (scale), `<Surface>Tilt` (degrees added to the X
   rotation), `<Surface>Aspect` (Auto, 4:1, 16:9, 4:3, 21:9, 32:9), with `<Surface>` = `Backglass`, `DMD` or `Topper`; and
@@ -450,6 +460,7 @@ Packs in `~/Documents/VPinballX/Tables/pinupsystem/pupvideos`:
 | `BladeRunner2049` | none: no batch file, played as uploaded | Not reported (the `qcom-iris` error of section 12 was seen with it) |
 | `5th_Element_VR` | none: only `EditThisPuPPack.bat` | Not reported |
 | `TopGun` | none: only `EditThisPuPPack.bat` | Not reported |
+| `tna` | Option 4 - VR_or_Desktop | Nov 14: no PuP display. Every screen is positioned on screen 5, so all of it goes to the DMD surface, placed on `BGDMD` before the script's `SetBackglass` moved that flasher 190 units toward the player: the surface stayed inside the backbox. Fixed by placing the surfaces again at the first frame (section 3), checked on the Mac with the script's VR branch forced; headset test pending |
 | `City_Hunter` | none: only `EditThisPuPPack.bat` and `PuPInit.bat` | Oct 28: scores missing and DMD black. Every screen is on the backglass: the frame (`Overlay.png`, screen 2) with six windows for the mode videos, the attract video in the large window top right, the scores below as labels of screen 1. Scores fixed by the two plugin changes of section 9, checked on the Mac. The table's DMD (`DMDPUP`, a legacy DMD flasher) stays black: the script feeds no DMD (UltraDMD is off) |
 
 Tables of the library whose script uses PuP and whose pack is not on the Frame: BleachVR (`Bleachvr`), JAWS 50th Anniversary
@@ -460,8 +471,8 @@ The library's view of every table is in `table-stats.json` (`usesPup`, `pupPacks
 
 - Why the iris decoder stops answering is not known: no kernel message accompanies it. Blade Runner 2049 logged `qcom-iris
   aa00000.video-codec: session error received 0x4000003: fatal error` once, without any visible effect.
-- The surfaces are placed before the script runs: a table moving its VR DMD at init (The Matrix) gets its PuP DMD under the backglass.
-  Placing them again after the script's init (or at the first frame PuP draws) would fix it.
+- The surfaces are placed again at the first frame and follow the table's DMD and backglass flashers (section 3, since Nov 14, 2026).
+  Primitives of the cabinet moved by the script after the first frame are not followed.
 - Packs imported before a change of the layout rules keep their files until a layout is applied from the Pack options panel.
 - Aliens: the pack on the Frame has no layout applied (imported before packs without one always got it): apply one, or upload it again.
 - `PuPlayer.B2SInit` is not read for the pack name (section 4).

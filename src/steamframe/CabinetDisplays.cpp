@@ -212,6 +212,13 @@ CabinetDisplays::Rect CabinetDisplays::GetFlasherRect(const Flasher* flasher)
    return rect;
 }
 
+bool CabinetDisplays::SameRect(const Rect& a, const Rect& b)
+{
+   constexpr float eps = 0.01f;
+   return fabsf(a.center.x - b.center.x) < eps && fabsf(a.center.y - b.center.y) < eps && fabsf(a.center.z - b.center.z) < eps && fabsf(a.width - b.width) < eps
+      && fabsf(a.height - b.height) < eps && fabsf(a.rotX - b.rotX) < eps && fabsf(a.rotY - b.rotY) < eps && fabsf(a.rotZ - b.rotZ) < eps;
+}
+
 // Same place as the implicit VR backglass of the player (see Player::Player)
 CabinetDisplays::Rect CabinetDisplays::GetDefaultBackglassRect() const
 {
@@ -230,6 +237,7 @@ bool CabinetDisplays::FindDMDAnchor(Rect& rect)
    // A flasher showing the DMD of the VR room: named like a DMD, or rendering a display, and standing above the glass (the desktop DMD
    // flashers of the tables lie over the playfield or under the apron)
    const Flasher* best = nullptr;
+   m_dmdAnchorFlasher = nullptr;
    for (IEditable* part : table->GetParts())
    {
       if (part->GetItemType() != eItemFlasher)
@@ -250,7 +258,12 @@ bool CabinetDisplays::FindDMDAnchor(Rect& rect)
    if (best)
    {
       rect = GetFlasherRect(best);
-      PLOGI << "[CabinetDisplays] DMD placed over the flasher '" << best->GetName() << '\'';
+      m_dmdAnchorFlasher = best;
+      m_dmdAnchorSource = rect;
+      if (m_logPlacement)
+      {
+         PLOGI << "[CabinetDisplays] DMD placed over the flasher '" << best->GetName() << '\'';
+      }
       return true;
    }
 
@@ -274,7 +287,10 @@ bool CabinetDisplays::FindDMDAnchor(Rect& rect)
       rect.height = maxV.z - minV.z;
       rect.center = vec3(0.5f * (minV.x + maxV.x), maxV.y, 0.5f * (minV.z + maxV.z));
       rect.rotX = -90.f;
-      PLOGI << "[CabinetDisplays] DMD placed over the primitive '" << primitive->GetName() << '\'';
+      if (m_logPlacement)
+      {
+         PLOGI << "[CabinetDisplays] DMD placed over the primitive '" << primitive->GetName() << '\'';
+      }
       return true;
    }
    return false;
@@ -345,8 +361,11 @@ bool CabinetDisplays::FindCabinetBackglass(Rect& rect) const
             continue;
          if (!FitUprightPanel(primitive, table->m_glassTopHeight, rect))
             continue;
-         PLOGI << "[CabinetDisplays] Backglass placed on the glass of the cabinet '" << primitive->GetName() << "': center " << rect.center.x << ", " << rect.center.y << ", "
+         if (m_logPlacement)
+         {
+            PLOGI << "[CabinetDisplays] Backglass placed on the glass of the cabinet '" << primitive->GetName() << "': center " << rect.center.x << ", " << rect.center.y << ", "
                << rect.center.z << ", " << rect.width << " x " << rect.height << ", rotation " << rect.rotX;
+         }
          return true;
       }
    return false;
@@ -367,8 +386,11 @@ bool CabinetDisplays::FindCabinetTopper(Rect& rect) const
             continue;
          if (!FitUprightPanel(primitive, table->m_glassTopHeight, rect))
             continue;
-         PLOGI << "[CabinetDisplays] Topper placed on the screen of the cabinet '" << primitive->GetName() << "': center " << rect.center.x << ", " << rect.center.y << ", "
+         if (m_logPlacement)
+         {
+            PLOGI << "[CabinetDisplays] Topper placed on the screen of the cabinet '" << primitive->GetName() << "': center " << rect.center.x << ", " << rect.center.y << ", "
                << rect.center.z << ", " << rect.width << " x " << rect.height;
+         }
          return true;
       }
    return false;
@@ -376,7 +398,7 @@ bool CabinetDisplays::FindCabinetTopper(Rect& rect) const
 
 // A glass covering the whole front of the backbox, its DMD included (the speaker panel is part of its image): only the part above the DMD
 // shows the backglass. The videos of PuP backglasses are 16:9: the rectangle is fitted in that part.
-bool CabinetDisplays::KeepAboveDMD(Rect& glass, const Rect& dmd)
+bool CabinetDisplays::KeepAboveDMD(Rect& glass, const Rect& dmd) const
 {
    const vec3 glassUp = RotateDirection(vec3(0.f, -1.f, 0.f), glass.rotX, glass.rotY, glass.rotZ);
    const vec3 dmdUp = RotateDirection(vec3(0.f, -1.f, 0.f), dmd.rotX, dmd.rotY, dmd.rotZ);
@@ -397,7 +419,10 @@ bool CabinetDisplays::KeepAboveDMD(Rect& glass, const Rect& dmd)
       glass.width = glass.height * aspect;
    else
       glass.height = glass.width / aspect;
-   PLOGI << "[CabinetDisplays] The glass of the cabinet holds the DMD: backglass kept above it, center height " << glass.center.z << ", " << glass.width << " x " << glass.height;
+   if (m_logPlacement)
+   {
+      PLOGI << "[CabinetDisplays] The glass of the cabinet holds the DMD: backglass kept above it, center height " << glass.center.z << ", " << glass.width << " x " << glass.height;
+   }
    return true;
 }
 
@@ -419,22 +444,59 @@ Flasher* CabinetDisplays::CreateFlasher(Surface surface)
 void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bool hasTableBackglass, bool hasTableTopper)
 {
    LoadPlacements();
+   m_hasTableBackglass = hasTableBackglass;
+   m_hasTableTopper = hasTableTopper;
+   m_fullDMD = !packFolder.empty() ? HasFullDMDScreen(packFolder, lowerCase(m_player->m_ptable->m_script_text)) : false;
+
+   std::array<Rect, SurfaceCount> anchors;
+   PlaceAnchors(anchors);
+   if (!hasTableBackglass)
+      m_surfaces[Backglass].flasher = CreateFlasher(Backglass);
+   m_surfaces[ScoreView].defaultAspect = m_fullDMD ? 16.f / 9.f : 0.f;
+   m_surfaces[ScoreView].flasher = CreateFlasher(ScoreView);
+   if (!hasTableTopper)
+   {
+      m_surfaces[Topper].defaultAspect = 16.f / 9.f;
+      m_surfaces[Topper].flasher = CreateFlasher(Topper);
+   }
+
+   for (int i = 0; i < SurfaceCount; i++)
+      if (m_surfaces[i].flasher)
+      {
+         m_surfaces[i].anchor = anchors[i];
+         ApplyPlacement(static_cast<Surface>(i));
+         PLOGI << "[CabinetDisplays] " << GetSurfaceName(static_cast<Surface>(i)) << " surface created: " << m_surfaces[i].flasher->GetName();
+      }
+   m_logPlacement = false;
+}
+
+// The default place of each surface, from the parts of the cabinet as they are now
+void CabinetDisplays::PlaceAnchors(std::array<Rect, SurfaceCount>& anchors)
+{
+   // The table's DMD flashers are found again: the ones no longer found are shown again
+   for (Flasher* flasher : m_tableDMDs)
+      flasher->m_cabinetSuppressed = false;
+   m_tableDMDs.clear();
 
    // The backglass of the cabinet: the table's, the implicit VR one, or the same place as that one
    m_backglass = GetDefaultBackglassRect();
-   const Flasher* tableBackglass = nullptr;
+   m_tableBackglassFlasher = nullptr;
    for (IEditable* part : m_player->m_ptable->GetParts())
       if (part->GetItemType() == eItemFlasher && static_cast<Flasher*>(part)->m_d.m_renderMode == FlasherData::EXT_RENDER
-         && static_cast<Flasher*>(part)->m_d.m_renderStyle == VPXWindowId::VPXWINDOW_Backglass && part != m_player->m_implicitVRBackglass)
+         && static_cast<Flasher*>(part)->m_d.m_renderStyle == VPXWindowId::VPXWINDOW_Backglass && part != m_player->m_implicitVRBackglass
+         && GetSurfaceIndex(static_cast<Flasher*>(part)) < 0)
       {
-         tableBackglass = static_cast<Flasher*>(part);
+         m_tableBackglassFlasher = static_cast<Flasher*>(part);
          break;
       }
    // The DMD of the cabinet, found first: it may stand on the glass of the backbox
    Rect dmd;
    const bool hasAnchor = FindDMDAnchor(dmd);
-   if (tableBackglass)
-      m_backglass = GetFlasherRect(tableBackglass);
+   if (m_tableBackglassFlasher)
+   {
+      m_backglass = GetFlasherRect(m_tableBackglassFlasher);
+      m_tableBackglassSource = m_backglass;
+   }
    else if (Rect cabinetGlass; FindCabinetBackglass(cabinetGlass))
    {
       if (hasAnchor)
@@ -444,14 +506,9 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       cabinetGlass.center = cabinetGlass.center + (normal.y < 0.f ? -normal : normal) * 1.5f;
       m_backglass = cabinetGlass;
    }
-   if (!hasTableBackglass)
-   {
-      m_surfaces[Backglass].anchor = m_backglass;
-      m_surfaces[Backglass].flasher = CreateFlasher(Backglass);
-   }
+   anchors[Backglass] = m_backglass;
 
    // The DMD, in front of the table's one (fitted to its height, wider for a 16:9 full DMD), otherwise under the backglass
-   const bool fullDMD = !packFolder.empty() ? HasFullDMDScreen(packFolder, lowerCase(m_player->m_ptable->m_script_text)) : false;
    if (!hasAnchor)
    {
       dmd = m_backglass;
@@ -459,19 +516,22 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       dmd.height = dmd.width * 0.25f;
       const vec3 down = RotateDirection(vec3(0.f, 1.f, 0.f), dmd.rotX, dmd.rotY, dmd.rotZ); // Local +y is the bottom of the flasher
       dmd.center = m_backglass.center + down * (0.5f * m_backglass.height + 0.6f * dmd.height);
-      PLOGI << "[CabinetDisplays] No DMD in the cabinet: DMD placed under the backglass";
+      if (m_logPlacement)
+      {
+         PLOGI << "[CabinetDisplays] No DMD in the cabinet: DMD placed under the backglass";
+      }
    }
    // In front of the anchor, toward the player (+y)
    vec3 normal = RotateDirection(vec3(0.f, 0.f, 1.f), dmd.rotX, dmd.rotY, dmd.rotZ);
    if (normal.y < 0.f)
       normal = -normal;
    dmd.center = dmd.center + normal * 1.5f;
-   m_surfaces[ScoreView].anchor = dmd;
-   m_surfaces[ScoreView].defaultAspect = fullDMD ? 16.f / 9.f : 0.f;
-   m_surfaces[ScoreView].flasher = CreateFlasher(ScoreView);
+   anchors[ScoreView] = dmd;
+   for (Flasher* flasher : m_tableDMDs)
+      flasher->m_cabinetSuppressed = m_tableDMDSuppressed;
 
    // The topper, above the backglass
-   if (!hasTableTopper)
+   if (!m_hasTableTopper)
    {
       Rect topper = m_backglass;
       // On the screen of the topper of the cabinet, in front of it, fitted to its height
@@ -498,22 +558,52 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
                if (backboxTop != -FLT_MAX && bottom < backboxTop + gap)
                {
                   topper.center.z += backboxTop + gap - bottom;
-                  PLOGI << "[CabinetDisplays] Topper placed on top of the backbox '" << part->GetName() << "' (top " << backboxTop << "): center height " << topper.center.z;
+                  if (m_logPlacement)
+                  {
+                     PLOGI << "[CabinetDisplays] Topper placed on top of the backbox '" << part->GetName() << "' (top " << backboxTop << "): center height " << topper.center.z;
+                  }
                }
                break;
             }
       }
-      m_surfaces[Topper].anchor = topper;
-      m_surfaces[Topper].defaultAspect = 16.f / 9.f;
-      m_surfaces[Topper].flasher = CreateFlasher(Topper);
+      anchors[Topper] = topper;
    }
+}
 
+// Whether the script moved the flashers the surfaces are placed from (cheap: checked at each frame)
+bool CabinetDisplays::AnchorsMoved() const
+{
+   return (m_dmdAnchorFlasher && !SameRect(GetFlasherRect(m_dmdAnchorFlasher), m_dmdAnchorSource))
+      || (m_tableBackglassFlasher && !SameRect(GetFlasherRect(m_tableBackglassFlasher), m_tableBackglassSource));
+}
+
+void CabinetDisplays::PlaceAgain()
+{
+   // A flasher moved at each frame is followed 4 times a second at most, as the parts of the cabinet are searched again
+   const uint64_t now = NowMs();
+   if (m_placedAfterInit && now < m_nextPlaceAgainMs)
+      return;
+   m_nextPlaceAgainMs = now + 250;
+   const bool afterInit = !m_placedAfterInit;
+   m_placedAfterInit = true;
+
+   std::array<Rect, SurfaceCount> anchors;
+   PlaceAnchors(anchors);
    for (int i = 0; i < SurfaceCount; i++)
-      if (m_surfaces[i].flasher)
+   {
+      SurfaceState& s = m_surfaces[i];
+      if (s.flasher == nullptr || SameRect(s.anchor, anchors[i]))
+         continue;
+      s.anchor = anchors[i];
+      s.hasApplied = false; // Applied by Update, with the placement settings
+      if (m_placedAgainLogs < 10)
       {
-         ApplyPlacement(static_cast<Surface>(i));
-         PLOGI << "[CabinetDisplays] " << GetSurfaceName(static_cast<Surface>(i)) << " surface created: " << m_surfaces[i].flasher->GetName();
+         m_placedAgainLogs++;
+         PLOGI << "[CabinetDisplays] " << GetSurfaceName(static_cast<Surface>(i)) << " placed again, the table "
+               << (afterInit ? "script moved the parts of the cabinet at its init"s : "moved the flasher it stands on"s) << ": center " << s.anchor.center.x << ", "
+               << s.anchor.center.y << ", " << s.anchor.center.z << ", " << s.anchor.width << " x " << s.anchor.height << ", rotation " << s.anchor.rotX;
       }
+   }
 }
 
 void CabinetDisplays::ApplyPlacement(Surface surface)
@@ -544,6 +634,8 @@ void CabinetDisplays::ApplyPlacement(Surface surface)
 void CabinetDisplays::Update()
 {
    m_placementPageOpened = m_player->m_liveUI->m_inGameUI.IsOpened(kPageId);
+   if (!m_placedAfterInit || AnchorsMoved())
+      PlaceAgain();
    for (int i = 0; i < SurfaceCount; i++)
    {
       SurfaceState& s = m_surfaces[i];
