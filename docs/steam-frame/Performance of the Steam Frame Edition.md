@@ -191,8 +191,8 @@ run from a cool device held 72.0 fps without throttling, the GPU levelling at 85
 frames reprojected by the compositor; with dynamic resolution, 4 %.
 
 **Settings** (Steam Frame screen, section *Dynamic resolution*; live, per table or for all): the switch (on), the target (85 %), the
-sensitivity (Medium) and the minimum (70 %), with a status line. The full size is the *Render resolution* slider of the VR & Room screen, section *More* (applies
-to the next table started); the Display & Performance screen shows it. See [section 12](#12-settings-reference).
+sensitivity (Medium) and the minimum (70 %), with a status line. The full size is the *Render resolution* slider just above, section
+*Render resolution* (125 % by default; applies to the next table started), with its status line. See [section 12](#12-settings-reference).
 
 ## 5. Foveated rendering
 
@@ -550,6 +550,8 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 
 | Section | Option | Values | Default (Frame) | What it does |
 |---|---|---|---|---|
+| Render resolution | **Render resolution** | 50–200 % | 125 % | The full size of the rendering per eye, as a share of the size the headset recommends (125 % = the Frame's native 2160²), and the ceiling the dynamic resolution climbs back to. Higher is sharper and costs more GPU time; 100 % (1728²) leaves the GPU more room on heavy tables. Applies to the next table started. |
+| | *Status line* | | | The size of the current table per eye and the headset's recommended size, and the size of the next table when the setting changed. |
 | Dynamic resolution | **Dynamic resolution** | on / off | on | Adjusts the rendering resolution every frame to the GPU time ([section 4](#4-dynamic-resolution)). Off, the table renders at its full resolution whatever it costs. |
 | | **Dynamic resolution target** | 50–100 % | 85 % | The GPU time aimed at, as a share of the frame period (85 % of 13.9 ms is 11.8 ms). 90 % suits a table that sits just under its full size (Darkest Dungeon: 87.7 % of the time at full resolution worn, against 48 % at 85 %), but on a table that cannot hold its full size it runs the GPU at its limit (Robot Invasion with its mirrors: a missed frame per second, against 0.14 at 85 %). Lower keeps more margin for heavy moments and for a hot device; higher gives more resolution to tables that sit just under their full size. |
 | | **Dynamic resolution sensitivity** | Low / Medium / High | Medium | How many slow frames (over the whole frame period, or missed), close together, it takes to lower the resolution at once: Low one, Medium 2 within 3 frames, High 3 within 5. A line under it recalls: "Low = more sensitive = will switch more often". Headless, Darkest Dungeon spends 58, 66 and 72 % of its time at full resolution at Low, Medium and High, for a few more missed frames (0, 0.03 and 0.04 per second); on Robot Invasion with its mirrors, at its limit, missed frames go from 0.06 to 0.13–0.14 per second. |
@@ -598,7 +600,6 @@ The settings that matter for performance on the Frame:
 |---|---|---|---|
 | **Performance panel** | on / off | off | Shows the panel of [section 11](#11-the-performance-panel). Costs nothing to the scene. Saved at once, for all tables. |
 | **Headset Refresh Rate** | Runtime default, 72, 80, 90, 120 Hz | Runtime default (72 Hz on the Frame) | A higher rate leaves less time per frame (11.1 ms at 90 Hz instead of 13.9 ms): the dynamic resolution then lowers the resolution further. All the measurements of this article are at 72 Hz. |
-| *Render resolution* (status) | | | The full size of the rendering per eye, and the headset's recommended size. The size itself is the *Render resolution* slider of the VR & Room screen, section *More* (50–200 % of the recommended size, 125 % by default, which is the Frame's native 2160²); it applies to the next table started. |
 | **Full Scene Anti Aliasing** | 50–200 % | 100 % | Supersampling: renders more pixels and scales them down. Very costly on the Frame (1.3× cost 6.5 ms on Ghostbusters). Below 100 %, renders fewer pixels and upscales them; dynamic resolution does that better. |
 | **MSAA level** | Disabled, 4, 6, 8 samples | Disabled | 4 samples cost 11.3 ms on Ghostbusters at 2160²: not usable on the Frame. |
 | **Post processed antialiasing** | Disabled, Fast FXAA, Standard FXAA, Quality FXAA, Fast NFAA, Standard DLAA, Quality SMAA, Quality FAAA | Standard FXAA | The anti-aliasing of the Frame ([section 9](#9-anti-aliasing-and-image-quality)): about 0.5 ms when foveated, more at full rate. The three FXAA modes read the luma from the alpha channel ([section 8.2](#82-fxaa-reads-the-luma-from-the-alpha-channel)); Fast FXAA is not faster on the Frame. |

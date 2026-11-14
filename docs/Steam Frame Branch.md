@@ -630,6 +630,19 @@ In the headset they show a table floating in the void, without their cabinet, ba
 Files: `src/steamframe/VRRoomOption.h/.cpp` (new), `src/steamframe/Launcher.h/.cpp`, `src/core/player.cpp`, `steamframe/steamframe.cmake`,
 `tests/test-vr-room-option.cpp` (new; lines of the library's tables, built alone as written at its top).
 
+## 30. Native render resolution by default (2026-11-14)
+
+The Frame recommends 80 % of its panels (1728² per eye). The branch was tuned and measured at the panel's native 2160² (`ResFactor = 1.25`,
+the dynamic resolution's ceiling and the size the performance panel rates against, `kNativeFactor`), but that value was only in the
+developer's settings: a fresh install rendered at 1728², and the new menu showed the *Render resolution* slider only in Room › More.
+
+- **Default.** `PlayerVR/ResFactor` defaults to 1.25 in the Frame build (`VPX_STEAM_FRAME_HEADSET`, `Settings_properties.inl`, upstream's
+  -1 kept in the `#else`); the classic VR settings page shows the same default. Other builds keep 100 %. A value saved by hand is kept.
+- **Menu.** Performance › Device Performance, section *Render resolution* above *Dynamic resolution*: the slider and its status line
+  (moved from VPX Performance › VR rendering).
+
+Files: `src/core/Settings_properties.inl`, `src/ui/live/ingameui/VRSettingsPage.cpp`, `src/steamframe/vrui/Screens.cpp`, docs.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.

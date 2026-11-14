@@ -740,7 +740,7 @@ static vector<Section> GetSections(Screen screen)
 
    case Screen::Display:
       return {
-         Section { "VR rendering"s, kVR, { Prop(Settings::m_propPlayerVR_DisplayRefreshRate), Label("Render resolution status"s) }, false, false },
+         Section { "VR rendering"s, kVR, { Prop(Settings::m_propPlayerVR_DisplayRefreshRate) }, false, false },
          Section { "Desktop mirror"s, kVR, { Prop(Settings::m_propPlayerVR_DesktopDisplay), Prop(Settings::m_propPlayerVR_ShrinkDesktopDisplay) }, false, false },
          Section { ""s, kGraphics, {}, true },
       };
@@ -749,6 +749,8 @@ static vector<Section> GetSections(Screen screen)
       return {
          Section { ""s, kPerfPanel, {}, true },
          Section { ""s, kPerfProfile, {}, true },
+         // The ceiling of the dynamic resolution (PlayerVR/ResFactor, 125 % = the Frame's native panel by default)
+         Section { "Render resolution"s, kVR, { Label("Render resolution"s), Label("Render resolution status"s) }, false, false },
          Section { "Dynamic resolution"s, kVR,
             { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
                Label("Dynamic resolution sensitivity help"s),

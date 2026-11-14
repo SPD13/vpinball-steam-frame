@@ -322,7 +322,13 @@ PropFloatDyn(PlayerVR, ControllerCabZOffset, "Cabinet Z Offset"s, "Z offset to a
 PropFloatDyn(PlayerVR, ControllerCabWidthOffset, "Cabinet Width Offset"s,
    "Width offset added to the distance between the controllers to define the lockbar width when using controller view centering (only applies when a custom lockbar width is defined)"s,
    -50.f, 50.f, 0.f);
+#if defined(VPX_STEAM_FRAME_HEADSET)
+// The Steam Frame recommends 80 % of its panels (1728x1728): render at the panel's native 2160x2160 by default, the size the performance
+// panel rates against (kNativeFactor in src/steamframe/PerfPanelLayer.cpp) and the dynamic resolution climbs back to
+PropFloatUnbounded(PlayerVR, ResFactor, "ResFactor"s, ""s, 1.25f);
+#else
 PropFloatUnbounded(PlayerVR, ResFactor, "ResFactor"s, ""s, -1.f);
+#endif
 PropBool(PlayerVR, OverrideLockbarWidth, "Custom Lockbar Width"s,
    "Scale the virtual cabinet so that its lockbar matches the user defined lockbar width. If disabled, the cabinet is rendered at its native (table defined) size."s, true);
 PropBool(PlayerVR, OverrideLockbarHeight, "Custom Lockbar Height"s,
