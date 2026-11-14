@@ -243,12 +243,18 @@ void VRSettingsPage::BuildPage()
          ImGui::TextUnformatted(("Anti-aliasing: " + m_player->m_vrDevice->GetFoveatedAntialiasingStatus()).c_str());
       }));
 
-   // Rendering resolution (PlayerVR/ResFactor, a factor of the headset's recommended size, unset meaning 100 %). The swapchains are created
-   // with the session, so a change is used by the next table played; the status line shows the current size and the next one
+   // Rendering resolution (PlayerVR/ResFactor, a factor of the headset's recommended size, unset meaning 100 %, 125 % on the Steam Frame:
+   // its native panel). The swapchains are created with the session, so a change is used by the next table played; the status line shows
+   // the current size and the next one
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   constexpr float defaultResFactor = 1.25f;
+#else
+   constexpr float defaultResFactor = 1.f;
+#endif
    AddItem(std::make_unique<InGameUIItem>(
       VPX::Properties::FloatPropertyDef(""s, ""s, "Render resolution"s,
          "Rendering resolution of each eye, relative to the size recommended by the headset. Higher is sharper and costs more GPU time; dynamic resolution, when on, lowers it as needed.\nOnce saved, used by the next table played"s,
-         false, 0.5f, 2.f, 0.05f, 1.f),
+         false, 0.5f, 2.f, 0.05f, defaultResFactor),
       100.f, "%4.0f %%"s, //
       [this]() { return m_player->m_vrDevice->GetResolutionFactor(); }, // Live
       [](const Settings& settings)

@@ -187,8 +187,10 @@ swapchain 1.4–1.5 ms, bloom 0.2 ms.
   is the next step if the budget allows.
 - Never `MSAASamples` at native resolution on the Frame.
 
-`ResFactor` is set in the headset since 2026-10-19: "Render resolution" in the VR settings page, 50 % to 200 % of the headset's
-recommended size in 5 % steps (125 % = 2160², the native panel), saved globally or for the table like the other items. The swapchains are
+`ResFactor` is set in the headset since 2026-10-19: "Render resolution" in the VR settings page (in the new menu: Performance › Device
+Performance, section *Render resolution*, since 2026-11-14), 50 % to 200 % of the headset's recommended size in 5 % steps (125 % = 2160²,
+the native panel, the default of the Frame build since 2026-11-14; 100 % before, unless set by hand), saved globally or for the table like
+the other items. The swapchains are
 created with the session, so the value is used by the next table played; the "Render resolution" status line under it shows the size of
 the current table and, when the setting changed, the size of the next one. With dynamic resolution on, it is the ceiling the scale
 climbs back to.
