@@ -64,6 +64,8 @@ std::shared_ptr<Sampler> TextureManager::LoadTexture(ITexManCacheable* const mem
    entry.lastUsedFrame = m_statsFrame;
 #endif
 
+   const uint64_t loadStart = (entry.pendingUpload || sampler == nullptr) ? usec() : 0; // First draw of a preloaded image, or of one not preloaded
+   const bool wasPreloaded = entry.pendingUpload != nullptr;
    if (entry.pendingUpload)
    {
       // Consumed by whichever variant asks first, dropping the strong reference that kept the bitmap alive. A second variant
@@ -107,6 +109,11 @@ std::shared_ptr<Sampler> TextureManager::LoadTexture(ITexManCacheable* const mem
       }
 #endif
    }
+   // An image loaded when drawn holds the frame up: the decode of an image that was not preloaded (or the read of its cache file after an
+   // eviction) can take hundreds of milliseconds while a table is played
+   if (loadStart != 0)
+      if (const uint64_t ms = (usec() - loadStart) / 1000; ms >= 10)
+         PLOGI << "Image '" << memtex->GetName() << "' loaded when drawn in " << ms << " ms" << (wasPreloaded ? " (preloaded: upload only)" : " (not preloaded, or evicted)");
    return sampler;
 }
 

@@ -496,6 +496,8 @@ The anti-aliasing mode, the supersampling factor and the other graphics options 
 
 **PuP videos no longer hold up the frame.** Each new video on a PuP screen closes the previous hardware decoder, which takes several milliseconds. This used to happen under a lock needed to draw that screen, stopping the frame being prepared for about 10 ms every 4 to 5 s on Darkest Dungeon. The decoder is now closed outside that lock. Headless, the waits are gone, missed frames look lower, and the time at full resolution does not change. In the headset, one play of 111 s reached 74.7 % at full resolution, against 62 % in the two longer plays before, still rated yellow; a longer play has yet to confirm it. Tables without PuP are not concerned.
 
+**Images the script shows are prepared with the others.** Many tables change the images of their parts from the script, for example to a darker version of the ramps and plastics when the lights of the playfield (the GI) go off. Visual Pinball prepares, when a table starts, the images of the parts it shows and those the previous plays of the table drew; on a table's first play, an image only the script shows was loaded the first time it appeared, and the game stopped meanwhile. On World Poker Tour, whose script swaps 21 images when the GI goes off, the first GI off of its first play stopped the game for **1.9 s** (0.9 s in a real play). The Steam Frame Edition also prepares the images named in the table's script: the same moment then takes one frame of about 0.1 s (104 ms), and none once a play has shown them. The cost is on the table's first start, which takes longer while the extra images are compressed (7.8 s more on World Poker Tour, once), and in memory, for the images a script names but never shows, such as the variants of a table's options (about 300 MB on World Poker Tour, much less on most tables: half of the 90 tables of the test library add 5 MB or less). Images whose name the script builds while it runs are not found; Visual Pinball still remembers them after the first play.
+
 - **Memory between tables.** On Linux, the process grew by about 10 MB at each switch between the lobby and a table (Addams 964 →
   1207 MB after 15 switches), memory kept by glibc's allocator rather than leaked. The build sets the allocator's mmap threshold to
   1 MB at start: **about 430 MB less at the table and 460 MB less in the lobby**, flat from switch to switch, for tables loading 3 to 5 %
@@ -505,7 +507,7 @@ The anti-aliasing mode, the supersampling factor and the other graphics options 
 - **One VR session for all tables.** The OpenXR session is kept from table to table, and a thread shows the "Loading" message in the
   headset meanwhile: switches take 150 to 250 ms less, with at most 28 to 42 ms without a frame.
 
-No settings.
+One setting: *Preload script images*, below ([section 12.1](#121-the-steam-frame-screen)).
 
 ## 11. The performance panel
 
@@ -538,7 +540,7 @@ foveation is fixed).
 
 ### 12.1 The Steam Frame screen
 
-The screen of this edition's performance features, behind the Steam Frame icon of the rail. Its five sections:
+The screen of this edition's performance features, behind the Steam Frame icon of the rail. Its sections:
 
 ![The Steam Frame screen, top: dynamic resolution and foveated rendering](img/performance-steam-frame-screen-1.jpg)
 
@@ -569,8 +571,10 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | | **Room reflection** | On / Off / Automatic | Off | The parts of the VR room in the reflections: 3 to 5 ms on tables with a large room. They stay in the room around you. |
 | | *Status line* | | | Whether the room is left out, or that no part of it reaches the reflections on this table. |
 | | **Reflection size** | Full / Half | Half | The size of the reflections, per axis. Half renders them with a quarter of the pixels: softer reflections, for 0.45 ms less per frame on Darkest Dungeon at 2160², where it halves the slow frames (time at full resolution 95.5 → 98.7 %, missed frames 0.22 → 0.035 per second). Applied at once. |
+| Textures | **Preload script images** | on / off | on | Also prepares, when a table starts, the images its script names ([section 10](#10-memory-threads-loading-and-table-switches)): no stop the first time the script shows one of them on a table's first play (World Poker Tour 1.9 s → 0.1 s), for a longer first start and memory held by the images never shown. Applies to the next table started. |
+| | *Status line* | | | How many images this table's script names that no part uses, and their size in megapixels. |
 
-All of them apply at once. **Save** stores them for the table being played or for all tables: a table with its own values keeps
+All of them apply at once, except *Preload script images*, which applies to the next table started. **Save** stores them for the table being played or for all tables: a table with its own values keeps
 them, so a demanding table can have, for example, a lower minimum resolution or its anti-aliasing always foveated. **Defaults** puts
 back the values above; **Undo** the stored ones.
 

@@ -39,6 +39,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Performance panel** (a tool to tune the tables, Performance > Device Performance > Performance panel, off by default, saved at once): a panel standing left of the cabinet, facing the player, with the target (2160×2160 per eye at 72 Hz on the Frame), a rating of the table every 30 seconds (green: native resolution 95 % of the time and frames on time; yellow: on time at a lower resolution; red: frames missed, GPU or CPU bound) and the frame rate, resolution, GPU time and use, CPU per thread (logic, render, PinMAME, audio), clocks and temperatures of the last 3 minutes (section 18). The table page of the menu shows the last rating of the table, with its badge, whether the panel was on or not.
 - **Simplified meshes** (Steam Frame > Simplified meshes, on by default in the Frame build, per table or for all): the large 3D parts of heavy tables are drawn with fewer triangles where the difference cannot be seen from the player's eyes, and in full when the player leans in (section 19).
 - **Light-map pruning** (Device Performance > Light maps, Medium by default, Off in the High performance profile, per table or for all): the light maps of baked tables (VLM) leave out their triangles adding too little light to see, live: Off, Low, Medium, High (43, 56, 62 % of the light-map triangles of Medieval Madness). The faint glow of the lights on dark walls ends along triangle edges, mostly from High on (section 25).
+- **Preload script images** (Device Performance > Textures, on by default, per table or for all, next table started): the images a table's script names (such as the "GI off" versions of the parts' images) are prepared when the table starts, like those of its parts, so the first time the script shows them on a table's first play no longer stops the game: World Poker Tour 1.9 s → one frame of 0.1 s when its GI first goes off. Costs a longer first start and memory for images a script names but never shows (section 28).
 - **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
 - **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic, and *Reflection size*, Full or Half (Half by default in the Frame build, since 2026-11-02). Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
 - **Thread placement** (no menu entry, `Player.ThreadPlacement`, Frame build): while a table is played, the render thread runs on core 7, the logic thread on cores 5 and 6 and the others on cores 2 to 4. Worn, Darkest Dungeon spends 62 % of its time at full resolution with it (two plays) against 1.9 to 19.4 % without (three plays); headless with Steam's cores it gains little (section 23).
@@ -587,6 +588,27 @@ Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` membe
   the former `HeadSetX/Y` to ±500 cm until then). `Launcher::MigrateSettings` moves the former settings to the new names once.
 - **Recenter first:** the placement is relative to the origin of the stage; a Steam recenter afterwards may move it, the cabinet with it.
 
+## 28. Preload of the images named by the script (2026-11-14)
+
+Since upstream 78a616272 (2026-11-12), play preloads only the images of the parts shown in play and those of the used textures cache
+(`used_textures.xml`, the textures drawn in the previous plays). An image only the script shows was decoded, uncompressed, the first time it
+was drawn on a table's first play: World Poker Tour stopped for 0.9 s (worn) to 1.9 s (headless) when its GI first went off. Measurements
+and survey in section 8.16 of `docs/Performance on the Steam Frame.md`. Not guarded, a candidate for upstream.
+
+- **What.** `PinTable::CollectScriptImages` adds to the preload the images whose name is a string literal of the script (`m_script_text`,
+  so a `.vbs` override too; outside `'` and `Rem` comments; the whole literal, case ignored as `GetImage`). `Player` calls it after the
+  images of the parts and of the cache, when `Player.PreloadScriptImages` is on (default), and logs the number added. The images are
+  compressed and kept in memory like the other preloaded ones; their first draw uploads them. Names built at run time are not found.
+- **Menu.** A "Textures" section at the bottom of the Device Performance screen (`TexturesPage` in `Screens.cpp`, saved for the table or for
+  all): the setting, read when a table starts, and a status line with the images the script of the table played names that no part uses.
+- **Log.** `TextureManager::LoadTexture` logs an image whose load or upload when drawn takes 10 ms or more, with its name and time.
+- **Cost.** A longer first start of the tables whose script names large images (World Poker Tour 19.8 → 27.6 s, once), and memory held by
+  the images named but never drawn (about 300 MB on World Poker Tour on later plays; half of the 90 tables of the Frame library add 5 MB or
+  less, 13 add 50 MB or more).
+
+Files: `src/parts/pintable.h/.cpp`, `src/core/player.cpp`, `src/renderer/TextureManager.cpp`, `src/core/Settings_properties.inl`,
+`src/steamframe/vrui/Screens.cpp`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -604,6 +626,7 @@ Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` membe
 - iOS/Android library builds: uploads are staged in `.upload`; `InGameUIPage` has the tile code; the home page of the web server stays the file manager, the tables routes answer 404 and `/info` reports `tableLibrary: false`, so the file manager hides its link to the tables page; no other intended change.
 - Standalone desktop builds write their log file and console from a `LogWriter` thread (section 24): the same lines, in the same order; those of the last moment may be missing after a crash.
 - Standalone desktop builds have the PinMAME plugin's `Cheat` setting on by default (section 6): WPC machines skip the checksum of their ROMs at power-on.
+- Every build: play also preloads the images named by a string literal of the table script (`Player.PreloadScriptImages`, on by default, section 28; not guarded, a candidate for upstream): no stop when the script first shows one of them, a longer first start and more memory on tables whose script names large images; and the texture manager logs the images that take 10 ms or more to load when drawn.
 - The Visual Studio project files (`make/*.vcxproj`) were not updated. None of the new files is needed by a non-standalone build; the CMake build lists them.
 
 ## Files

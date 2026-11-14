@@ -58,6 +58,7 @@ tables still below the native size (section 8.6), generic rules for the reflecti
 - **On PuP tables, the largest slow frames were a wait for a video decoder being closed (2026-11-02).** Each new video closed the previous hardware decoder under a lock that the logic thread needs to draw the PuP screens, stopping it for about 10 ms every 4 to 5 s on Darkest Dungeon. The decoder is now closed outside that lock. Headless, the waits are gone and missed frames look lower, but the time at full resolution does not move. Worn, one play of 111 s reached 74.7 % at full resolution against 62 % before, still rated yellow (section 8.11).
 - **Dynamic resolution has a sensitivity setting, Medium by default (2026-11-02).** It sets how many frames over the whole period, close together, lower the resolution at once: Low one, as before; Medium 2 within 3 frames; High 3 within 5. Headless, Darkest Dungeon goes from 58 % of its time at full resolution (Low) to 66 % (Medium) and 72 % (High), for 0.03–0.04 missed frames per second instead of none; Robot Invasion with its mirrors, at its limit, misses 0.13–0.14 frames per second instead of 0.06. Worn, Darkest Dungeon at Medium with the target at 90 % reached 87.7 % at full resolution (74.7 % at Low and 85 %), for 0.42 missed frames per second instead of 0.15. 90 % was the default for a few hours, then back to 85 %: on Robot Invasion with its mirrors it means a missed frame per second instead of 0.14 (section 8.12).
 - **Reflections at half size by default, and missed frames under the sensitivity (2026-11-02).** The playfield reflection at half size per axis saves about 0.45 ms on Darkest Dungeon at 2160², halves its readings over the period and takes its missed frames from 0.12 to about 0.01 per second, headless; it is the setting *Reflection size*, Half by default in the Frame build, its look not checked in the headset yet (section 8.8). Worn after a restart of the Frame (a system service had spun a core since boot), Darkest Dungeon at Medium and 90 % rated 90.3 % over 137 s, the smoothest play so far for the owner, at both sizes; its remaining dips came from frames handed over late, not from the GPU (80–84 % busy). A missed frame now counts under the sensitivity like a reading over the period instead of lowering the resolution at once: no difference headless, not played yet (section 8.12).
+- **Images only the script shows are preloaded (2026-11-14).** Since upstream 78a616272, an image no part uses was decoded when first drawn on a table's first play: World Poker Tour stopped 1.9 s (headless) when its script first swapped 21 images for their "GI off" version. The images named by the script are now preloaded (`Player.PreloadScriptImages`, on by default): that frame takes 104 ms, for a first load 7.8 s longer and about 300 MB more memory on this table; half of the 90 tables of the library add 5 MB or less (section 8.16).
 
 ## 2. Method
 
@@ -381,6 +382,7 @@ Gains are per frame at 72 Hz; on Addams, a millisecond saved lets dynamic resolu
 | 20 | Threads on chosen cores while a table is played: render on core 7, logic on 5 and 6, the others on 2 to 4 | **Worn, Darkest Dungeon 1.9–19.4 % → 62 % at full resolution** (3 plays without, 2 with), mean size about 1770² → 2070²; headless with Steam's cores, little | A small module | **Done** 2026-11-01, `Player.ThreadPlacement`, on by default, no menu entry (8.10); sound fine according to the owner; World Joker Tour worn 6.3–12.7 % → 33 % (one play with it); long plays not measured |
 | 19 | Simplify the parts of "group elements" collections that are not really merged | WildWest −0.6 ms, no change with dynamic resolution; Addams and LOTR nothing | One condition | Measured 2026-11-01 (8.6): low value |
 | 21 | PuP's decoder closed outside the lock that drawing its screens takes | **Worn, Darkest Dungeon 62 % → 74.7 % at full resolution** (one play of 111 s, two of 171 and 188 s before); headless, waits 18–22 → 0 in 90 s, missed frames 0.07–0.17 → 0.04–0.05/s, time at full size unchanged | A few lines | **Done** 2026-11-02, in master 0659ce1e7 (8.11); PuP tables only; a longer play to confirm |
+| 22 | Images named by the table script preloaded with those of the parts | **World Poker Tour, first play: the frame when the GI first goes off 1 922 → 104 ms** | Small (a scan of the script) | **Done** 2026-11-14 (8.16), `Player.PreloadScriptImages`, on by default; first load 7.8 s longer, about 300 MB more memory on this table |
 
 Details:
 
@@ -1262,6 +1264,49 @@ copy (largest difference 3/255, on one pixel). On the Frame, headless at 2160²,
 Medieval Madness then sits 2.7 ms under the target of dynamic resolution (11.8 ms at 72 Hz) in play, and under it with every light on.
 The refractive ramps looked as before in the headset (owner, 2026-11-04). How it works and a draft of the upstream pull request:
 `docs/steam-frame/Refraction Copies Limited to Their Area.md`.
+
+### 8.16 Images swapped in by the script (2026-11-14)
+
+On the first play of World Poker Tour (2026-11-13) the game stopped for about a second the first time the GI went off, with a spike of the
+GPU. Its script swaps the images of 21 parts for their "GI off" version (`Backpanel.image = "BackwallGIOff"` and so on), and since
+upstream 78a616272 (2026-11-12) play preloads only the images of the parts shown in play and those of `used_textures.xml` (the textures
+drawn in the previous plays). On a table's first play the list does not exist yet, so the "GI off" images were decoded when first drawn,
+uncompressed, on the thread preparing the frame. Before that commit, every image of a table was preloaded.
+
+- **Preload.** `PinTable::CollectScriptImages` adds the images whose name is a string literal of the script (outside comments, the whole
+  literal, case ignored as `GetImage`), called by `Player` after the images of the parts and of the cache. Names built at run time
+  (`"Light" & n`) are not found. Setting `Player.PreloadScriptImages`, on by default (not guarded: a candidate for upstream); Device
+  Performance screen, section *Textures*, with the number of images it adds on the table played; it applies to the next table started.
+- **Log.** `TextureManager::LoadTexture` logs an image that takes 10 ms or more when drawn (`Image 'WPTPlastics1GIOff' loaded when drawn in
+  716 ms (not preloaded, or evicted)`), so a freeze of this kind names its images in the log.
+- **Survey.** Over the 90 tables of the Frame library (`script-images-survey.py` with `vpx-inspect.py`, an approximation of
+  `CollectPlayImages` from the parts' string records, which matched the 91 images of World Poker Tour within one): the script names images
+  no part uses on 63 tables; compressed (BC7, mips included) they add a median of 5 MB, 10 MB or more on 38 tables, 50 MB or more on 13:
+  Transformers 544 MB, World Poker Tour 488 MB (same author, the same GI swap), Eight Ball 190 MB, Blade Runner 176 MB, Tenacious D 135 MB.
+  Some of them are variants chosen by table options that a given setup never shows: side blades 1 to 5 in GI on and off versions
+  (World Poker Tour, Transformers), LED plastics, desktop and VR room parts (Eight Ball), color grading LUTs. Names built at run time
+  cover about 2 700 images (1 180 on Robot Invasion), left to the used textures cache.
+
+**Measured** on the Frame, headless (`VPX_PERF_FORCE_RENDER`, dynamic resolution on, cores 3 to 7), a copy of World Poker Tour whose
+script forces the GI off 45 s into the play (in a first series the trigger did not fire on the first play with the preload on, which was run
+again; `Doc/test-hooks`: `wpt-preload-series.sh`, `preload-report.py`; the frames from
+`dr-trace-hooks.py`). *First play*: empty texture cache; *second*: the cache of the play before.
+
+| Play | Load | Images compressed | GI off: slowest frame | Memory (resident, end of play) |
+|---|---|---|---|---|
+| Off, first play | 19.8 s | 162 (626 MB) | **1 922 ms** (21 images decoded, 1 759 ms; `WPTPlastics1GIOff` 8192² 716 ms) | 861 MB |
+| On, first play | 27.6 s | 221 (1 114 MB) | **104 ms** (the 21 preloaded images uploaded in one frame) | 1 160 MB (peak 2 651 against 1 890) |
+| On, second play | 4.1 s | from the cache (5.5 s for 221 files) | 95 ms (the 21 preloaded images uploaded in one frame) | 1 163 MB |
+| Off, second play | 4.0 s | from the cache (4.2 s for 198 files) | no slow frame (listed by the cache, uploaded at load) | 864 MB |
+
+- With the preload, the "GI off" images are compressed while the table loads and kept in memory; their first draw only uploads them:
+  one frame of 104 ms (95 ms on the second play) instead of 1.9 s, each upload under 10 ms. Once a play has drawn them, the used textures cache uploads them at load, without or with the
+  setting (no slow frame).
+- The cost on this table: the first load takes 7.8 s more (the extra images compressed, once), and the images named but never drawn stay
+  in memory for the whole play: about 300 MB on the first play and on later ones (the variants of the side blades among them), with a peak
+  of 2 651 MB instead of 1 890 MB while the first load compresses.
+- Left as it is: the upload of a set of large images still takes one frame. Uploading the script's images at load, as the cached ones,
+  would remove it, for GPU memory held by images that may never be drawn.
 
 ## 9. Reproduction
 

@@ -816,6 +816,12 @@ void Player::InitTableSession(const bool isInitial)
          for (const auto &[name, entry] : m_usedTextures)
             if (const Texture *const image = m_ptable->GetImage(name); image != nullptr)
                used.insert(image);
+         // The images a script swaps in (f.e. the 'GI off' versions of the parts' images) are on no part: until the used textures cache lists
+         // them, the first draw of each decoded it uncompressed while playing (0.9 s on World Poker Tour's first play on the Steam Frame, when its
+         // GI first went off, 2026-11-13)
+         if (m_ptable->GetSettings().GetPlayer_PreloadScriptImages())
+            if (const size_t named = m_ptable->CollectScriptImages(used); named > 0)
+               PLOGI << named << " images named by the script and used by no part are preloaded";
          for (Texture *const image : m_ptable->m_vimage)
             if (used.contains(image))
                preloadImages.push_back(image);

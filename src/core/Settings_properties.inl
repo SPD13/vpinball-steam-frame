@@ -222,6 +222,8 @@ PropInt(Player, SecurityLevel, "Security Level"s, ""s, 0, 4, DEFAULT_SECURITY_LE
 PropInt(Player, NumberOfTimesToShowTouchMessage, "NumberOfTimesToShowTouchMessage"s, "Number of times to re-display the touch display message"s, 0, 100, 10);
 PropBool(Player, Mirror, "Mirror"s, "Mirror the table (left <-> right)"s, false);
 PropEnum(Player, CacheMode, "Cache Mode"s, "Use cache to limit stutters and speedup loading"s, int, 1, "Disabled"s, "Preload Textures"s);
+// Images named by the table script preloaded with those of the parts, see PinTable::CollectScriptImages
+PropBool(Player, PreloadScriptImages, "Preload script images"s, "Also prepare, when a table starts, the images its script names, such as the versions of the parts' images with the lights off. Without it, the first time the script shows one of them on a table's first play, the game stops while it is loaded (up to 2 seconds for large images). Costs loading time on a table's first start and memory for the images a script names but never shows. Applies to the next table started"s, true);
 PropEnum(Player, RumbleMode, "RumbleMode"s, "Use rumble motor(s) in attached input devices"s, int, 3, "Off"s, "Table only (N/A yet)"s, "Generic only (N/A yet)"s, "Table with generic fallback"s);
 PropFloat(Player, RumbleFlipperContact, "Flipper Contact Rumble"s, "Strength of the rumble played when a ball hits a flipper, scaled by the impact speed (0 disables it)"s, 0.f, 3.f, 1.f);
 PropFloat(Player, RumbleBumper, "Bumper Rumble"s, "Strength of the rumble played when a bumper fires (0 disables it)"s, 0.f, 3.f, 1.f);

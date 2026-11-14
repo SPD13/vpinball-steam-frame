@@ -7470,6 +7470,58 @@ void PinTable::CollectPlayImages(ankerl::unordered_dense::set<const Texture *> &
    }
 }
 
+size_t PinTable::CollectScriptImages(ankerl::unordered_dense::set<const Texture *> &named) const
+{
+   ankerl::unordered_dense::map<string, const Texture *, StringHashFunctor, StringComparator> images; // Case insensitive, as GetImage
+   for (const Texture *const image : m_vimage)
+      images.emplace(image->m_name, image);
+   const auto isIdentifier = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+   const string &script = m_script_text;
+   const size_t n = script.size();
+   size_t added = 0;
+   string literal;
+   for (size_t i = 0; i < n;)
+   {
+      const char c = script[i];
+      if (c == '"')
+      {
+         // A string literal ends at the next double quote that is not doubled ("" is a quote inside it); one left open at the end of the line is ignored
+         literal.clear();
+         size_t j = i + 1;
+         bool terminated = false;
+         for (; j < n && script[j] != '\n' && script[j] != '\r'; j++)
+         {
+            if (script[j] == '"')
+            {
+               if (j + 1 < n && script[j + 1] == '"')
+               {
+                  literal += '"';
+                  j++;
+                  continue;
+               }
+               terminated = true;
+               break;
+            }
+            literal += script[j];
+         }
+         if (terminated)
+            if (const auto it = images.find(literal); it != images.end() && named.insert(it->second).second)
+               added++;
+         i = j + 1;
+      }
+      else if (c == '\'' || ((c == 'r' || c == 'R') && (i == 0 || !isIdentifier(script[i - 1])) && i + 3 <= n && StrCompareNoCase(script.substr(i, 3), "rem"s)
+                                && (i + 3 == n || std::isspace(static_cast<unsigned char>(script[i + 3])))))
+      {
+         // A comment, to the end of the line
+         while (i < n && script[i] != '\n')
+            i++;
+      }
+      else
+         i++;
+   }
+   return added;
+}
+
 void PinTable::ShowWhereMaterialsUsed(vector<WhereUsedInfo> &vWhereUsed)
 {
    for (size_t i = 0; i < m_materials.size(); i++)
