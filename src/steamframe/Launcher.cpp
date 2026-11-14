@@ -16,6 +16,7 @@
 #include "steamframe/TableFixes.h"
 #include "steamframe/TableLibrary.h"
 #include "steamframe/TablePickerPage.h"
+#include "steamframe/VRRoomOption.h"
 #include "steamframe/vrui/VRUI.h"
 #include "parts/Collection.h"
 #include "parts/Material.h"
@@ -664,6 +665,17 @@ string Launcher::GetLoadingText(const std::filesystem::path& tablePath, bool lob
          break;
       }
    return "Loading " + name + "...";
+}
+
+string Launcher::GetScriptToRun(const string& script, bool vr)
+{
+   if (!vr)
+      return script;
+   std::optional<VPX::VRRoomOption::Change> change = VPX::VRRoomOption::TurnOn(script);
+   if (!change)
+      return script;
+   PLOGI << "VR room option of the script turned on for the headset (line " << change->line << ": " << trim_string(change->option) << ')';
+   return std::move(change->script);
 }
 
 // The first load of a table takes longer as it fills the table's cache on the disk, its compressed textures being what takes most of the time. That cache tells
