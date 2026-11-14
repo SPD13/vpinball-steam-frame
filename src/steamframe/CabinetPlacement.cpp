@@ -206,7 +206,8 @@ bool VRDevice::GetPlacementBarTransforms(Matrix3D (&barToClip)[2], Matrix3D (&lo
    return true;
 }
 
-// LiveUI: the message, in the lower middle of the UI panel, which follows the head while placing (see LiveUI::RenderUI)
+// LiveUI: the message, in the middle of the UI panel, which stands in the room as the loading message while placing, in the table's forward direction
+// of when it started (see LiveUI::RenderUI and VRDevice::UpdateUIPanel)
 void LiveUI::RenderCabinetPlacementMessage()
 {
    VRDevice* const vr = m_player->m_vrDevice;
@@ -237,7 +238,7 @@ void LiveUI::RenderCabinetPlacementMessage()
 
    const ImGuiIO& io = ImGui::GetIO();
    ImGui::PushFont(m_baseFont, m_baseFont->LegacySize * 1.5f);
-   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.68f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
    ImGui::SetNextWindowBgAlpha(0.85f);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ImGui::GetFontSize() * 1.2f, ImGui::GetFontSize() * 0.9f));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetFontSize() * 0.5f);

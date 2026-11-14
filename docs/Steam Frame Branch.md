@@ -573,8 +573,9 @@ Files: `src/steamframe/CabinetPlacement.cpp` (new: `VRDevice` and `LiveUI` membe
   action (left thumbstick click by default), which the fork turns into this mode. The passthrough is forced on while placing
   (`Passthrough::SetForced`, not saved), then back to the setting: on if it was on, off otherwise.
 - **Feedback:** a thin white bar from one controller to the other, the lockbar on it (its width, centered), colored by the play area check, and a
-  message in the lower middle of the view, following the head: "Move the lockbar to the desired position and press a button", the state of the
-  check, and the button that fixes it (its mapping in Controls).
+  message standing in the room as the loading message, in the table's forward direction of when the mode started (the table turns with the
+  controllers), at the menu distance and 0.1 m below the eyes, placed when the mode starts and kept there: "Move the lockbar to the desired
+  position and press a button", the state of the check, and the button that fixes it (its mapping in Controls).
 - **Play area check:** the stage bounds of OpenXR (`xrGetReferenceSpaceBoundsRect`, a rectangle centered on the origin of the stage), for a stage
   reference space. Both ends of the lockbar are checked: green 30 cm or more inside, orange closer, red outside. Unknown bounds (no stage, or no
   play area set) are not checked (grey).

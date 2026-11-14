@@ -27,8 +27,8 @@ Your room appears, even if the passthrough was off, and the cabinet jumps to the
 
 ## 2. The lockbar follows both controllers
 
-A thin bar joins the two controllers, with the lockbar drawn on it at its real width. A message in the lower middle of the view says what
-to do, where the lockbar stands (green: inside your play area) and which button fixes the cabinet.
+A thin bar joins the two controllers, with the lockbar drawn on it at its real width. A message, standing in front of the table as the loading message
+does and staying there while you move, says what to do, where the lockbar stands (green: inside your play area) and which button fixes the cabinet.
 
 ![The bar between the controllers, the lockbar on it, the message](img/placement-03-room.jpg)
 

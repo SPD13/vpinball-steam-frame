@@ -639,8 +639,12 @@ void LiveUI::RenderUI()
       // With the in-game UI closed, the panel stays in front of the head, so that a new notification appears in the middle of the view; it then
       // stays there in the room until it disappears, the panel following the head again for the next one
       const unsigned int notification = m_notificationOverlay.GetNewestId();
-      // and while the cabinet is placed, for its message
-      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && (m_player->m_vrDevice->IsPlacingCabinet() || notification == 0 || notification != m_vrNotificationPlaced));
+      // While the cabinet is placed, the panel stands in the room as the loading message, in the table's forward direction, placed when it starts
+      const bool placingCabinet = m_player->m_vrDevice->IsPlacingCabinet();
+      if (placingCabinet && !m_vrPlacingCabinet)
+         m_player->m_vrDevice->ReplaceUIPanel();
+      m_vrPlacingCabinet = placingCabinet;
+      m_player->m_vrDevice->SetUIPanelFollowsHead(!m_inGameUI.IsOpened() && !placingCabinet && (notification == 0 || notification != m_vrNotificationPlaced));
       m_vrNotificationPlaced = notification;
       onVRPanel = m_player->m_vrDevice->GetUIPanelTransforms(right, bottom, matView);
    }
