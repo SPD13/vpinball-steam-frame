@@ -494,6 +494,49 @@ private:
    }
 };
 
+// The images named by the table script, preloaded with those of its parts (Device Performance screen). Read when a table starts, so a change
+// applies to the next table started; saved for the table or for all of them like the settings pages
+class TexturesPage final : public InGameUIPage
+{
+public:
+   TexturesPage()
+      : InGameUIPage("Textures"s, ""s, SaveMode::Both)
+   {
+   }
+
+private:
+   void BuildPage() override
+   {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_PreloadScriptImages, //
+         []() { return g_settingsService.GetActiveSettings().GetPlayer_PreloadScriptImages(); }, //
+         [](bool v) { g_settingsService.GetActiveSettings().SetPlayer_PreloadScriptImages(v, false); }));
+      // What the setting adds on this table: the images its script names that no part uses (counted once, the scan takes a few milliseconds)
+      string status = "No table played"s;
+      if (m_player != nullptr && m_player->m_ptable != nullptr)
+      {
+         const PinTable* const table = m_player->m_ptable;
+         ankerl::unordered_dense::set<const Texture*> parts;
+         table->CollectPlayImages(parts);
+         ankerl::unordered_dense::set<const Texture*> images = parts;
+         const size_t named = table->CollectScriptImages(images);
+         uint64_t pixels = 0;
+         for (const Texture* const image : images)
+            if (!parts.contains(image))
+               pixels += static_cast<uint64_t>(image->m_width) * image->m_height;
+         status = named == 0 ? "This table's script names no image that its parts do not use"s
+                             : std::format("This table's script names {} images that no part uses ({:.0f} megapixels): preloaded when the table starts if on", named,
+                                  static_cast<double>(pixels) / 1e6);
+      }
+      AddItem(std::make_unique<InGameUIItem>("Preload script images status"s, "The images this setting adds to the ones prepared when this table starts"s,
+         [status](int, const InGameUIItem*)
+         {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(status.c_str());
+         }));
+   }
+};
+
 // Dynamic resolution outside VR (Device Performance screen; in VR, the items of the VR settings): the settings of VR, applied live, saved for the
 // table or for all of them like the settings pages
 class DesktopDynamicResolutionPage final : public InGameUIPage
@@ -659,6 +702,7 @@ constexpr const char* kSceneBuffer = "vrui/scene-buffer";
 constexpr const char* kLightMaps = "vrui/light-maps";
 constexpr const char* kDesktopDynamicResolution = "vrui/desktop-dynamic-resolution";
 constexpr const char* kReflections = "vrui/reflections";
+constexpr const char* kTextures = "vrui/textures";
 constexpr const char* kPerfProfile = "vrui/perf-profile";
 
 // Sections of the composed screens: how the options of upstream's pages (VR settings, graphics, sound...) are grouped by the new menu.
@@ -719,6 +763,7 @@ static vector<Section> GetSections(Screen screen)
          Section { "Light maps"s, kLightMaps, {}, true },
          Section { "Scene buffer"s, kSceneBuffer, {}, true },
          Section { "Reflections"s, kReflections, {}, true },
+         Section { "Textures"s, kTextures, {}, true },
       };
 
    case Screen::Sound:
@@ -885,6 +930,7 @@ std::unique_ptr<InGameUIPage> CreateScreenContent(Screen screen)
       sources.push_back(source(kLightMaps, std::make_unique<LightMapsPage>()));
       sources.push_back(source(kSceneBuffer, std::make_unique<SceneBufferPage>()));
       sources.push_back(source(kReflections, std::make_unique<ReflectionsPage>()));
+      sources.push_back(source(kTextures, std::make_unique<TexturesPage>()));
       std::unique_ptr<InGameUIPage> page = CreateComposed(screen, "Device Performance"s, "What the Steam Frame Edition adds to keep heavy tables smooth"s, std::move(sources));
       profilePage->SetScreen(static_cast<const ComposedPage*>(page.get())); // The settings the profile sets are the items of the screen
       return page;

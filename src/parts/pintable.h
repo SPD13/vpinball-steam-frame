@@ -387,6 +387,10 @@ public:
    // Images that play may draw: the table's (except the environment image, decoded by the renderer) and those of the parts shown in play,
    // that is not in a group hidden in every player mode and not reference images (editor only visuals). Images set by the script are unknown here
    void CollectPlayImages(ankerl::unordered_dense::set<const Texture *> &shown) const;
+   // Images named by a string literal of the script (outside comments, the whole literal being the name, case ignored as GetImage): what a
+   // script may set on a part, f.e. the 'GI off' versions of its images. Names built at run time ("Light" & n) are not found. Returns the
+   // number of images added to 'named'
+   size_t CollectScriptImages(ankerl::unordered_dense::set<const Texture *> &named) const;
    void ShowWhereMaterialsUsed(vector<WhereUsedInfo> &);
    void ShowWhereMaterialUsed(vector<WhereUsedInfo> &, Material *const ppi);
 
