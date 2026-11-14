@@ -1086,7 +1086,11 @@ void Player::InitTableSession(const bool isInitial)
       m_scriptInterpreter->SetScriptErrorHandler([this](ScriptInterpreter::ErrorType type, int line, int column, const string &description, const vector<string> &stackDump)
          { OnScriptError(type, line, column, description, stackDump); });
       m_scriptInterpreter->Start(m_ptable);
+#if defined(VPX_STEAM_FRAME)
+      m_scriptInterpreter->Evaluate(m_pluginAPI.ApplyScriptCOMObjectOverrides(Launcher::GetScriptToRun(m_ptable->m_script_text, m_vrDevice != nullptr)), false);
+#else
       m_scriptInterpreter->Evaluate(m_pluginAPI.ApplyScriptCOMObjectOverrides(m_ptable->m_script_text), false);
+#endif
 
       // Fire Init event for table object itself and all table parts, also fire Animate event of parts having it, since initial setup is considered as the initial animation event
       m_ptable->FireVoidEvent(DISPID_GameEvents_Init);

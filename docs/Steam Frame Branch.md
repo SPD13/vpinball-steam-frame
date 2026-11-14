@@ -609,6 +609,27 @@ and survey in section 8.16 of `docs/Performance on the Steam Frame.md`. Not guar
 Files: `src/parts/pintable.h/.cpp`, `src/core/player.cpp`, `src/renderer/TextureManager.cpp`, `src/core/Settings_properties.inl`,
 `src/steamframe/vrui/Screens.cpp`.
 
+## 29. VR room option left off (2026-11-14)
+
+Most tables made for VR turn their room on by themselves: their script reads `RenderingMode` (2 in VR) or offers the room as a table
+option. Older ones have a user option at the top of the script, meant to be edited by hand, and a few ship with it off: Tron Legacy (Stern
+2011) VPW Mod (`Const VRRoom = 0 '0 - VR Room Off, 1 - Tron Room 2 - Minimal Room, 3 - Ultra Minimal`), Congo VPW, Whirlwind 4K and Getaway mod.
+In the headset they show a table floating in the void, without their cabinet, backglass or room, and the library does not tag them (their
+`VR…` collections make them "made for VR", section 8).
+
+- **What.** When the table plays in a headset (`Player::m_vrDevice`), the script run gets that option set to 1, the first room it offers
+  (`Launcher::GetScriptToRun`, called where `Player::InitTableSession` evaluates the script; `VRRoomOption::TurnOn`). The `.vpx` and its `.vbs`
+  are left as they are, so desktops and cabinets play the table as written, and the script's line numbers do not change. Logged:
+  `VR room option of the script turned on for the headset (line 78: Const VRRoom = 0 ...)`.
+- **Which tables.** Only a clear case: the script does not read `RenderingMode` outside comments, and the first assignment of `VRRoom` or
+  `VR_Room` outside subs and functions (`VRRoom = 0`, `Const VRRoom = 0`, `Dim VRRoom : VRRoom = 0`) sets 0 with a comment saying that 0 is
+  off (or desktop) and naming a choice 1. Left alone: options where 0 is a room (TOTAN `' 0 = big room, 1 = small room`), values loaded from
+  saved data (Rocky, James Bond), `VRRoomChoice` (the tables that read `RenderingMode`). On the 130 tables of the Frame library (2026-11-14)
+  it changes exactly the four above.
+
+Files: `src/steamframe/VRRoomOption.h/.cpp` (new), `src/steamframe/Launcher.h/.cpp`, `src/core/player.cpp`, `steamframe/steamframe.cmake`,
+`tests/test-vr-room-option.cpp` (new; lines of the library's tables, built alone as written at its top).
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -657,6 +678,8 @@ src/steamframe/RomAliases.h
 src/steamframe/RomAliases.cpp           game aliases of the tables (section 6)
 src/steamframe/TableFixes.h
 src/steamframe/TableFixes.cpp           fixes of the tables and ROMs: recipes, script patches, state (section 17)
+src/steamframe/VRRoomOption.h
+src/steamframe/VRRoomOption.cpp         VR room option left off by the script, turned on in a headset (section 29)
 plugins/pinmame/RomFix.h
 plugins/pinmame/RomFix.cpp              ROM procedures of the fixes, run by the PinMAME plugin (section 17)
 src/assets/fixes/fixes.json             the recipes of the fixes (section 17)
@@ -682,6 +705,7 @@ src/ui/live/ingameui/MessagePage.h
 src/ui/live/ingameui/MessagePage.cpp
 tests/test-table-library.cpp
 tests/test-table-fixes.cpp
+tests/test-vr-room-option.cpp
 src/renderer/VRControllerModels.h
 src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h

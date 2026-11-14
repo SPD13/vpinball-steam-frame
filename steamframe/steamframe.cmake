@@ -34,6 +34,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/ScoreTracker.cpp
    src/steamframe/TableFixes.h
    src/steamframe/TableFixes.cpp
+   src/steamframe/VRRoomOption.h
+   src/steamframe/VRRoomOption.cpp
    src/steamframe/TableLibrary.h
    src/steamframe/TableLibrary.cpp
    src/steamframe/TableImageCache.h

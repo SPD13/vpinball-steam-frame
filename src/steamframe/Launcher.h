@@ -140,6 +140,8 @@ public:
    bool RefuseTable(const PinTable* table, const std::filesystem::path& tableFilename); // A table that cannot be played as it is: not started, the lobby tells why
    void OnTableLoaded(PinTable* table, const std::filesystem::path& tableFilename, bool isLobby);
    void OnPlayerCreated(Player* player, bool isLobby);
+   // The table script as the player runs it: in a headset, with the VR room option left off turned on (see VRRoomOption.h)
+   static string GetScriptToRun(const string& script, bool vr);
    void OnTableClosed();
 
    // Items of the home page of the in-game menu: at the top (quit the launcher, play another table), and after the table options
