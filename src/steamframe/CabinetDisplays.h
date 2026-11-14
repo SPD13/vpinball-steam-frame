@@ -42,7 +42,9 @@ public:
    static void RegisterPage(Player* player);
    static void AddMenuItem(VPX::InGameUI::InGameUIPage& page);
 
-   // Each frame, before the parts are rendered: applies the placement settings, and hides the table's DMD while PuP draws in its place
+   // Each frame, before the parts are rendered: places the surfaces again when the script moved the parts they stand on (at its init,
+   // or later for the table's DMD and backglass flashers), applies the placement settings, and hides the table's DMD while PuP draws
+   // in its place
    void Update();
 
    bool HasSurface(Surface surface) const { return m_surfaces[surface].flasher != nullptr; }
@@ -96,6 +98,9 @@ private:
    };
 
    void CreateSurfaces(const std::filesystem::path& packFolder, bool hasTableBackglass, bool hasTableTopper);
+   void PlaceAnchors(std::array<Rect, SurfaceCount>& anchors);
+   bool AnchorsMoved() const;
+   void PlaceAgain();
    Flasher* CreateFlasher(Surface surface);
    void ApplyPlacement(Surface surface);
    void LoadPlacements();
@@ -103,9 +108,10 @@ private:
    bool FindCabinetBackglass(Rect& rect) const;
    bool FindCabinetTopper(Rect& rect) const;
    static bool FitUprightPanel(Primitive* primitive, float glassTopHeight, Rect& rect);
-   static bool KeepAboveDMD(Rect& glass, const Rect& dmd);
+   bool KeepAboveDMD(Rect& glass, const Rect& dmd) const;
    Rect GetDefaultBackglassRect() const;
    static Rect GetFlasherRect(const Flasher* flasher);
+   static bool SameRect(const Rect& a, const Rect& b);
    static float GetAspect(int aspectIndex);
 
    Player* const m_player;
@@ -114,4 +120,15 @@ private:
    std::vector<Flasher*> m_tableDMDs; // Flashers of the table showing its DMD, hidden while PuP draws on the DMD surface
    bool m_tableDMDSuppressed = false;
    bool m_placementPageOpened = false;
+
+   // The parts the surfaces stand on are found before the table script runs, which may move them (Total Nuclear Annihilation moves its VR
+   // DMD 190 units toward the player at init): the surfaces are placed again at the first frame, then follow the flashers they stand on
+   bool m_hasTableBackglass = false, m_hasTableTopper = false, m_fullDMD = false;
+   const Flasher* m_dmdAnchorFlasher = nullptr; // The table's DMD flasher the DMD surface stands in front of, if any
+   const Flasher* m_tableBackglassFlasher = nullptr; // The table's backglass surface, the other surfaces are placed from it
+   Rect m_dmdAnchorSource, m_tableBackglassSource; // Their place when the surfaces were placed
+   bool m_placedAfterInit = false;
+   bool m_logPlacement = true; // Details of the placement in the log: at creation only
+   uint64_t m_nextPlaceAgainMs = 0;
+   int m_placedAgainLogs = 0;
 };
