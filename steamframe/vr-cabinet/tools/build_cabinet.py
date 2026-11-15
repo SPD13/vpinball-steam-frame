@@ -456,7 +456,9 @@ spring0 = sleeve0 + out_dir * 0.55 * IN
 SPRING_L = 1.7 * IN
 helix("PlungerSpring", "PlungerSpring", spring0, out_dir, 0.27 * IN, 0.035 * IN, SPRING_L, 9, M["chrome"])
 knob0 = spring0 + out_dir * SPRING_L
-revolve("PlungerRod", "PlungerRodBar", [(0, -2.5 * IN), (0.19 * IN, -2.5 * IN), (0.19 * IN, 0.2 * IN), (0, 0.2 * IN)], knob0, out_dir, M["chrome"], segments=16)
+# The rod goes on inside the cabinet: with the knob fully pulled (2.8", DefaultCabinet kPlungerTravel) it still passes through the front
+ROD_IN = (knob0 - hole).length + 2.8 * IN + 1.0 * IN
+revolve("PlungerRod", "PlungerRodBar", [(0, -ROD_IN), (0.19 * IN, -ROD_IN), (0.19 * IN, 0.2 * IN), (0, 0.2 * IN)], knob0, out_dir, M["chrome"], segments=16)
 revolve("PlungerRod", "PlungerKnob", [(0, 0), (0.34 * IN, 0), (0.42 * IN, 0.15 * IN), (0.48 * IN, 0.9 * IN), (0.6 * IN, 1.7 * IN), (0.62 * IN, 1.85 * IN),
                                       (0.56 * IN, 2.02 * IN), (0.4 * IN, 2.12 * IN), (0, 2.16 * IN)], knob0, out_dir, M["knob"])
 
