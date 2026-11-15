@@ -26,6 +26,9 @@ std::filesystem::path FindBackglassImage(const std::filesystem::path& tablePath)
 std::filesystem::path GetBackglassCapturePath(const std::filesystem::path& tablePath);
 // The .directb2s used by the B2S plugin for a table: <table>.directb2s, or <folder name>.directb2s (case insensitive), empty if none
 std::filesystem::path FindDirectB2S(const std::filesystem::path& tablePath);
+// A downloaded .directb2s seldom has the name of the table it goes with, and is then never loaded: when a folder holds one table and one
+// .directb2s found by neither name, the .directb2s is renamed <table>.directb2s. Called when a table or a .directb2s is uploaded (WebServer).
+void MatchDirectB2SName(const std::filesystem::path& folder);
 // Writes the main image of a .directb2s as <table>.backglass.png or .jpg (the image as stored, not encoded again). Slow for large files (tens of
 // MB to read): call it from a worker thread. Returns the written file, empty if the file has no image.
 std::filesystem::path ExtractBackglass(const std::filesystem::path& tablePath, const std::filesystem::path& directB2S);

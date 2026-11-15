@@ -13,6 +13,7 @@
 #include "VPinballLib.h"
 #endif
 #ifdef VPX_STEAM_FRAME
+#include "steamframe/CabinetBackglass.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/TableLibrary.h"
 #endif
@@ -618,6 +619,8 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
       std::filesystem::remove(stagingPath, ec); // Only succeeds when no other transfer is pending
 #ifdef VPX_STEAM_FRAME
       g_launcher->GetTableLibrary().OnFileAdded(file); // It may be a missing ROM
+      if (*q != '\0' && (extension_from_path(file) == "vpx" || extension_from_path(file) == "directb2s"))
+         VPX::Cabinet::MatchDirectB2SName(path); // A backglass named after its table, whichever of the two comes first
 #endif
 #ifdef __LIBVPINBALL__
       if (*q == '\0' && file == "VPinballX.ini") {
