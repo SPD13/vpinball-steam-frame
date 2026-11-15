@@ -372,6 +372,7 @@ public:
    bool IsLost() const { return m_lost; }
    void CreateSession(); // Opens the session if it was not kept from the previous table, then attaches the table to it (see AttachTable)
    void ReleaseSession(); // Detaches the table, then ends the session (letting the runtime stop it) and destroys it unless it is kept (the instance is kept)
+   void UpdateSceneSize(); // The far plane: the size of the table's parts, again after parts were added to the attached table
    // Keep the session when the table is released, for the next table played with this device (see VPApp::AcquireVRDevice)
    void SetKeepSession(bool keep) { m_keepSession = keep; }
    void* GetGraphicContext() const;
