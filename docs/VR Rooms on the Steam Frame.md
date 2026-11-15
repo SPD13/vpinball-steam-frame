@@ -429,8 +429,15 @@ drawn, dynamic resolution 2160², but loading 4.3 → 19.5 s (33 s of CPU, 17.6 
 1.34 M statue (at most 0.5 VP unit it keeps 97 %, at 16 VP units 54 %) and its 9 levels each start from the whole mesh: 5.6 s on the Mac.
 Going straight to the coarse levels the statues need from the cabinet (8 and 16 VP units) takes 1.7 s on the Mac.
 
+**Loading** (`Steam Frame Branch.md` section 31): in VR the parts far from the player start at a coarser level (the statues at 4 VP units),
+and the levels are kept on disk with the texture cache. KISS, headless at 2160²: first load 8.6 s (16 s of CPU, a 16 MB cache file), then
+2.4 s (4.3 s before the branch, which simplified the other parts at every load), 10.1–10.3 ms, 1.85 M triangles drawn, dynamic resolution
+at 2160². Tron 2.5 → 2.0 s, Medieval Madness 10.8 → 8.1 s, Stranger Things 3.7 → 2.45 s. The Frame drifted during the series: the build
+with only the flasher fix read 7.8 ms on Tron at first and 8.4–8.5 ms two hours later, beside 8.4 ms for the final build; compare runs made
+back to back.
+
 **Library** (`Doc/test-hooks/room-survey2.py`, read-only, the 130 tables of the Frame): flashers with an edge over 20,000 units only in Tron
 (and one hidden 40,000-unit flasher in Simpsons Treehouse of Horror); grouped parts the new rule simplifies in 49 tables, the largest
 KISS 2.5 M triangles, Stranger Things 1.14 M, Star Wars ESB 730 k, Space Cadet 691 k, X-Men 687 k, Addams 638 k, Wrath of Olympus 626 k,
-LOTR 617 k. Stranger Things: 9.93 → 9.11 ms, loading 3.4 → 3.6 s (a first run rebuilt its texture cache: compare loads with
-`Texture compression: 0 compressed`).
+LOTR 617 k. Stranger Things draws the same triangles with the rule (1.420 M; 9.8–9.9 ms in four runs, one stray run at 9.1); loading
+3.4 → 3.6 s (a first run rebuilt its texture cache: compare loads with `Texture compression: 0 compressed`).

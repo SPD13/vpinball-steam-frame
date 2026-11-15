@@ -392,7 +392,7 @@ Files: `src/steamframe/MeshSimplifier.h/.cpp`, `third-party/include/meshoptimize
 
 The GPU time of heavy tables on the Frame follows their triangles (about 2.2 ms per million per frame), and tables built from scans or exports (Addams Family, Attack from Mars, Iron Man) carry far more than the headset can show (`docs/Table Geometry on the Steam Frame.md`; the choices are in `docs/Performance on the Steam Frame.md`, section 8.2).
 
-- **While the table loads.** With `Player.SimplifyMeshes` on (default in the Frame build, off elsewhere), the primitives with a 3D mesh of at least 500 triangles get simplified levels of their mesh, on the thread pool that loads the textures (`MeshSimplifier::Enqueue`, from `Player`'s texture loading). Each level is meshoptimizer's simplifier (positions scaled by the part's size, normals and texture coordinates weighted 10) within an error bound of 0.5, 0.71, 1, 1.41, 2, 2.83, 4, 8 and 16 VP units (x1.41 steps where the parts of a table are seen from the lockbar, x2 beyond), each made from the previous one kept; a level is kept when it removes at least 10 % of the triangles. A level is an index list over the part's own vertices: the kept vertices are exact, the physics, the editor and the table's file keep the original mesh. Not simplified: animated meshes, parts merged by their collection's group elements (section 31), the playfield mesh, small meshes, and additive parts and light maps that do not lie on a simplified part; a layer lying on a part is simplified with it (see below). Coinciding meshes (same index list, same placement and vertices within 0.25 VPU, like a part and its 'off' layer) share one set of levels, so that stacked layers stay on top of each other. The log line `Mesh simplification:` gives the meshes, the triangles at each bound and the time. No cache yet: Addams costs 4.5 s of CPU on a Mac, about 0.6 s more loading (0.3 s with x2 steps).
+- **While the table loads.** With `Player.SimplifyMeshes` on (default in the Frame build, off elsewhere), the primitives with a 3D mesh of at least 500 triangles get simplified levels of their mesh, on the thread pool that loads the textures (`MeshSimplifier::Enqueue`, from `Player`'s texture loading). Each level is meshoptimizer's simplifier (positions scaled by the part's size, normals and texture coordinates weighted 10) within an error bound of 0.5, 0.71, 1, 1.41, 2, 2.83, 4, 8 and 16 VP units (x1.41 steps where the parts of a table are seen from the lockbar, x2 beyond), each made from the previous one kept; a level is kept when it removes at least 10 % of the triangles. A level is an index list over the part's own vertices: the kept vertices are exact, the physics, the editor and the table's file keep the original mesh. Not simplified: animated meshes, parts merged by their collection's group elements (section 31), the playfield mesh, small meshes, and additive parts and light maps that do not lie on a simplified part; a layer lying on a part is simplified with it (see below). Coinciding meshes (same index list, same placement and vertices within 0.25 VPU, like a part and its 'off' layer) share one set of levels, so that stacked layers stay on top of each other. The log line `Mesh simplification:` gives the meshes, the triangles at each bound and the time. Addams costs 4.5 s of CPU on a Mac, about 0.6 s more loading (0.3 s with x2 steps); since 2026-11-14 the levels are kept on disk with the texture cache and only the first load makes them, and in VR the parts far from the player only get their coarse levels (section 31).
 - **Each frame.** `Primitive::RenderSetup` puts the levels after the mesh in the part's index buffer (`MeshSimplifier::CreateIndexBuffer`); `Primitive::Render` draws the range picked by `MeshSimplifier::SelectRange`: the coarsest level whose error, at the distance between the part's bounding box and the closest eye, stays under `Player.SimplifyMeshesError` pixels (default 1) of the view at its full render resolution (from the projection, as the ratio of its y scale to its w term, since in VR the projection also carries the scale of the table; so a zoomed desktop camera is as safe as the headset; not the dynamic resolution, so a lower resolution does not make the parts coarser). The reflection probe allows twice as much. In the main view a part gets finer at once and coarser only within 80 % of the allowed error, so that it does not switch back and forth.
 - **Performance profile** (top of the Device Performance screen, `PerfProfilePage` in `Screens.cpp`): Low, Medium and High set the
   settings of the screen at once, Custom is highlighted when they match none (it cannot be chosen). Low: dynamic resolution on, foveated
@@ -664,11 +664,29 @@ Tron Legacy (Stern 2011) VPW Mod and KISS (Stern 2015) 2.0 stayed below full res
   `Primitive::RenderSetup` only merges the dynamic 3D meshes of such a collection that share the material and texture of its first
   one: the others are drawn on their own, and `IsGrouped` (`MeshSimplifier.cpp`) now follows that rule. KISS's room is four statues of
   2.49 M triangles (Peter Criss 1.34 M) in such a collection, static, each with its own texture: 13.3 → 10.4 ms at 2160², dynamic
-  resolution at 2160² (2026 before), but the table loads in 19.5 s instead of 4.3 s (meshoptimizer on the 1.34 M statue, 33 s of CPU).
-  The rule reaches the room parts of 49 tables of the library (KISS 2.5 M triangles, Stranger Things 1.14 M, Star Wars ESB 730 k,
-  Space Cadet 691 k, X-Men 687 k, Addams 638 k, LOTR 617 k); Stranger Things: 9.93 → 9.11 ms, loading 3.4 → 3.6 s.
+  resolution at 2160² (2026 before), but with all its levels the table loaded in 19.5 s instead of 4.3 s (meshoptimizer on the 1.34 M
+  statue, 33 s of CPU at every load). The rule reaches the room parts of 49 tables of the library (KISS 2.5 M triangles, Stranger Things
+  1.14 M, Star Wars ESB 730 k, Space Cadet 691 k, X-Men 687 k, Addams 638 k, LOTR 617 k); on Stranger Things nothing it draws changes.
+- **Far parts start at a coarser level (VR).** `MeshSimplifier::StartBound`: the distance from the part's box at load to where the player's
+  eyes may be (the lockbar's width and 1 m around it, from 1 m under the playfield to 1.2 m above it), times the allowed error and a pixel
+  angle of 0.0003 rad (under a third of the Frame's at 2160²), gives the finest level the part may draw from there, and the finer bounds are
+  not made. A part seen closer than that draws its full mesh, as a part without levels. The start keeps a margin: each level is made from
+  the previous one, and a chain started at the last bound needed simplifies less (KISS's statues, needing 8 VP units: from 8 their coarsest
+  level kept 1.85 M triangles, from 4 or 0.5, 1.6 M). KISS's first load: 8.6 s, 16 s of CPU.
+- **Levels kept on disk.** `MeshLevelCache` (`src/steamframe/MeshLevelCache.h/.cpp`): `cache/<table>/simplified-meshes.bin`, next to the
+  texture cache, when `Player.CacheMode` is on. One entry per group, found by a 128-bit XXH3 hash of everything its levels are made from
+  (the levels' version `kLevelsVersion`, meshoptimizer's version, the part's mesh, size and placement, the meshes and placements of its
+  layers, its start bound), so that an edited table or other settings make other entries; outcomes without levels are kept too. Indices are
+  stored with meshoptimizer's index sequence codec (`third-party/include/meshoptimizer/indexcodec.cpp`, vendored from meshoptimizer 1.2),
+  which keeps their exact order (a layer draws exactly its part's triangles). Entries are checked when read (counts, indices within the
+  mesh): a damaged file is ignored. The file is written again, with the entries the load used, when it made new ones. Logged:
+  `Mesh simplification cache: 35 groups found, 0 made (read in 108 ms)`. Headless, at 2160² (first load, then the next ones): KISS 8.6 →
+  2.4 s (16 MB, 10.1–10.3 ms, 1.85 M triangles drawn both times), Tron 2.5 → 2.0 s (3 MB), Medieval Madness 10.8 → 8.1 s (15 MB, its 477
+  light maps simplified with their parts read back: same GPU time and triangles), Stranger Things 3.7 → 2.45 s (3 MB). Change
+  `kLevelsVersion` whenever `Make` or its constants change.
 
-Files: `src/steamframe/FlasherOutline.h/.cpp` (new), `src/parts/flasher.cpp`, `src/steamframe/MeshSimplifier.cpp`,
+Files: `src/steamframe/FlasherOutline.h/.cpp` (new), `src/parts/flasher.cpp`, `src/steamframe/MeshSimplifier.h/.cpp`,
+`src/steamframe/MeshLevelCache.h/.cpp` (new), `third-party/include/meshoptimizer/indexcodec.cpp` (new), `src/core/player.cpp`,
 `steamframe/steamframe.cmake`, docs.
 
 ## Effects on existing builds
@@ -752,6 +770,8 @@ src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h
 src/steamframe/MeshSimplifier.h
 src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19; grouped parts, section 31)
+src/steamframe/MeshLevelCache.h
+src/steamframe/MeshLevelCache.cpp       simplified levels kept on disk with the texture cache (section 31)
 src/steamframe/FlasherOutline.h
 src/steamframe/FlasherOutline.cpp       straight edges of flashers kept whole (section 31)
 src/steamframe/SceneBufferFormat.h
