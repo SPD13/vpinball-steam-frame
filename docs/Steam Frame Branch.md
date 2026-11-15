@@ -392,7 +392,7 @@ Files: `src/steamframe/MeshSimplifier.h/.cpp`, `third-party/include/meshoptimize
 
 The GPU time of heavy tables on the Frame follows their triangles (about 2.2 ms per million per frame), and tables built from scans or exports (Addams Family, Attack from Mars, Iron Man) carry far more than the headset can show (`docs/Table Geometry on the Steam Frame.md`; the choices are in `docs/Performance on the Steam Frame.md`, section 8.2).
 
-- **While the table loads.** With `Player.SimplifyMeshes` on (default in the Frame build, off elsewhere), the primitives with a 3D mesh of at least 500 triangles get simplified levels of their mesh, on the thread pool that loads the textures (`MeshSimplifier::Enqueue`, from `Player`'s texture loading). Each level is meshoptimizer's simplifier (positions scaled by the part's size, normals and texture coordinates weighted 10) within an error bound of 0.5, 0.71, 1, 1.41, 2, 2.83, 4, 8 and 16 VP units (x1.41 steps where the parts of a table are seen from the lockbar, x2 beyond), each made from the previous one kept; a level is kept when it removes at least 10 % of the triangles. A level is an index list over the part's own vertices: the kept vertices are exact, the physics, the editor and the table's file keep the original mesh. Not simplified: animated meshes, grouped parts, the playfield mesh, small meshes, and additive parts and light maps that do not lie on a simplified part; a layer lying on a part is simplified with it (see below). Coinciding meshes (same index list, same placement and vertices within 0.25 VPU, like a part and its 'off' layer) share one set of levels, so that stacked layers stay on top of each other. The log line `Mesh simplification:` gives the meshes, the triangles at each bound and the time. No cache yet: Addams costs 4.5 s of CPU on a Mac, about 0.6 s more loading (0.3 s with x2 steps).
+- **While the table loads.** With `Player.SimplifyMeshes` on (default in the Frame build, off elsewhere), the primitives with a 3D mesh of at least 500 triangles get simplified levels of their mesh, on the thread pool that loads the textures (`MeshSimplifier::Enqueue`, from `Player`'s texture loading). Each level is meshoptimizer's simplifier (positions scaled by the part's size, normals and texture coordinates weighted 10) within an error bound of 0.5, 0.71, 1, 1.41, 2, 2.83, 4, 8 and 16 VP units (x1.41 steps where the parts of a table are seen from the lockbar, x2 beyond), each made from the previous one kept; a level is kept when it removes at least 10 % of the triangles. A level is an index list over the part's own vertices: the kept vertices are exact, the physics, the editor and the table's file keep the original mesh. Not simplified: animated meshes, parts merged by their collection's group elements (section 31), the playfield mesh, small meshes, and additive parts and light maps that do not lie on a simplified part; a layer lying on a part is simplified with it (see below). Coinciding meshes (same index list, same placement and vertices within 0.25 VPU, like a part and its 'off' layer) share one set of levels, so that stacked layers stay on top of each other. The log line `Mesh simplification:` gives the meshes, the triangles at each bound and the time. No cache yet: Addams costs 4.5 s of CPU on a Mac, about 0.6 s more loading (0.3 s with x2 steps).
 - **Each frame.** `Primitive::RenderSetup` puts the levels after the mesh in the part's index buffer (`MeshSimplifier::CreateIndexBuffer`); `Primitive::Render` draws the range picked by `MeshSimplifier::SelectRange`: the coarsest level whose error, at the distance between the part's bounding box and the closest eye, stays under `Player.SimplifyMeshesError` pixels (default 1) of the view at its full render resolution (from the projection, as the ratio of its y scale to its w term, since in VR the projection also carries the scale of the table; so a zoomed desktop camera is as safe as the headset; not the dynamic resolution, so a lower resolution does not make the parts coarser). The reflection probe allows twice as much. In the main view a part gets finer at once and coarser only within 80 % of the allowed error, so that it does not switch back and forth.
 - **Performance profile** (top of the Device Performance screen, `PerfProfilePage` in `Screens.cpp`): Low, Medium and High set the
   settings of the screen at once, Custom is highlighted when they match none (it cannot be chosen). Low: dynamic resolution on, foveated
@@ -643,6 +643,34 @@ developer's settings: a fresh install rendered at 1728², and the new menu showe
 
 Files: `src/core/Settings_properties.inl`, `src/ui/live/ingameui/VRSettingsPage.cpp`, `src/steamframe/vrui/Screens.cpp`, docs.
 
+## 31. Heavy VR rooms: flasher outlines and grouped parts (2026-11-14)
+
+Tron Legacy (Stern 2011) VPW Mod and KISS (Stern 2015) 2.0 stayed below full resolution with their room and reached it in passthrough
+(owner's session: Tron at the 70 % floor, 30–35 ms per frame; KISS at 90 %, 11.4 ms). Headless series and causes in
+`VR Rooms on the Steam Frame.md`, section 9.
+
+- **Flasher outlines.** `IHaveDragPoints::GetRgVertex` cuts each edge of an outline until `FlatWithAccuracy` finds every piece straight
+  (twice the area of the triangle made with the middle point, squared, under 4, in floats). Far from the table the float rounding of the
+  middle point alone fails the test: the 4 straight edges of Tron's pulsing blue floor (`VRBlueFloor`, a square of 1.2 million VP units)
+  came out as 25,622 points, and the floor as about 25,000 long, thin triangles, 36 ms of GPU per frame at 2160². In `Flasher::RenderSetup`,
+  `FlasherOutline::DropStraightPoints` removes the points added between two drag points that are not smooth (the curve there is the
+  straight segment between them, so the outline is the same). Tron with its room: 43.6 → 7.8 ms at 2160², dynamic resolution at 2160²
+  instead of 1512². Logged: `Flasher 'VRBlueFloor': 25622 points along its straight edges left out, 4 points kept`. Only the drawn polygon
+  of flashers changes; hit testing, the editor and the other parts with drag points (walls, ramps, rubbers, whose outline also makes
+  their physics) keep upstream's outline. A table's own flashers, near the table, get no extra point. Over the Frame's library only Tron
+  has flashers that large (its blue floor and two explosion flashers). A fix in `GetRgVertex` itself would serve every part: candidate
+  for upstream. Cutting the large triangles into a grid as well was measured (7.74 ms without, 7.77 ms with) and dropped.
+- **Grouped parts simplified.** The mesh simplifier (section 19) left out every primitive of a collection with *group elements*.
+  `Primitive::RenderSetup` only merges the dynamic 3D meshes of such a collection that share the material and texture of its first
+  one: the others are drawn on their own, and `IsGrouped` (`MeshSimplifier.cpp`) now follows that rule. KISS's room is four statues of
+  2.49 M triangles (Peter Criss 1.34 M) in such a collection, static, each with its own texture: 13.3 → 10.4 ms at 2160², dynamic
+  resolution at 2160² (2026 before), but the table loads in 19.5 s instead of 4.3 s (meshoptimizer on the 1.34 M statue, 33 s of CPU).
+  The rule reaches the room parts of 49 tables of the library (KISS 2.5 M triangles, Stranger Things 1.14 M, Star Wars ESB 730 k,
+  Space Cadet 691 k, X-Men 687 k, Addams 638 k, LOTR 617 k); Stranger Things: 9.93 → 9.11 ms, loading 3.4 → 3.6 s.
+
+Files: `src/steamframe/FlasherOutline.h/.cpp` (new), `src/parts/flasher.cpp`, `src/steamframe/MeshSimplifier.cpp`,
+`steamframe/steamframe.cmake`, docs.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -723,7 +751,9 @@ src/renderer/VRControllerModels.h
 src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h
 src/steamframe/MeshSimplifier.h
-src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19)
+src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19; grouped parts, section 31)
+src/steamframe/FlasherOutline.h
+src/steamframe/FlasherOutline.cpp       straight edges of flashers kept whole (section 31)
 src/steamframe/SceneBufferFormat.h
 src/steamframe/SceneBufferFormat.cpp    scene buffers in RG11B10F, switched live (section 21)
 src/steamframe/Reflections.h
