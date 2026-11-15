@@ -7,6 +7,7 @@
 #ifdef __STANDALONE__
 
 #include "core/VPApp.h"
+#include "steamframe/DefaultCabinet.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
@@ -1488,8 +1489,14 @@ void TableActionsPage::BuildPage()
    AddPerformanceRow(*this, table->performance);
 
    if (!table->madeForVR && m_player->m_vrDevice != nullptr)
-      AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Error,
-         "No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset"s));
+   {
+      if (DefaultCabinet::IsEnabled())
+         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+            "No VR room or cabinet: this table was made for desktops and cabinets, it plays in a default pinball cabinet, in the room of the lobby"s));
+      else
+         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Error,
+            "No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset"s));
+   }
 
    // PinUP Player pack: installed, or missing (only for the tables whose script uses PinUP Player, a PinMAME game may have none)
    if (table->hasPupPack)

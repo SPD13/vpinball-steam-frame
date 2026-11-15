@@ -175,7 +175,7 @@ void VRDevice::AddPerfPanelLayer(std::vector<XrCompositionLayerBaseHeader*>& lay
    // Middle of the lockbar in the reference space: the bottom middle of the playfield at the height of the glass, through the playfield's transform
    // (which puts that point at the lockbar, see RenderFrame), from VPX units to meters
    const PinTable* const table = g_pplayer->m_ptable;
-   Vertex3Ds lockbar((table->m_right - table->m_left) * 0.5f, table->m_bottom - table->m_top, table->m_glassBottomHeight);
+   Vertex3Ds lockbar((table->m_right - table->m_left) * 0.5f, table->m_bottom - table->m_top, table->GetCabinetGlassBottomHeight());
    m_spaces[static_cast<int>(PartGroupData::SpaceReference::SR_PLAYFIELD)].m_toWorld.MultiplyVector(lockbar);
    const vec3 lockbarPos(lockbar.x * kVpuToMeters, lockbar.y * kVpuToMeters, lockbar.z * kVpuToMeters);
 

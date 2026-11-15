@@ -79,6 +79,19 @@ TEST_CASE("Cabinet fit: a steeper table raises the back")
    CHECK(fit.Deform({ 0.f, n.yFront, n.zFrontTop })[2] == doctest::Approx(n.zFrontTop));
 }
 
+TEST_CASE("Cabinet fit: a top edge asked steeper raises the back, the front stays")
+{
+   const Nominal n;
+   Table t = NominalTable(n);
+   const Fit model(n, t);
+   t.topAngle = 5.2f;
+   const Fit steeper(n, t);
+   const Point frontTop { n.halfWidth, n.yFront, n.zFrontTop }, backTop { n.halfWidth, n.yFlat, n.zBackTop };
+   CHECK(steeper.Deform(frontTop)[2] == doctest::Approx(model.Deform(frontTop)[2]));
+   CHECK(steeper.Deform(backTop)[2] > model.Deform(backTop)[2] + 0.02f);
+   CHECK(steeper.GetTable().topAngle == doctest::Approx(5.2f));
+}
+
 TEST_CASE("Cabinet fit: the lockbar height moves the body and stretches the legs to the floor")
 {
    const Nominal n;

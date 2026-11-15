@@ -806,6 +806,13 @@ public:
    float m_AOScale;
    float m_SSRScale;
    float m_groundToLockbarHeight = CMTOVPU(91.f); // Height of lockbar from ground (corresponding to cab model for VR)
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: how deep the playfield lies under the lockbar, to place the cabinet and room spaces, when set. The default VR
+   // cabinet (src/steamframe/DefaultCabinet.h) sets the depth of a real cabinet for the tables made for desktops, whose glass height is
+   // often far from it. The glass itself, a physics part, stays at m_glassBottomHeight.
+   float m_cabinetGlassBottomHeight = 0.f;
+   float GetCabinetGlassBottomHeight() const { return m_cabinetGlassBottomHeight > 0.f ? m_cabinetGlassBottomHeight : m_glassBottomHeight; }
+#endif
    Matrix3D GetDefaultPlayfieldToCabMatrix() const
    {
       // Default transform from the room/cabinet reference spaces to the playfield space, built
@@ -813,8 +820,13 @@ public:
       // height minus the glass distance above the ground, and is inclined by the authored slope
       // around its front (lockbar) edge. User space adjustments (cabinet scaling, room placement,
       // slope override, ...) are only applied in VR (see VRDevice::UpdateVRPosition / ComputeVRSpaces).
+#if defined(VPX_STEAM_FRAME)
+      return Matrix3D::MatrixTranslate(0.f, -m_bottom, -(m_groundToLockbarHeight - GetCabinetGlassBottomHeight())) * Matrix3D::MatrixRotateX(ANGTORAD(GetPlayfieldSlope()))
+         * Matrix3D::MatrixTranslate(0.f, m_bottom, 0.f);
+#else
       return Matrix3D::MatrixTranslate(0.f, -m_bottom, -(m_groundToLockbarHeight - m_glassBottomHeight)) * Matrix3D::MatrixRotateX(ANGTORAD(GetPlayfieldSlope()))
          * Matrix3D::MatrixTranslate(0.f, m_bottom, 0.f);
+#endif
    }
 
    float m_playfieldReflectionStrength; // default (implicit) playfield reflection strength (0 to disable playfield reflection)

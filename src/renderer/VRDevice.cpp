@@ -1847,9 +1847,11 @@ void VRDevice::AttachTable()
 }
 
 // The far plane covers the whole table: again when parts are added to it after it was attached (the default VR cabinet's room, see
-// src/steamframe/DefaultCabinet.cpp), whose far walls would otherwise be cut off
+// src/steamframe/DefaultCabinet.cpp), whose far walls would otherwise be cut off. The spaces are placed again too: the default cabinet
+// sets the depth of the playfield under the lockbar (PinTable::GetCabinetGlassBottomHeight).
 void VRDevice::UpdateSceneSize()
 {
+   m_worldDirty = true;
    vector<Vertex3Ds> bounds;
    bounds.reserve(16);
    Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
@@ -2884,7 +2886,11 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             geometry.playfieldWidth = table->m_right - table->m_left;
             geometry.playfieldDepth = table->m_bottom - table->m_top;
             geometry.groundToLockbarHeight = table->m_groundToLockbarHeight;
+#if defined(VPX_STEAM_FRAME)
+            geometry.glassBottomHeight = table->GetCabinetGlassBottomHeight();
+#else
             geometry.glassBottomHeight = table->m_glassBottomHeight;
+#endif
             geometry.angleTiltMin = table->m_angletiltMin;
             geometry.angleTiltMax = table->m_angletiltMax;
             geometry.difficulty = table->m_difficulty;

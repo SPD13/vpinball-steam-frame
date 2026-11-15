@@ -723,6 +723,20 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   in play (`Config::isTableInUse`) stays. The tables already at the root are not moved: scans move nothing (the owner's Frame was migrated
   once, by hand, with a build that did). Logged `TableLibrary: Moved ... into its own folder` and `TableLibrary: Backglass ... moved along
   its table`. Tests in `tests/test-table-library.cpp`.
+- **Depth.** The playfield lies under the lockbar as in a real cabinet, not at the table's glass height, which desktop tables set freely
+  (Metallica Remastered: 0.189 m, never set; a real machine: 3", 0.076 m): `PinTable::m_cabinetGlassBottomHeight` (fork member, used by
+  `VRDevice` for the spaces, `GetDefaultPlayfieldToCabMatrix` and the performance panel; the glass, a physics part, keeps
+  `m_glassBottomHeight`). `GetPlayfieldDepth` measures the long parts along the sides (a quarter of the length at least: rails, walls,
+  side blades; toys near a side do not count), and picks the depth (3" at least, the glass at most) and the angle of the top edge of the
+  sides to the playfield (the model's 3.6° to 8°, `CabinetFit::Table::topAngle`) that keep that edge lowest over them. Long side parts too
+  tall for any cabinet (more than 0.10 m of depth even at 8°: the side walls of a desktop table) are hidden, every frame since scripts
+  show them again with their options (Metallica's 'Side Blades'), and still hold the ball in; their art is drawn again on blades cut along
+  the top edge (`AddSideBlade`: the wall's outline, side image, material and texture coordinates). Logged: `Playfield ... m under the
+  lockbar (table glass ...), top edge ...`, `'Wall34' hidden`, `Side blade from 'Wall34' (BladeL)`. Metallica: 0.079 m, 5.2°.
+- **PinUP Player.** The displays of a PuP pack go on the windows of the backbox (`GetBackglassWindow`, `GetDisplayWindow`), in the part
+  group of the cabinet (its windows are in the cabinet space); the score view of the cabinet is hidden while PuP shows its DMD there.
+- **Table page.** In the headset, the table's page says that a table without a VR room plays in the default cabinet, in the room of the
+  lobby (`DefaultCabinet::IsEnabled`), and the "Table not made for VR" message is not shown; the same on the web Tables page.
 - **Room.** The room chosen for the lobby (section 9; the game room by default, none for the empty room) stands around the cabinet:
   `DefaultCabinet::LoadRoom` loads its table (`Launcher::GetLobbyTablePath`) and moves its primitives, images and materials to the played
   table, in a part group in the room space (prefix `SF_Room_`). The player stands at the middle of the bottom edge of the table in both,
@@ -732,11 +746,11 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
 - **Switch.** `VPX_DEFAULT_CABINET=0` turns it off; `=1` adds it out of a headset too, for desktop tests (the cabinet then stands where
   the table's own cabinet settings put it), `=2` on the tables made for VR too; `VPX_DEFAULT_ROOM=0` leaves the room out. Logged:
   `[DefaultCabinet] Table ... spring plunger at x ...`, `Room lobby-gameroom.vpx: 9 parts, 8 images`, `Added ... parts, ... images, ... materials`.
-- **Not yet.** A setting in the menu, per-table art, hiding the parts some desktop tables draw at the place of the cabinet (wood rails,
-  lockbar). Checked on the Mac (desktop views of the upstream example table; the test hooks `Doc/test-hooks/cab-shot-hooks.py`); not yet
-  in the headset.
+- **Not yet.** A setting in the menu, per-table art, the lockbars some desktop tables draw at the place of the cabinet's. Checked on
+  the Mac (desktop views; the test hooks `Doc/test-hooks/cab-shot-hooks.py`) and by the owner in the headset (Led Zeppelin, Rick and
+  Morty with its PuP pack, Metallica Remastered).
 
-Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/steamframe/CabinetBackglass.h/.cpp`, `lib/src/WebServer.cpp`, `src/steamframe/Passthrough.h/.cpp`, `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
+Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/steamframe/CabinetDisplays.cpp`, `src/steamframe/TablePickerPage.cpp`, `src/assets/web/tables.js`, `src/parts/pintable.h`, `src/renderer/VRDevice.h/.cpp`, `src/steamframe/PerfPanelLayer.cpp`, `src/steamframe/CabinetBackglass.h/.cpp`, `lib/src/WebServer.cpp`, `src/steamframe/Passthrough.h/.cpp`, `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
 `src/assets/vr-cabinet/` (new), `steamframe/vr-cabinet/` (new, the Blender scripts), `tests/test-cabinet-fit.cpp` (new, built alone as
 written at its top).
 

@@ -8,6 +8,7 @@
 #include "parts/flasher.h"
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
+#include "steamframe/DefaultCabinet.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/PupPackOptions.h"
 #include "steamframe/PupPacks.h"
@@ -460,9 +461,13 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       m_surfaces[Topper].flasher = CreateFlasher(Topper);
    }
 
+   // On the default cabinet, the surfaces are placed on its windows, in the coordinates of the VR cabinet space: they join its part group
+   PartGroup* const cabinetGroup = m_player->m_defaultCabinet ? m_player->m_defaultCabinet->GetCabinetGroup() : nullptr;
    for (int i = 0; i < SurfaceCount; i++)
       if (m_surfaces[i].flasher)
       {
+         if (cabinetGroup)
+            m_surfaces[i].flasher->SetPartGroup(cabinetGroup);
          m_surfaces[i].anchor = anchors[i];
          ApplyPlacement(static_cast<Surface>(i));
          PLOGI << "[CabinetDisplays] " << GetSurfaceName(static_cast<Surface>(i)) << " surface created: " << m_surfaces[i].flasher->GetName();
@@ -491,11 +496,46 @@ void CabinetDisplays::PlaceAnchors(std::array<Rect, SurfaceCount>& anchors)
       }
    // The DMD of the cabinet, found first: it may stand on the glass of the backbox
    Rect dmd;
-   const bool hasAnchor = FindDMDAnchor(dmd);
+   bool hasAnchor = FindDMDAnchor(dmd);
+   // The default cabinet of the tables without a VR room (DefaultCabinet): the windows of its backbox. Its score view flasher is hidden
+   // with the table's DMD flashers while PuP shows its DMD there.
+   const DefaultCabinet* const cabinet = m_player->m_defaultCabinet.get();
+   const auto windowRect = [](const DefaultCabinet::Window& w)
+   {
+      Rect rect;
+      rect.center = vec3(w.x, w.y, w.z);
+      rect.width = w.width;
+      rect.height = w.height;
+      rect.rotX = w.rotX;
+      return rect;
+   };
+   if (cabinet && cabinet->GetDisplayWindow().valid)
+   {
+      dmd = windowRect(cabinet->GetDisplayWindow());
+      hasAnchor = true;
+      m_dmdAnchorFlasher = nullptr;
+      if (cabinet->GetDisplayFlasher())
+         m_tableDMDs.push_back(cabinet->GetDisplayFlasher());
+      if (m_logPlacement)
+      {
+         PLOGI << "[CabinetDisplays] DMD placed on the speaker panel of the default cabinet";
+      }
+   }
    if (m_tableBackglassFlasher)
    {
       m_backglass = GetFlasherRect(m_tableBackglassFlasher);
       m_tableBackglassSource = m_backglass;
+   }
+   else if (cabinet && cabinet->GetBackglassWindow().valid)
+   {
+      // In front of the generic art
+      m_backglass = windowRect(cabinet->GetBackglassWindow());
+      const vec3 normal = RotateDirection(vec3(0.f, 0.f, 1.f), m_backglass.rotX, m_backglass.rotY, m_backglass.rotZ);
+      m_backglass.center = m_backglass.center + (normal.y < 0.f ? -normal : normal) * 1.5f;
+      if (m_logPlacement)
+      {
+         PLOGI << "[CabinetDisplays] Backglass placed on the backglass window of the default cabinet";
+      }
    }
    else if (Rect cabinetGlass; FindCabinetBackglass(cabinetGlass))
    {
@@ -548,7 +588,7 @@ void CabinetDisplays::PlaceAnchors(std::array<Rect, SurfaceCount>& anchors)
          topper.center = m_backglass.center + up * (0.5f * m_backglass.height + 0.5f * topper.height + 0.02f * m_backglass.height);
          // On top of the backbox of a VR cabinet, whose frame rises above its glass
          for (IEditable* part : m_player->m_ptable->GetParts())
-            if (part->GetItemType() == eItemPrimitive && lowerCase(part->GetName()) == "pincab_backbox"s)
+            if (part->GetItemType() == eItemPrimitive && (lowerCase(part->GetName()) == "pincab_backbox"s || (cabinet && cabinet->IsOwnPart(part) && lowerCase(part->GetName()) == "sf_cab_backbox"s)))
             {
                float backboxTop = -FLT_MAX;
                for (const vec3& p : GetPrimitiveVertices(static_cast<Primitive*>(part)))

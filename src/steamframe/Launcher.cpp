@@ -395,7 +395,7 @@ bool Launcher::IsMadeForVR(PinTable* table)
    if (IsVRTableFile(table->m_filename))
       return true;
    // The parts the player adds to the table it plays are not the table's: in a headset its implicit VR backglass is named 'vr_backglass',
-   // and the default cabinet and its room are in the VR cabinet and room spaces
+   // and the default cabinet and its room are in the VR cabinet and room spaces, with the displays of PinUP Player placed on it
    const Player* const player = g_pplayer && g_pplayer->m_ptable == table ? g_pplayer : nullptr;
    for (IEditable* part : table->GetParts())
    {
@@ -403,7 +403,8 @@ bool Launcher::IsMadeForVR(PinTable* table)
          continue;
       if (player
          && (part == static_cast<IEditable*>(player->m_implicitVRBackglass) || part == static_cast<IEditable*>(player->m_implicitPlayfieldMesh)
-            || (player->m_defaultCabinet && player->m_defaultCabinet->IsOwnPart(part))))
+            || (player->m_defaultCabinet
+               && (player->m_defaultCabinet->IsOwnPart(part) || (part->GetPartGroup() && player->m_defaultCabinet->IsOwnPart(part->GetPartGroup()))))))
          continue;
       if (IsVRPartName(part->GetName()))
          return true;
