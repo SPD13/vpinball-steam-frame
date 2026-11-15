@@ -312,6 +312,28 @@ int main(int argc, const char** argv) {
    // costs 50% more than with direct rendering (14 ms against 9 ms at native resolution on the Steam Frame, see docs/Steam Frame Branch.md).
    // 'profiled' makes the driver measure both modes and keep the faster one. Read when the Vulkan device is created; a value set by the user wins.
    setenv("TU_AUTOTUNE_ALGO", "profiled", 0);
+
+   // Steam starts games on the Steam Frame with TU_AUTOTUNE_FLAGS=preempt_optimize: a render pass the compositor had to wait for twice is
+   // then forced into tiled rendering (so that it can be interrupted between tiles) until its tiles get cheap. That is the likely cause of a
+   // state seen in Steam launches of KISS (Stern 2015) 2.0: the scene pass costing ~11.6 ms whatever the resolution against 10.8 ms direct at
+   // full size, the dynamic resolution stuck at 70-80 % until a look away from the table, frames alternating between 9.4 and 14.4 ms (each
+   // scene buffer has its own decision). The flag is left out; VPX_TU_PREEMPT_OPTIMIZE=1 keeps it. Parked: the cause was not proven
+   // (docs/VR Rooms on the Steam Frame.md, section 9.1).
+   if (const char* flags = getenv("TU_AUTOTUNE_FLAGS"); flags != nullptr && getenv("VPX_TU_PREEMPT_OPTIMIZE") == nullptr)
+   {
+      std::string kept;
+      for (const char* p = flags; *p != '\0';)
+      {
+         const size_t n = strcspn(p, ",|; ");
+         if (n > 0 && std::string(p, n) != "preempt_optimize")
+            kept += (kept.empty() ? "" : ",") + std::string(p, n);
+         p += n + (p[n] != '\0' ? 1 : 0);
+      }
+      if (kept.empty())
+         unsetenv("TU_AUTOTUNE_FLAGS");
+      else
+         setenv("TU_AUTOTUNE_FLAGS", kept.c_str(), 1);
+   }
 #endif
 
    g_argc = argc;
