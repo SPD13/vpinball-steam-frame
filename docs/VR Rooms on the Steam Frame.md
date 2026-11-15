@@ -388,3 +388,49 @@ Gotchas met:
 
 Results on the Frame: `~/perf-test/results-room` (first series), `results-room2` (second), `results-ad` (Addams); builds
 `~/perf-test/vpx-room` and `vpx-room2`. They can be deleted once no longer needed.
+
+## 9. Tron Legacy and KISS: a flasher outline and grouped statues (2026-11-14)
+
+The owner reported that Tron Legacy (Stern 2011) VPW Mod 1.1 and KISS (Stern 2015) 2.0 stay below full resolution with their room and
+reach it in passthrough. Their session log (worn, eye-tracked): Tron at the 70 % floor (1512²) with 30–35 ms of GPU per frame and about 150
+frames missed per 5 s, 2160² at 7 ms in passthrough; KISS at 90 % (11.4 ms), 100 % at 6 ms in passthrough.
+
+**Method.** Headless runs (`VPX_PERF_FORCE_RENDER`, autoplay, 100 s, cores 3–7 like a Steam launch) with the perf-hook executable of
+2026-11-14 (`~/perf-test/vpx-preload`), at a fixed 2160² with bgfx's GPU profiler and with the user's settings (dynamic resolution).
+Each variant is a hard link of the table with its own `.vbs` (the table's script with the room switched on and some of its parts hidden
+after the room setup) and a hard linked copy of the texture cache. Tools: `Doc/test-hooks/room-tron-series.sh` (the series, prefs copies
+with passthrough forced off) and `room-tron-variants.py` (the `.vbs` variants); `vpx-inspect.py` for the parts. Results in
+`~/perf-test/results-tron` and `results-roomfix*`. **Gotcha:** the owner's `[Standalone] Passthrough = 1` stays saved when a session ends in
+passthrough: copies of their settings must force it off (the first two runs of the series measured the room hidden).
+
+**Tron, leave one out** (fixed 2160², runtime GPU time per frame): full room 43.7 ms (43.6 repeated), cabinet only 6.3 ms; without the
+3 × 3 grid flashers 43.1, the sky sphere 42.9, the 1 km opaque floor 42.1, the moving cycles, tanks and recognizer 43.1, the glass scratches
+43.1; **without the pulsing blue floor (`VRBlueFloor`) 7.8 ms**. With dynamic resolution: 29.9 ms at 1512² (as worn).
+
+**The blue floor.** A flasher of 4 drag points (none smooth), a square of 1.2 million VP units (660 m) at 1 m under the playfield, tilted
+6°, blended, two textures. Moved out of view: 7.9 ms. Laid flat, lowered 20 m under the opaque floor (every pixel failing the depth test),
+without its textures, additive, drawn first or last of the transparent parts (depth bias ±100000): 41.4–43.4 ms. Shrunk to 30 % of its
+size (its drag points edited in a copy of the table): 15.7 ms; to 10 %: 8.8 ms. At 1296²: 25.2 ms (4.3 without it). Foveation off 46.9,
+compact scene buffer off 48.9. Cutting its triangles into a grid of 20,000-unit cells: no change, because it was not two triangles:
+`IHaveDragPoints::GetRgVertex` cuts each edge until `FlatWithAccuracy` (twice the area of the triangle made with the middle point, squared,
+under 4) finds every piece straight, and at these coordinates the float rounding of the middle point alone fails it. The 4 straight
+edges came out as 25,622 points, the polygon as about 25,000 long, thin triangles across the floor (the 25,000 more triangles counted
+whenever the floor showed). The grid flashers have round coordinates and escaped it; the explosion flashers had 341 such points.
+
+**Fix** (`src/steamframe/FlasherOutline.*`, `Steam Frame Branch.md` section 31): the points added between two drag points that are not
+smooth are removed from a flasher's drawn outline. Tron with its room: **7.77 ms at 2160², dynamic resolution at 2160²** (1512² before);
+with the grid cutting as well 7.77 ms, without it 7.74 ms (dropped).
+
+**KISS.** Its "Mega Room" is four statues (`VMR_Peter2` 1.34 M triangles, `VMR_Ace` 457 k, `VMR_Gene` 354 k, `VMR_Paul` 339 k), lit,
+static, each with its own texture, in the collection `VR_MegaRoom` with *group elements*. Headless: 13.3 ms with the room, 5.7 ms without;
+dynamic resolution 2026 px. The simplifier left out every part of such a collection, though upstream only merges its dynamic 3D meshes
+with the first one's material and texture. With the rule fixed (`MeshSimplifier.cpp`, `IsGrouped`): 10.4 ms, 2.83 M → 1.89 M triangles
+drawn, dynamic resolution 2160², but loading 4.3 → 19.5 s (33 s of CPU, 17.6 s to the last mesh). meshoptimizer gets little from the
+1.34 M statue (at most 0.5 VP unit it keeps 97 %, at 16 VP units 54 %) and its 9 levels each start from the whole mesh: 5.6 s on the Mac.
+Going straight to the coarse levels the statues need from the cabinet (8 and 16 VP units) takes 1.7 s on the Mac.
+
+**Library** (`Doc/test-hooks/room-survey2.py`, read-only, the 130 tables of the Frame): flashers with an edge over 20,000 units only in Tron
+(and one hidden 40,000-unit flasher in Simpsons Treehouse of Horror); grouped parts the new rule simplifies in 49 tables, the largest
+KISS 2.5 M triangles, Stranger Things 1.14 M, Star Wars ESB 730 k, Space Cadet 691 k, X-Men 687 k, Addams 638 k, Wrath of Olympus 626 k,
+LOTR 617 k. Stranger Things: 9.93 → 9.11 ms, loading 3.4 → 3.6 s (a first run rebuilt its texture cache: compare loads with
+`Texture compression: 0 compressed`).
