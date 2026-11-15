@@ -90,6 +90,31 @@ std::filesystem::path FindDirectB2S(const std::filesystem::path& tablePath)
    return found[0].empty() ? found[1] : found[0];
 }
 
+void MatchDirectB2SName(const std::filesystem::path& folder)
+{
+   std::vector<std::filesystem::path> tables, backglasses;
+   std::error_code ec;
+   for (const auto& entry : std::filesystem::directory_iterator(folder, ec))
+   {
+      if (!entry.is_regular_file(ec))
+         continue;
+      const string ext = lowerCase(PathToUTF8(entry.path().extension()));
+      if (ext == ".vpx")
+         tables.push_back(entry.path());
+      else if (ext == ".directb2s")
+         backglasses.push_back(entry.path());
+   }
+   if (tables.size() != 1 || backglasses.size() != 1 || !FindDirectB2S(tables[0]).empty())
+      return;
+   std::filesystem::path target = tables[0];
+   target.replace_extension(".directb2s");
+   std::filesystem::rename(backglasses[0], target, ec);
+   if (ec)
+      PLOGE << "Failed to rename " << backglasses[0].filename() << " after its table: " << ec.message();
+   else
+      PLOGI << "Backglass " << backglasses[0].filename() << " renamed " << target.filename() << " after its table";
+}
+
 static vector<uint8_t> DecodeBase64(const char* src, size_t length)
 {
    static const auto decodeTable = []()
