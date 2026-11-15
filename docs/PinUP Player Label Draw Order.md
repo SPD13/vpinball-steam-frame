@@ -1,5 +1,9 @@
 # PinUP Player: the labels of a screen positioned on another one are hidden by that screen's labels (upstream PR candidate)
 
+**Sync of 2026-11-20:** upstream draws the screens and their labels in window stacking order since b394442fa (2026-11-15), which
+replaced the render passes this change reorders. The fork's commit was dropped for upstream's code; City Hunter and Tomb Raider are
+checked on the Frame with it. The rest of this document describes the change as it was.
+
 *2026-10-28. For `vpinball/vpinball` (`plugins/pup/PUPManager.cpp`, `PUPManager::Render`). The fork's commit is "pup: labels of a
 screen positioned on another one are drawn above the labels of that screen"; it applies to upstream `master` (`609d55068`, Oct 29) as it
 is.*
@@ -72,6 +76,15 @@ PinUP Player's source is not available, so this rests on the pack and on what th
 
 The rule taken is the narrowest that follows from this: the labels of a screen are never covered by the labels of the screens it is
 positioned on.
+
+**Correction after the upstream review (2026-11-15, #4435):** the second point is wrong. In PinUP Player the screens are separate
+top-level windows; a `CustomPos` screen is only placed at its source screen's rectangle, and FN 5 / FN 6 send those windows to the
+back or front, not child controls. The labels of each screen live in their own transparent window, always on top, created on the
+screen's first `LabelInit` (or first `PUPOVERLAYS` / `PUPALPHAS` play) and brought to the front each time the screen starts a media. So
+label stacking follows which screen was shown last, not which screen is positioned on which. In City Hunter, screen 1's label window
+most likely comes after screen 2's, which gives the same result as this rule, but packs whose stacking comes from the show order can
+differ. The reviewer accepted the change as a stopgap, described as a heuristic; a faithful model (a front-to-back order of video and
+label layers per screen, in a topmost and a normal band, updated on creation, media start, FN 5, FN 6 and FN 33) is a larger change.
 
 ## The change
 
@@ -155,7 +168,8 @@ there; it was not built and run on upstream `master` itself.
 
 ## Points for the reviewer (upstream)
 
-- The rule follows from the pack and from the plugin's own child control wording, not from PinUP's code. A capture of City Hunter on
+- The rule is a heuristic: it follows from the pack, not from PinUP's code (the child control reading was wrong, see the correction
+  above). A capture of City Hunter on
   PinUP Player would settle it, as would any pack with labels on a screen positioned on a `ForceOn` one.
 - Only the label passes move. If PinUP also draws the *videos* of a child over its parent's overlay, this is a first step, not the whole
   rule; nothing seen so far asks for it.
@@ -183,8 +197,8 @@ and is dropped.
 >
 > This change keeps the tiers and only delays the label pass of a screen until the screens it is positioned on have drawn theirs. Videos
 > and images are not reordered, so a backglass frame still stays above the videos of its children, and packs whose parents already draw
-> their labels first are unchanged. The plugin's notes on FN 5 / FN 6 describe positioned screens as child controls of their source
-> screen (`TControl.SendToBack` / `BringToFront`): a child control is painted over its parent whatever the parent's topmost rank.
+> their labels first are unchanged. This is a heuristic, not PinUP's rule: PinUP stacks the label windows by the
+> order in which the screens were shown, and in City Hunter that most likely gives the same result.
 >
 > Tested on macOS with City Hunter: with this change (and `f0d73270b`, already in master), the backglass shows the high score pages in
 > attract mode and the credits, balls, player, score and XP gauge in a game; without it, none of them.
