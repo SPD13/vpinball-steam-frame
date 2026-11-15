@@ -31,6 +31,7 @@ class VRDevice;
 class LiveUI;
 class ScoreTracker;
 class CabinetDisplays;
+class DefaultCabinet;
 class BaseTexture;
 class Flasher;
 class HitTimer;
@@ -116,6 +117,7 @@ public:
 #ifdef VPX_STEAM_FRAME
    std::unique_ptr<ScoreTracker> m_scoreTracker; // Records the scores of the games, when playing a table of the library
    std::unique_ptr<CabinetDisplays> m_cabinetDisplays; // Displays of PinUP Player on the cabinet, in VR
+   std::unique_ptr<DefaultCabinet> m_defaultCabinet; // VR cabinet of the tables without a VR room (src/steamframe/DefaultCabinet.h)
 #endif
 
    // Request to replace the played table with a new one. The given reference on the table is adopted by

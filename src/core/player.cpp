@@ -18,6 +18,7 @@
 #include "core/VPApp.h"
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/CabinetDisplays.h"
+#include "steamframe/DefaultCabinet.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
 #include "steamframe/LightMapPruning.h"
@@ -712,6 +713,8 @@ void Player::InitTableSession(const bool isInitial)
       }
    }
 #ifdef VPX_STEAM_FRAME
+   // A cabinet for the tables without a VR room, before the parts are set up for rendering
+   m_defaultCabinet = DefaultCabinet::Create(this);
    // The displays of PinUP Player that the VR room of the table lacks (DMD, topper), before the parts are set up for rendering
    m_cabinetDisplays = CabinetDisplays::Create(this);
 #endif
@@ -1336,6 +1339,14 @@ void Player::ShutdownTableSession()
       if (ball->m_runtimeBall && FindIndexOf(m_ptable->GetParts(), static_cast<IEditable *>(ball)) != -1)
          m_ptable->RemovePart(ball);
    m_vball.clear();
+
+#ifdef VPX_STEAM_FRAME
+   if (m_defaultCabinet)
+   {
+      m_defaultCabinet->Remove();
+      m_defaultCabinet.reset();
+   }
+#endif
 
    if (m_implicitPlayfieldMesh)
    {
@@ -2832,6 +2843,8 @@ void Player::PrepareFrame()
       m_scoreTracker->Update();
    if (m_cabinetDisplays)
       m_cabinetDisplays->Update();
+   if (m_defaultCabinet)
+      m_defaultCabinet->Update();
 #endif
 
    m_overall_frames++; // This causes the next VPinMAME <-> VPX sync to update light status which can be heavy since it needs to perform PWM integration of all lights

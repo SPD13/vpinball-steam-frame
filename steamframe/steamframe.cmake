@@ -15,6 +15,10 @@ target_sources(vpinball PRIVATE
    src/steamframe/CabinetBackglass.cpp
    src/steamframe/CabinetDisplays.h
    src/steamframe/CabinetDisplays.cpp
+   src/steamframe/CabinetFit.h
+   src/steamframe/CabinetFit.cpp
+   src/steamframe/DefaultCabinet.h
+   src/steamframe/DefaultCabinet.cpp
    src/steamframe/CabinetLauncherPage.h
    src/steamframe/CabinetLauncherPage.cpp
    src/steamframe/Launcher.h
