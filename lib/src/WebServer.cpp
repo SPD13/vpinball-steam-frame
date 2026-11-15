@@ -619,8 +619,12 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
       std::filesystem::remove(stagingPath, ec); // Only succeeds when no other transfer is pending
 #ifdef VPX_STEAM_FRAME
       g_launcher->GetTableLibrary().OnFileAdded(file); // It may be a missing ROM
-      if (*q != '\0' && (extension_from_path(file) == "vpx" || extension_from_path(file) == "directb2s"))
-         VPX::Cabinet::MatchDirectB2SName(path); // A backglass named after its table, whichever of the two comes first
+      if (extension_from_path(file) == "vpx" || extension_from_path(file) == "directb2s") {
+         if (*q == '\0')
+            g_launcher->GetTableLibrary().OrganizeRootUpload(path / UTF8ToPath(file)); // A table goes into a folder of its own, a backglass along its table
+         else
+            VPX::Cabinet::MatchDirectB2SName(path); // A backglass named after its table, whichever of the two comes first
+      }
 #endif
 #ifdef __LIBVPINBALL__
       if (*q == '\0' && file == "VPinballX.ini") {

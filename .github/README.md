@@ -120,7 +120,7 @@ On the Frame, open **Library > Non-Steam > Visual Pinball X - Steam Frame Editio
 
 **▶ [See instructions](/docs/tutorials/Adding%20Tables%20and%20ROMs.md)**
 
-- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. Missing ROMs are listed there, with a link to the ROM folder. Upload a table's download as it is: when its readme asks to add an alias to `VPMAlias.txt`, the game does it.
+- **From a browser (easiest):** in the game, open the table picker. Under **Add tables from a browser**, turn **Wi-Fi upload** on, then open the address it shows from a phone or computer on the same network. Upload `.vpx` files, or a `.zip` of a table's folder to bring its backglass and other files along. A `.vpx` uploaded at the top of the tables folder gets a folder of its own, named after it, and a backglass uploaded there joins its table (see [The backglass](#the-backglass)). Missing ROMs are listed there, with a link to the ROM folder. Upload a table's download as it is: when its readme asks to add an alias to `VPMAlias.txt`, the game does it.
 - **Over ssh:** copy the tables to `~/Documents/VPinballX/Tables` on the Frame and the ROMs to `~/Documents/VPinballX/Tables/pinmame/roms`, for example:
   `scp "My Table.vpx" steamos@frame.local:Documents/VPinballX/Tables/`
 
@@ -586,7 +586,8 @@ Tables that come with their own VR room or cabinet keep theirs: nothing is added
 
 The backglass of a table is a `.directb2s` file, often downloaded separately from the table, from the same pages. To show it on the cabinet:
 
-- **Upload it into the same folder as the table**, with the browser (**Wi-Fi upload**, then the folder of the table in the file manager). A backglass in another folder is not found.
+- **Upload it into the same folder as the table**, with the browser (**Wi-Fi upload**, then the folder of the table in the file manager). A backglass in another folder is not found. Uploaded at the top of the tables folder, it goes into the folder of its table by itself when its name and the table's name share their words (all the words of the shorter name are in the other, in any order: `Medieval Madness (Williams 1997).directb2s` joins `Medieval_Madness.vpx`) and no other table without a backglass matches it too.
+- **Each table in its own folder.** A `.vpx` uploaded at the top of the tables folder is moved into a folder of its own, with its files of the same name already there (image, `.ini`, `.vbs`, backglass). The tables already at the top of the folder stay where they are.
 - **Its name must match the table's**: the game looks for `<name of the table>.directb2s` (or the name of the table's folder), without regard to upper or lower case. Downloaded backglasses seldom have that name (`Led Zeppelin Pinball.directb2s` for `Led Zeppelin Pinball 2.5.vpx`), so the game renames it for you when it is uploaded: when the folder holds one table and one backglass, the backglass takes the name of the table, whichever of the two is uploaded first. With several tables or several backglasses in a folder, rename the file yourself with the file manager.
 
 Some tables draw their DMD with a PinUP Player pack instead of a backglass file: that pack must be added too for the DMD to show.

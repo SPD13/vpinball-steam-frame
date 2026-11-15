@@ -543,6 +543,9 @@ void TableLibrary::Rescan(const ProgressCallback& onProgress, int settleSeconds)
             + std::to_string(importedRoms) + " ROM(s) from " + archive.string());
    }
 
+   // The tables and backglasses uploaded to the root while a scan was running, before the new tables are registered (in their folder)
+   OrganizePendingUploads(tables);
+
    progress(70, "Scanning for tables...");
    seenPaths.clear();
    for (const Table& table : tables)
@@ -827,6 +830,246 @@ void TableLibrary::MoveRootRoms(const std::vector<Table>& tables)
    }
    if (changed)
       SaveRejectedArchives();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// One folder per table
+
+namespace {
+
+// The words of a file name, lower case: runs of letters and digits (the bytes of UTF-8 sequences count as letters)
+std::vector<string> NameWords(const string& name)
+{
+   std::vector<string> words;
+   string word;
+   for (const char c : name) {
+      const unsigned char u = static_cast<unsigned char>(c);
+      if (u >= 0x80 || std::isalnum(u))
+         word += static_cast<char>(std::tolower(u));
+      else if (!word.empty())
+         words.push_back(std::exchange(word, string()));
+   }
+   if (!word.empty())
+      words.push_back(word);
+   return words;
+}
+
+bool HasAllWords(const std::vector<string>& words, const std::vector<string>& in)
+{
+   return std::all_of(words.begin(), words.end(), [&in](const string& word) { return std::find(in.begin(), in.end(), word) != in.end(); });
+}
+
+// Whether the words of one name are all in the other (either way: the backglass or the table may be the one adding a version, a maker or a
+// year), and make more than a short word
+bool NamesMatch(const std::vector<string>& a, const std::vector<string>& b)
+{
+   const std::vector<string>& shorter = a.size() <= b.size() ? a : b;
+   size_t letters = 0;
+   for (const string& word : shorter)
+      letters += word.size();
+   return letters >= 4 && (HasAllWords(a, b) || HasAllWords(b, a));
+}
+
+// Whether a lower case file name is '<stem>.<anything>'
+bool IsCompanionName(const string& lowerName, const string& lowerStem)
+{
+   return lowerName.size() > lowerStem.size() + 1 && lowerName.compare(0, lowerStem.size(), lowerStem) == 0 && lowerName[lowerStem.size()] == '.';
+}
+
+bool FolderHasBackglass(const fs::path& folder)
+{
+   std::error_code ec;
+   for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (HasExtension(it->path(), ".directb2s") && it->is_regular_file(ec))
+         return true;
+   return false;
+}
+
+}
+
+bool TableLibrary::OrganizeRootUpload(const fs::path& file)
+{
+   std::unique_lock operationLock(m_operationMutex, std::try_to_lock);
+   if (!operationLock.owns_lock()) {
+      // A scan is running: the scan that follows the upload does it (see OrganizePendingUploads)
+      std::lock_guard lock(m_mutex);
+      m_pendingRootUploads.push_back(file);
+      return false;
+   }
+   if (!m_loaded)
+      LoadJson();
+   std::vector<Table> tables = m_tables;
+   OrganizeRootFile(tables, file);
+   if (tables.size() != m_tables.size() || !std::equal(tables.begin(), tables.end(), m_tables.begin(), SameTable))
+      Commit(std::move(tables));
+   return true;
+}
+
+void TableLibrary::OrganizePendingUploads(std::vector<Table>& tables)
+{
+   std::vector<fs::path> files;
+   {
+      std::lock_guard lock(m_mutex);
+      files.swap(m_pendingRootUploads);
+   }
+   for (const fs::path& file : files)
+      OrganizeRootFile(tables, file);
+}
+
+void TableLibrary::OrganizeRootFile(std::vector<Table>& tables, const fs::path& file)
+{
+   std::error_code ec;
+   if (!fs::is_regular_file(file, ec) || RelativePath(file).find('/') != string::npos)
+      return; // Gone, or no longer at the root
+   if (HasExtension(file, ".vpx"))
+      MoveRootTable(tables, file);
+   else if (HasExtension(file, ".directb2s"))
+      PlaceRootBackglass(file);
+}
+
+// The files at the root of the tables folder, but the archives (imported by the scans)
+std::vector<fs::path> TableLibrary::ListRootFiles() const
+{
+   std::vector<fs::path> files;
+   std::error_code ec;
+   for (auto it = fs::directory_iterator(m_config.tablesPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (!IsHidden(it->path()) && it->is_regular_file(ec) && !IsArchive(it->path()))
+         files.push_back(it->path());
+   return files;
+}
+
+// A downloaded backglass seldom has the name of its table ('Metallica Remastered - Pro.directb2s' for 'Metallica Remastered (Pro) - fAthAwg
+// v1.3c.vpx', 'Medieval Madness (Williams 1997).directb2s' for 'Medieval_Madness.vpx'): its table is the only one without backglass whose name
+// holds all of its words, or all of whose words it holds. The tables are looked for in the folder, as the scan registering an uploaded table
+// may not have run yet.
+std::optional<fs::path> TableLibrary::FindBackglassTable(const fs::path& backglass, const std::vector<fs::path>& rootFiles) const
+{
+   std::set<string> rootNames;
+   for (const fs::path& file : rootFiles)
+      rootNames.insert(ToLower(file.filename().string()));
+   const std::vector<string> words = NameWords(backglass.stem().string());
+   std::vector<fs::path> matches;
+   for (const fs::path& vpx : ListTableFiles(m_config.tablesPath, 0)) {
+      const bool atRoot = RelativePath(vpx).find('/') == string::npos;
+      const bool hasBackglass = atRoot ? rootNames.contains(ToLower(vpx.stem().string()) + ".directb2s") : FolderHasBackglass(vpx.parent_path());
+      if (!hasBackglass && NamesMatch(words, NameWords(vpx.stem().string())))
+         matches.push_back(vpx);
+   }
+   if (matches.size() > 1)
+      Log(LogLevel::Info, "Backglass " + backglass.filename().string() + " left as it is: it matches several tables");
+   return matches.size() == 1 ? std::optional(matches[0]) : std::nullopt;
+}
+
+// A backglass uploaded to the root goes along its table, under the name of the table
+void TableLibrary::PlaceRootBackglass(const fs::path& backglass)
+{
+   const std::vector<fs::path> rootFiles = ListRootFiles();
+   const string lowerName = ToLower(backglass.filename().string());
+   for (const fs::path& file : rootFiles)
+      if (HasExtension(file, ".vpx") && lowerName == ToLower(file.stem().string()) + ".directb2s")
+         return; // Already named after its table
+   const std::optional<fs::path> vpx = FindBackglassTable(backglass, rootFiles);
+   if (!vpx)
+      return;
+   const fs::path target = fs::path(*vpx).replace_extension(".directb2s");
+   std::error_code ec;
+   fs::rename(backglass, target, ec);
+   if (ec)
+      Log(LogLevel::Error, "Failed to move " + backglass.string() + " to " + target.string() + ": " + ec.message());
+   else
+      Log(LogLevel::Info, "Backglass " + backglass.filename().string() + " moved along its table, as " + RelativePath(target));
+}
+
+// A table uploaded to the root goes into a folder of its own, with its companion files
+void TableLibrary::MoveRootTable(std::vector<Table>& tables, const fs::path& vpx)
+{
+   if (m_config.isTableInUse && m_config.isTableInUse(vpx))
+      return;
+   const std::vector<fs::path> rootFiles = ListRootFiles();
+   std::vector<string> rootStems; // Of the tables of the root
+   for (const fs::path& file : rootFiles)
+      if (HasExtension(file, ".vpx"))
+         rootStems.push_back(ToLower(file.stem().string()));
+   const string lowerStem = ToLower(vpx.stem().string());
+
+   // Companion files go with the table of the longest matching name ('Star Trek.Pro.png' with 'Star Trek.Pro.vpx', not 'Star Trek.vpx')
+   std::vector<std::pair<fs::path, fs::path>> files; // Companion files, and their name in the table's folder
+   bool hasBackglass = false;
+   std::vector<fs::path> strayBackglasses;
+   for (const fs::path& file : rootFiles) {
+      if (HasExtension(file, ".vpx"))
+         continue;
+      const string lowerName = ToLower(file.filename().string());
+      const string* owner = nullptr;
+      for (const string& stem : rootStems)
+         if (IsCompanionName(lowerName, stem) && (owner == nullptr || stem.size() > owner->size()))
+            owner = &stem;
+      if (owner != nullptr && *owner == lowerStem) {
+         files.emplace_back(file, file.filename());
+         hasBackglass |= lowerName == lowerStem + ".directb2s";
+      }
+      else if (owner == nullptr && HasExtension(file, ".directb2s"))
+         strayBackglasses.push_back(file);
+   }
+   // Its backglass, uploaded first under another name
+   if (!hasBackglass)
+      for (const fs::path& backglass : strayBackglasses)
+         if (FindBackglassTable(backglass, rootFiles) == vpx) {
+            files.emplace_back(backglass, fs::path(vpx.filename()).replace_extension(".directb2s"));
+            break;
+         }
+
+   std::error_code ec;
+   const fs::path folder = BuildPath(GetUniqueFolder(NameFromStem(vpx)));
+   const fs::path newVpx = folder / vpx.filename();
+   fs::create_directories(folder, ec);
+   if (!ec)
+      fs::rename(vpx, newVpx, ec);
+   if (ec) {
+      Log(LogLevel::Error, "Failed to move " + vpx.string() + " into a folder of its own: " + ec.message());
+      std::error_code ignored;
+      fs::remove(folder, ignored); // Only when empty
+      return;
+   }
+   std::map<string, string> moved { { RelativePath(vpx), RelativePath(newVpx) } };
+   for (const auto& [file, name] : files) {
+      fs::rename(file, folder / name, ec);
+      if (ec)
+         Log(LogLevel::Error, "Failed to move " + file.string() + " along its table: " + ec.message());
+      else
+         moved[RelativePath(file)] = RelativePath(folder / name);
+   }
+   // A table replacing one of the root keeps what the player kept along it (see FileLocator::GetTablePath): its texture cache, and a copy
+   // of the folders the tables of the root share (what the scripts saved: options, scores of the EM tables; links to the music files)
+   const fs::path cache = m_config.tablesPath / "cache" / vpx.stem();
+   if (fs::is_directory(cache, ec)) {
+      fs::create_directories(folder / "cache", ec);
+      fs::rename(cache, folder / "cache" / vpx.stem(), ec);
+      if (ec)
+         Log(LogLevel::Warn, "Failed to move the cache of " + vpx.filename().string() + ": " + ec.message());
+   }
+   const bool registered = std::any_of(tables.begin(), tables.end(), [&vpx, this](const Table& table) { return table.path == RelativePath(vpx); });
+   if (registered && fs::is_directory(m_config.tablesPath / "user", ec)) {
+      fs::copy(m_config.tablesPath / "user", folder / "user", fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+      if (ec)
+         Log(LogLevel::Warn, "Failed to copy the user folder for " + vpx.filename().string() + ": " + ec.message());
+   }
+   if (registered && fs::is_directory(m_config.tablesPath / "music", ec)) {
+      fs::copy(m_config.tablesPath / "music", folder / "music", fs::copy_options::recursive | fs::copy_options::skip_existing | fs::copy_options::create_hard_links, ec);
+      if (ec)
+         fs::copy(m_config.tablesPath / "music", folder / "music", fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+      if (ec)
+         Log(LogLevel::Warn, "Failed to copy the music folder for " + vpx.filename().string() + ": " + ec.message());
+   }
+   for (Table& table : tables) {
+      if (const auto it = moved.find(table.path); it != moved.end())
+         table.path = it->second;
+      if (const auto it = moved.find(table.image); it != moved.end())
+         table.image = it->second;
+   }
+   Log(LogLevel::Info, "Moved " + vpx.filename().string() + " and " + std::to_string(moved.size() - 1) + " companion file(s) into its own folder " + folder.filename().string());
+   if (registered && m_config.onTableMoved)
+      m_config.onTableMoved(vpx, newVpx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

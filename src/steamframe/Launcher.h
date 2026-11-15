@@ -109,6 +109,7 @@ public:
    };
    std::optional<LobbyRoom> GetLobbyRoom();
    int UseTableRoomInLobby(PinTable* table); // Returns the number of room parts kept, 0 if the table has no VR room (then nothing changes)
+   void OnTableMoved(const std::filesystem::path& from, const std::filesystem::path& to); // A table uploaded again to the root moved into a folder of its own: the lobby room follows it
    void ResetLobbyRoom();
    static vector<IEditable*> GetRoomParts(PinTable* table); // All the parts of its VR room, visible or not
    // Whether a table has a VR room or cabinet: the tables made for desktops and cabinets only show their playfield in a headset
