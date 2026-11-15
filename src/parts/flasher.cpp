@@ -16,6 +16,9 @@
 #include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
 #include "utils/color.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/FlasherOutline.h"
+#endif
 
 
 Flasher::~Flasher()
@@ -877,6 +880,12 @@ void Flasher::RenderSetup(Renderer *renderer)
 
    vector<RenderVertex> vvertex;
    m_curve.GetRgVertex(vvertex);
+#if defined(VPX_STEAM_FRAME)
+   // The straight edges of a flasher far from the table come cut into thousands of points by float rounding (src/steamframe/FlasherOutline.h)
+   if (m_d.m_renderMode == FlasherData::RenderMode::FLASHER)
+      if (const size_t dropped = VPX::FlasherOutline::DropStraightPoints(vvertex); dropped > 0)
+         PLOGI << "Flasher '" << GetName() << "': " << dropped << " points along its straight edges left out, " << vvertex.size() << " points kept";
+#endif
 
    m_numVertices = (unsigned int)vvertex.size();
    if (m_numVertices == 0)
