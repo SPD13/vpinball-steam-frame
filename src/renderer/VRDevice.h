@@ -144,6 +144,7 @@
    #include <optional>
    #include <thread>
 
+   #include "steamframe/FrameEventLog.h"
    #include "steamframe/Passthrough.h"
    #endif
 #endif
@@ -713,6 +714,7 @@ private:
    bool m_perfPanelHasImage = false; // An image drawn by the logic thread was released: the layer can be shown
    XrCompositionLayerQuad m_perfPanelLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
    void ReportPerfPanelFrame(int periods, float gpuMs); // From UpdateDynamicResolution
+   VPX::FrameEventLog m_frameEvents; // The frames out of the ordinary, logged with their time (src/steamframe/FrameEventLog.h)
    void AcquirePerfPanelImage(class RenderDevice* rd); // Before the frame is prepared
    void ReleasePerfPanelImage(); // After the frame is submitted
    void AddPerfPanelLayer(std::vector<XrCompositionLayerBaseHeader*>& layers);

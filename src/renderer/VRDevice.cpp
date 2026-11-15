@@ -1325,6 +1325,7 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    #if defined(VPX_STEAM_FRAME)
    if (perfPanel)
       ReportPerfPanelFrame(periods, gpuMs);
+   m_frameEvents.OnTiming(periods, gpuMs, m_frameBudgetMs);
    #endif
    if (!m_dynamicResolution || gpuMs < 1.f) // No reading, or nothing rendered (the headset is not worn): keep the scale
    {
@@ -3207,6 +3208,9 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
    frameEndInfo.environmentBlendMode = GetFrameBlendMode();
    frameEndInfo.layerCount = static_cast<uint32_t>(renderLayerInfo.layers.size());
    frameEndInfo.layers = renderLayerInfo.layers.data();
+   #if defined(VPX_STEAM_FRAME)
+   m_frameEvents.OnSubmit(rendered, frameState.shouldRender, static_cast<int>(m_sessionState), rendered ? rd->GetExecutedRenderScale() : 1.f);
+   #endif
    OPENXR_CHECK(xrEndFrame(m_session, &frameEndInfo), "Failed to end the XR Frame.");
    #if defined(VPX_STEAM_FRAME)
    if (m_bridgeEndTime != std::chrono::steady_clock::time_point {}) // The first frame after the bridge (src/steamframe/XRBridge.cpp)

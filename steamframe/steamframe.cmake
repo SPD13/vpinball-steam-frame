@@ -52,6 +52,8 @@ target_sources(vpinball PRIVATE
    src/steamframe/PerfPanel.h
    src/steamframe/PerfPanel.cpp
    src/steamframe/PerfPanelLayer.cpp
+   src/steamframe/FrameEventLog.h
+   src/steamframe/FrameEventLog.cpp
 
    # Simplified render meshes of heavy tables (meshoptimizer's simplifier)
    src/steamframe/MeshSimplifier.h
