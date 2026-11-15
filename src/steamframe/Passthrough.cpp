@@ -410,6 +410,8 @@ void ClassifyTable(PinTable* table)
 
 bool IsRoom(const IEditable* part) { return s_roomParts.contains(part); }
 
+void AddRoomPart(const IEditable* part) { s_roomParts.insert(part); }
+
 void Clear() { s_roomParts.clear(); }
 
 string GetStatus()

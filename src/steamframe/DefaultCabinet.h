@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CabinetFit.h"
+#include "parts/PartGroup.h"
 
 #include <filesystem>
 #include <memory>
@@ -33,7 +34,10 @@ class IEditable;
 // The implicit VR backglass (B2S) moves to the backglass window of the backbox, and a score view display (DMD, segments) is added in the
 // window of the speaker panel.
 //
-// VPX_DEFAULT_CABINET=0 turns it off, =1 shows it out of a headset too (desktop tests).
+// The room chosen for the lobby (the game room by default, none for the empty room) is added around it, in the room space: its parts are
+// moved from the lobby room's table (src/assets/lobby-*.vpx, steamframe/lobby-room) to the played one. Passthrough leaves it out.
+//
+// VPX_DEFAULT_CABINET=0 turns it off, =1 shows it out of a headset too (desktop tests), =2 on the tables made for VR too; VPX_DEFAULT_ROOM=0 leaves the room out.
 class DefaultCabinet final
 {
 public:
@@ -49,6 +53,8 @@ public:
 
 private:
    bool Load(const std::filesystem::path& folder);
+   void LoadRoom();
+   PartGroup* NewGroup(const std::string& name, PartGroupData::SpaceReference space);
    void LoadNode(const struct cgltf_data* data, const struct cgltf_node& node, const VPX::CabinetFit::Fit& fit, float launcherX, const std::string& folder);
    Flasher* CreateFlasher(const std::vector<float>& corners, const VPX::CabinetFit::Fit& fit, int window, const std::string& name);
    Material* GetMaterial(const struct cgltf_data* data, const struct cgltf_material* material, const std::string& folder, std::string& image, float& unlit);

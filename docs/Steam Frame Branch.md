@@ -689,7 +689,7 @@ Files: `src/steamframe/FlasherOutline.h/.cpp` (new), `src/parts/flasher.cpp`, `s
 `src/steamframe/MeshLevelCache.h/.cpp` (new), `third-party/include/meshoptimizer/indexcodec.cpp` (new), `src/core/player.cpp`,
 `steamframe/steamframe.cmake`, docs.
 
-## 32. Default VR cabinet (2026-11-14)
+## 32. Default VR cabinet and room (2026-11-14)
 
 Tables made for desktops and cabinets (no VR room or cabinet, `Launcher::IsMadeForVR`, section 8) only show their playfield in a headset,
 floating in the room. They get a pinball cabinet instead: a Williams WPC standard body with generic art, made by the scripts of
@@ -709,13 +709,20 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   start and launch buttons move when pressed.
 - **Backbox.** The table's `.directb2s` shows in the backglass window (an external render flasher, window Backglass), otherwise the generic
   backglass art; the score view (DMD, segments) shows in the window of the speaker panel. The implicit VR backglass is hidden.
+- **Room.** The room chosen for the lobby (section 9; the game room by default, none for the empty room) stands around the cabinet:
+  `DefaultCabinet::LoadRoom` loads its table (`Launcher::GetLobbyTablePath`) and moves its primitives, images and materials to the played
+  table, in a part group in the room space (prefix `SF_Room_`). The player stands at the middle of the bottom edge of the table in both,
+  so the cabinet takes the place of the menu of the lobby, on the free floor in front of the player. The baked lighting is drawn unlit,
+  under the tone mapping and color grading of the table. Passthrough leaves it out (`Passthrough::AddRoomPart`: the room parts of a table
+  are found before the cabinet is added).
 - **Switch.** `VPX_DEFAULT_CABINET=0` turns it off; `=1` adds it out of a headset too, for desktop tests (the cabinet then stands where
-  the table's own cabinet settings put it). Logged: `[DefaultCabinet] Table ... spring plunger at x ...`, `Added 35 parts, 6 images, 16 materials`.
-- **Not yet.** A room around it (the game room of the lobby), a setting in the menu, per-table art, hiding the parts some desktop tables
-  draw at the place of the cabinet (wood rails, lockbar). Checked on the Mac (desktop views of the upstream example table); not yet in the
-  headset.
+  the table's own cabinet settings put it), `=2` on the tables made for VR too; `VPX_DEFAULT_ROOM=0` leaves the room out. Logged:
+  `[DefaultCabinet] Table ... spring plunger at x ...`, `Room lobby-gameroom.vpx: 9 parts, 8 images`, `Added ... parts, ... images, ... materials`.
+- **Not yet.** A setting in the menu, per-table art, hiding the parts some desktop tables draw at the place of the cabinet (wood rails,
+  lockbar). Checked on the Mac (desktop views of the upstream example table; the test hooks `Doc/test-hooks/cab-shot-hooks.py`); not yet
+  in the headset.
 
-Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
+Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/steamframe/Passthrough.h/.cpp`, `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
 `src/assets/vr-cabinet/` (new), `steamframe/vr-cabinet/` (new, the Blender scripts), `tests/test-cabinet-fit.cpp` (new, built alone as
 written at its top).
 
