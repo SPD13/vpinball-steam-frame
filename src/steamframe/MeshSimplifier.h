@@ -15,6 +15,8 @@
 //
 // Not simplified: animated meshes, parts merged by their collection's group elements, small meshes, and additive parts and light maps
 // that do not lie on a simplified part.
+// In VR, a part far from where the player may stand only gets the levels it may draw from there. The levels of a table are kept on disk with
+// its texture cache (MeshLevelCache): a table pays the simplification on its first load only.
 // Meshes that coincide (same index list and vertex positions, like a part and its 'off' copy) are simplified once and share the result, so
 // that stacked parts stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
 // levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
@@ -28,6 +30,7 @@
 #include "math/matrix.h"
 
 #include <chrono>
+#include <memory>
 #include <mutex>
 
 class IndexBuffer;
@@ -39,6 +42,9 @@ namespace progschj { class ThreadPool; }
 
 namespace VPX
 {
+
+class MeshLevelCache;
+struct SimplifiedMesh;
 
 // Simplified levels of a primitive's mesh, from the finest to the coarsest
 struct MeshLevels final
@@ -62,9 +68,10 @@ class MeshSimplifier final
 public:
    static MeshSimplifier& Get();
 
-   // Queues the simplification of the table's primitives on the loading thread pool, when enabled by the table's settings
-   void Enqueue(progschj::ThreadPool& pool, PinTable* table);
-   // Logs what was done (once the pool is done)
+   // Queues the simplification of the table's primitives on the loading thread pool, when enabled by the table's settings. 'vr': played in a
+   // headset, where the player stays near the lockbar.
+   void Enqueue(progschj::ThreadPool& pool, PinTable* table, bool vr);
+   // Logs what was done (once the pool is done) and writes the new levels to the table's cache
    void LogStats();
 
    // Index buffer of a primitive: its mesh followed by its levels (whose positions it sets). Drops levels made from another mesh.
@@ -89,14 +96,24 @@ public:
       bool isReflectionPass, int& currentLevel, uint32_t& first, uint32_t& count) const;
 
 private:
-   MeshSimplifier() = default;
+   MeshSimplifier();
+   ~MeshSimplifier();
 
    struct Group; // Coinciding primitives simplified together, with the layers lying on them
+   // A group's levels, from the cache or made, then applied
    void Simplify(const Group& group);
+   // In VR, the finest bound of the levels a group may draw from where the player may stand (0: all)
+   float StartBound(const Group& group) const;
+   // Makes the levels of a group, from the bound startBound on
+   void Make(const Group& group, float startBound, SimplifiedMesh& out);
+   // Gives the levels to the parts and layers of the group, and counts them
+   void Apply(const Group& group, SimplifiedMesh& mesh, double ms, bool found, bool farStart);
    void AttachLayers(vector<std::shared_ptr<Group>>& groups, const vector<Primitive*>& layers);
 
    bool m_enabled = false;
    float m_allowedPixels = 0.f; // Allowed error, in pixels
+   bool m_vr = false;
+   std::unique_ptr<MeshLevelCache> m_cache;
 
    // Triangles left out, per frame and over one second (SelectRange is called by the logic thread while it prepares a frame)
    void CountFrame(size_t saved) const;
@@ -107,11 +124,13 @@ private:
 
    std::mutex m_statsMutex;
    int m_nMeshes = 0, m_nShared = 0, m_nCandidates = 0, m_nCandidatesDone = 0;
+   int m_nFound = 0, m_nFarStart = 0; // Groups whose levels came from the cache, groups started at a coarser level
    int m_nLayers = 0, m_nLayersWithPart = 0, m_nUnderLayers = 0, m_nUnmatched = 0;
    size_t m_trisIn = 0, m_trisUnderLayers = 0, m_trisLayersWithPart = 0;
    double m_layersMs = 0.;
    vector<size_t> m_trisPerLevel;
    double m_cpuMs = 0.;
+   double m_cacheMs = 0.; // Reading the cache
    std::chrono::steady_clock::time_point m_start, m_end;
 };
 
