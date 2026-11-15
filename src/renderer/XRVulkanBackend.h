@@ -103,6 +103,12 @@ public:
       assert(m_systemID != XR_NULL_SYSTEM_ID);
 
       PLOGI << "Initializing Vulkan OpenXR backend (creating Vulkan instance/device for OpenXR)";
+#if defined(VPX_STEAM_FRAME)
+      // What Turnip's autotuner is given: main.cpp sets the algorithm, Steam's launch adds flags (preempt_optimize, docs/VR Rooms on the
+      // Steam Frame.md, section 9)
+      PLOGI << "Turnip autotune: TU_AUTOTUNE_ALGO=" << (getenv("TU_AUTOTUNE_ALGO") ? getenv("TU_AUTOTUNE_ALGO") : "(unset)")
+            << ", TU_AUTOTUNE_FLAGS=" << (getenv("TU_AUTOTUNE_FLAGS") ? getenv("TU_AUTOTUNE_FLAGS") : "(unset)");
+#endif
 
       XrResult result;
 

@@ -441,3 +441,46 @@ back to back.
 KISS 2.5 M triangles, Stranger Things 1.14 M, Star Wars ESB 730 k, Space Cadet 691 k, X-Men 687 k, Addams 638 k, Wrath of Olympus 626 k,
 LOTR 617 k. Stranger Things draws the same triangles with the rule (1.420 M; 9.8–9.9 ms in four runs, one stray run at 9.1); loading
 3.4 → 3.6 s (a first run rebuilt its texture cache: compare loads with `Texture compression: 0 compressed`).
+
+### 9.1 KISS below 100 % in Steam launches: Steam's `preempt_optimize` (parked, 2026-11-14)
+
+With the fixes above in the dev slot, KISS still dropped in the owner's sessions started from Steam: 70–97 %, session ratings yellow
+(native 37.8 % and 5.8 % of the time), frames alternating between about 9.4 and 14.4 ms. GPU clock steady at 903 MHz, no other GPU client
+than VPX and the compositor, memory under the driver budget. Started over ssh, the same table held 100 % at 10.4–11.7 ms.
+
+**What was seen.** Worn runs started over ssh in the environment Steam gives the dev slot (`Doc/test-hooks/worn-env.py`, which replays
+`/proc/<pid>/environ` of a Steam launch, drops variables or sets `VAR=VALUE`, with a per-frame trace of the dynamic resolution; results in
+`~/perf-test/results-ktrace`). Without bgfx's GPU profiler (`env-noprof`), KISS ran 74 s at 74–80 % with the GPU at a flat 11.5–11.7 ms
+whatever the scale (0.70–0.82), then 100 % at 10.6–11.0 ms after a moment of low GPU time when the owner looked away from the table. So
+the state is not heavier per pixel: **drawing fewer pixels cost more than drawing all of them**, and the dynamic resolution stayed low
+because the next step up was not expected to fit. With the profiler, Steam's environment replayed (`env-full`), the same state lasted the
+first 12 s; bgfx's per-view times put the extra in the scene pass (9.43 ms at 76 % against 7.0 ms at 100 %).
+
+**Likely mechanism** (Mesa `src/freedreno/vulkan/tu_autotune.cc`, main branch; the Frame runs a Valve build of Mesa 26.3.0-devel,
+`git-abc426bb62`, not in the public tree). Steam launches games with `TU_AUTOTUNE_FLAGS=preempt_optimize`, besides the
+`TU_AUTOTUNE_ALGO=profiled` VPX sets (`main.cpp`). With it, a render pass the compositor had to wait for twice in a short window is marked
+latency sensitive and **forced into tiled rendering** ("High preemption latency risk"), which can be interrupted between tiles; the mark is
+cleared only after 30 s with tiles under 150 µs (a look away from the table). Tiled, a heavy scene pass reprocesses its geometry per bin
+(1.9 M triangles on KISS; `Foveated Rendering on the Steam Frame.md`, section 7), a cost that does not follow the resolution. The
+autotuner's key is the frame buffer and its attachments, not the drawn area, so each of the two scene buffers has its own decision: one
+direct and one tiled would explain the 9.4 / 14.4 ms alternation.
+
+**Not proven.** After the Frame was rebooted (21:36, its previous boot had run 08:15–18:44, every heavy session in it), three worn runs
+stayed at 100 %: Steam's flag removed (10.4–11.0 ms), and twice with it (10.5–11.0 ms). In a run with Turnip's trace
+(`MESA_GPU_TRACES=print`, which prints `tiledRender` per pass but no reason for the tiled ones), 60 of 16,347 scene passes were tiled, all in
+the first 32 s and scattered: the profiled autotuner trying both modes, not a pass held tiled. The owner's Steam sessions with the flag
+removed were green (97.8 % twice), but they came after the reboot too. Either the flag is the cause and takes time (or a busy compositor)
+to fire, or something else that builds up over hours of uptime and a reboot clears.
+
+**Decision: parked.** The flag exists so that the compositor can interrupt the game when it must reproject a frame; without it, a direct
+scene pass of about 7 ms can delay the compositor and show as judder (none noticed by the owner in short tests, and not measurable from
+VPX). It applies to every table and to the system UI while VPX runs, and overrides Valve's tuning of the platform, for a cause not shown.
+Kept in master: the start log line `Turnip autotune: TU_AUTOTUNE_ALGO=…, TU_AUTOTUNE_FLAGS=…` (`XRVulkanBackend.h`), which tells whether
+the flag was in effect in a session. The removal (`main.cpp`: `preempt_optimize` taken out of `TU_AUTOTUNE_FLAGS` at start,
+`VPX_TU_PREEMPT_OPTIMIZE=1` keeps it) is on the fork's branch `tu-preempt-optimize`, one commit to cherry-pick.
+
+**If it shows again** (KISS or another heavy table at 70–80 % with the GPU near 11.6 ms whatever the resolution, back to 100 % after a look
+away, and `TU_AUTOTUNE_FLAGS=preempt_optimize` in the log): before rebooting, compare back to back, worn,
+`python3 worn-env.py flag-A 120 VPX_GPU_PROFILE` and `python3 worn-env.py noflag-A 120 VPX_GPU_PROFILE TU_AUTOTUNE_FLAGS` (wait at least
+12 s between two runs: a run started 3 s after another never got a visible session), or two Steam launches with and without the commit.
+Dropping only with the flag confirms it; then watch for judder on head turns before keeping the removal.
