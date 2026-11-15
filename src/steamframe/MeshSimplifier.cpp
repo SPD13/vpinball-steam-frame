@@ -2,8 +2,10 @@
 
 #include "core/stdafx.h"
 #include "MeshSimplifier.h"
+#include "MeshLevelCache.h"
 
 #include "core/player.h"
+#include "core/VPApp.h"
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "renderer/IndexBuffer.h"
@@ -18,6 +20,8 @@
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
+#define XXH_INLINE_ALL
+#include "xxhash.h"
 
 namespace VPX
 {
@@ -40,6 +44,17 @@ static constexpr float kProbeFactor = 2.f;
 // A part goes to a coarser level only when that level is within this share of the allowed error, so that it does not switch back and forth
 // at the distance where two levels meet
 static constexpr float kCoarserMargin = 0.8f;
+// In VR, where the player's eyes may be: around the lockbar (the front of the playfield, its width), this much (1 m in VP units) to each side,
+// in front and behind, and up to kEyeHeight above the playfield
+static constexpr float kPlayerReach = 1852.f, kEyeHeight = 2222.f;
+// Finest angle a pixel of the view may cover, in radians: under a third of that of the Steam Frame at 2160 x 2160 (1 VP unit at 0.5 m). A part
+// farther than kPlayerReach from the player only gets the levels from the one it may draw from there (a part seen closer than that draws its
+// full mesh, as without levels). The margin keeps a finer start than needed: each level is made from the previous one, and a chain started
+// too close to its last bound simplifies less (KISS's 1.34 M triangle statue, needing 8 VP units from the cabinet: from 8, its coarsest
+// level kept 1.85 M triangles of the four statues; from 4, as from 0.5, 1.62 M).
+static constexpr float kFinestPixelAngle = 0.0003f;
+// Version of what the levels are made of and how (MeshLevelCache): change it whenever Make or its constants change
+static constexpr uint32_t kLevelsVersion = 1;
 // Vertex positions of coinciding meshes differ by less than this, in VP units
 static constexpr float kCoincidence = 0.25f;
 // A mesh with this many vertices per triangle (a closed mesh that shares them has 0.5) is an export of separate triangles, usually each with its
@@ -77,6 +92,13 @@ MeshSimplifier& MeshSimplifier::Get()
    static MeshSimplifier instance;
    return instance;
 }
+
+MeshSimplifier::MeshSimplifier()
+   : m_cache(std::make_unique<MeshLevelCache>())
+{
+}
+
+MeshSimplifier::~MeshSimplifier() = default;
 
 // Parts merged into one mesh by their collection's 'group elements' (Primitive::RenderSetup draws the group's first part with the meshes of
 // the others): only the dynamic 3D meshes of the collection with the material and texture of its first dynamic 3D mesh, when there are two
@@ -678,11 +700,14 @@ void MeshSimplifier::AttachLayers(vector<std::shared_ptr<Group>>& groups, const 
    m_layersMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
-void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
+void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table, bool vr)
 {
    m_enabled = table->GetSettings().GetPlayer_SimplifyMeshes();
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
+   m_vr = vr;
+   m_cache->Close();
    m_nMeshes = m_nShared = m_nCandidates = m_nCandidatesDone = 0;
+   m_nFound = m_nFarStart = 0;
    m_nLayers = m_nLayersWithPart = m_nUnderLayers = m_nUnmatched = 0;
    m_trisUnderLayers = m_trisLayersWithPart = 0;
    m_layersMs = 0.;
@@ -711,6 +736,14 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table)
    m_nCandidates = static_cast<int>(candidates.size());
    if (!m_enabled)
       return;
+
+   // The levels kept with the texture cache
+   if (table->GetSettings().GetPlayer_CacheMode() > 0 && FileExists(table->m_filename))
+   {
+      const auto t0 = std::chrono::steady_clock::now();
+      m_cache->Open(g_app->m_fileLocator.GetTablePath(table, FileLocator::TableSubFolder::Cache, true));
+      m_cacheMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+   }
 
    // Coinciding meshes: same index list, then same places
    vector<std::shared_ptr<Group>> groups;
@@ -760,6 +793,88 @@ void MeshSimplifier::Simplify(const Group& group)
 {
    const auto t0 = std::chrono::steady_clock::now();
    Primitive* const p = group.parts[0];
+   const float startBound = StartBound(group);
+
+   // The key: everything the levels are made from
+   XXH3_state_t* const state = XXH3_createState();
+   XXH3_128bits_reset(state);
+   const auto add = [state](const void* data, size_t size) { XXH3_128bits_update(state, data, size); };
+   const uint32_t versions[2] = { kLevelsVersion, MESHOPTIMIZER_VERSION };
+   add(versions, sizeof(versions));
+   add(&startBound, sizeof(startBound));
+   add(&p->m_d.m_vSize, sizeof(p->m_d.m_vSize));
+   add(&group.matrix, sizeof(group.matrix));
+   add(p->m_mesh.m_vertices.data(), p->m_mesh.m_vertices.size() * sizeof(Vertex3D_NoTex2));
+   add(p->m_mesh.m_indices.data(), p->m_mesh.m_indices.size() * sizeof(unsigned int));
+   vector<size_t> layerVertices;
+   for (size_t l = 0; l < group.layers.size(); l++)
+   {
+      const Mesh& lm = group.layers[l]->m_mesh;
+      layerVertices.push_back(lm.NumVertices());
+      add(&group.layerMatrices[l], sizeof(Matrix3D));
+      add(lm.m_vertices.data(), lm.m_vertices.size() * sizeof(Vertex3D_NoTex2));
+      add(lm.m_indices.data(), lm.m_indices.size() * sizeof(unsigned int));
+   }
+   const XXH128_hash_t hash = XXH3_128bits_digest(state);
+   XXH3_freeState(state);
+   const MeshLevelKey key { hash.low64, hash.high64 };
+
+   SimplifiedMesh mesh;
+   const bool found = m_cache->IsOpen() && m_cache->Find(key, p->m_mesh.NumVertices(), layerVertices, mesh);
+   if (!found)
+   {
+      Make(group, startBound, mesh);
+      if (mesh.outcome != SimplifiedMesh::Outcome::Levels)
+      {
+         mesh.errors.clear();
+         mesh.levels.clear();
+         mesh.layerLevels.assign(group.layers.size(), {});
+      }
+      m_cache->Store(key, mesh);
+   }
+   Apply(group, mesh, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(), found, startBound > 0.f);
+}
+
+float MeshSimplifier::StartBound(const Group& group) const
+{
+   if (!m_vr)
+      return 0.f;
+   // Box of the part on the table, at load
+   const Primitive* const p = group.parts[0];
+   const Mesh& mesh = p->m_mesh;
+   Vertex3Ds lo(FLT_MAX, FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (const Vertex3D_NoTex2& v : mesh.m_vertices)
+   {
+      lo.x = min(lo.x, v.x); lo.y = min(lo.y, v.y); lo.z = min(lo.z, v.z);
+      hi.x = max(hi.x, v.x); hi.y = max(hi.y, v.y); hi.z = max(hi.z, v.z);
+   }
+   Vertex3Ds wlo(FLT_MAX, FLT_MAX, FLT_MAX), whi(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (int i = 0; i < 8; i++)
+   {
+      const Vertex3Ds c = group.matrix.MultiplyVectorNoPerspective(Vertex3Ds((i & 1) ? lo.x : hi.x, (i & 2) ? lo.y : hi.y, (i & 4) ? lo.z : hi.z));
+      wlo.x = min(wlo.x, c.x); wlo.y = min(wlo.y, c.y); wlo.z = min(wlo.z, c.z);
+      whi.x = max(whi.x, c.x); whi.y = max(whi.y, c.y); whi.z = max(whi.z, c.z);
+   }
+   // Distance to where the player's eyes may be
+   const PinTable* const table = p->m_ptable;
+   const Vertex3Ds eyeLo(min(table->m_left, table->m_right) - kPlayerReach, table->m_bottom - kPlayerReach, -kPlayerReach);
+   const Vertex3Ds eyeHi(max(table->m_left, table->m_right) + kPlayerReach, table->m_bottom + kPlayerReach, kEyeHeight);
+   const float dx = max(max(wlo.x - eyeHi.x, eyeLo.x - whi.x), 0.f);
+   const float dy = max(max(wlo.y - eyeHi.y, eyeLo.y - whi.y), 0.f);
+   const float dz = max(max(wlo.z - eyeHi.z, eyeLo.z - whi.z), 0.f);
+   const float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+   // The finest bound of the levels it may draw from there (the error of a level is in VP units of the part at its size at load, as on the table)
+   const float finest = m_allowedPixels * kFinestPixelAngle * distance;
+   float start = 0.f;
+   for (const float bound : kBounds)
+      if (bound <= finest)
+         start = bound;
+   return start;
+}
+
+void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& out)
+{
+   Primitive* const p = group.parts[0];
    const Mesh& mesh = p->m_mesh;
    const size_t nv = mesh.NumVertices();
    const size_t tris = mesh.NumIndices() / 3;
@@ -788,15 +903,7 @@ void MeshSimplifier::Simplify(const Group& group)
       weights[3] = weights[4] = uvWeight;
 
    // Layers on the part: the simplifier gets a copy of a vertex per set of layer vertices it meets, and the edges of the layers are seams
-   const auto leaveOut = [this, &group, tris, t0]()
-   {
-      const std::lock_guard<std::mutex> lock(m_statsMutex);
-      m_cpuMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-      m_end = std::chrono::steady_clock::now();
-      m_nUnmatched++;
-      m_nUnderLayers += static_cast<int>(group.parts.size());
-      m_trisUnderLayers += tris * group.parts.size();
-   };
+   const auto leaveOut = [&out]() { out.outcome = SimplifiedMesh::Outcome::LeftOut; };
    const bool withLayers = !group.layers.empty();
    LayerSplit split;
    if (withLayers)
@@ -836,7 +943,7 @@ void MeshSimplifier::Simplify(const Group& group)
    vector<unsigned int> dst(sourceCount);
    for (const float bound : kBounds)
    {
-      if (bound <= sourceError)
+      if (bound <= sourceError || bound < startBound)
          continue;
       if (welded)
          weights[0] = weights[1] = weights[2] = normalWeight * bound;
@@ -937,12 +1044,44 @@ void MeshSimplifier::Simplify(const Group& group)
          for (unsigned int& i : level.indices)
             i = toMesh[i];
 
-   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+   out.outcome = levels->levels.empty() ? SimplifiedMesh::Outcome::NoLevels : SimplifiedMesh::Outcome::Levels;
+   for (MeshLevels::Level& level : levels->levels)
+   {
+      out.errors.push_back(level.error);
+      out.levels.push_back(std::move(level.indices));
+   }
+   out.layerLevels = std::move(layerLevels);
+}
+
+void MeshSimplifier::Apply(const Group& group, SimplifiedMesh& mesh, double ms, bool found, bool farStart)
+{
+   Primitive* const p = group.parts[0];
+   const size_t tris = p->m_mesh.NumIndices() / 3;
    const std::lock_guard<std::mutex> lock(m_statsMutex);
    m_cpuMs += ms;
    m_end = std::chrono::steady_clock::now();
-   if (levels->levels.empty())
+   m_nFound += found ? 1 : 0;
+   m_nFarStart += farStart ? 1 : 0;
+   if (mesh.outcome == SimplifiedMesh::Outcome::LeftOut)
+   {
+      m_nUnmatched++;
+      m_nUnderLayers += static_cast<int>(group.parts.size());
+      m_trisUnderLayers += tris * group.parts.size();
       return;
+   }
+   if (mesh.outcome != SimplifiedMesh::Outcome::Levels || mesh.levels.empty())
+      return;
+   auto levels = std::make_shared<MeshLevels>();
+   levels->loadSize = p->m_d.m_vSize;
+   levels->sourceIndices = p->m_mesh.NumIndices();
+   levels->sourceVertices = p->m_mesh.NumVertices();
+   for (size_t l = 0; l < mesh.levels.size(); l++)
+   {
+      MeshLevels::Level& level = levels->levels.emplace_back();
+      level.indices = std::move(mesh.levels[l]);
+      level.error = mesh.errors[l];
+   }
+   vector<vector<vector<unsigned int>>>& layerLevels = mesh.layerLevels;
    for (Primitive* part : group.parts)
       part->m_meshLevels = levels;
    m_nMeshes += static_cast<int>(group.parts.size() + group.layers.size());
@@ -1007,6 +1146,20 @@ void MeshSimplifier::LogStats()
       PLOGI << "Mesh simplification: " << m_nLayers << " additive parts and light maps on the table, " << m_nLayersWithPart << " simplified with the part under them ("
             << m_trisLayersWithPart << " triangles), found in " << static_cast<int>(m_layersMs) << " ms; " << m_nUnderLayers
             << " parts left out under a layer lying on two parts or not made of their triangles (" << m_trisUnderLayers << " triangles, " << m_nUnmatched << " not matched)";
+   }
+   if (m_vr)
+      PLOGI << "Mesh simplification: " << m_nFarStart << " groups far from the player started at a coarser level";
+   if (m_cache->IsOpen())
+   {
+      const auto t0 = std::chrono::steady_clock::now();
+      size_t entries = 0, bytes = 0;
+      const int made = m_cache->GetStored();
+      const bool saved = m_cache->Save(entries, bytes);
+      PLOGI << "Mesh simplification cache: " << m_nFound << " groups found, " << made << " made (read in " << static_cast<int>(m_cacheMs) << " ms)"
+            << (saved ? ", written: " + std::to_string(entries) + " entries, " + std::to_string((bytes + 512 * 1024) / (1024 * 1024)) + " MB in "
+                     + std::to_string(static_cast<int>(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count())) + " ms"
+                     : string());
+      m_cache->Close();
    }
 }
 

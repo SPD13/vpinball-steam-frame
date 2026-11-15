@@ -983,7 +983,7 @@ void Player::InitTableSession(const bool isInitial)
       for (auto image : preloadImages)
          pool.enqueue_block(loadImage, image, false);
 #if defined(VPX_STEAM_FRAME)
-      VPX::MeshSimplifier::Get().Enqueue(pool, m_ptable); // Simplified render meshes, made while the textures load
+      VPX::MeshSimplifier::Get().Enqueue(pool, m_ptable, m_vrDevice != nullptr); // Simplified render meshes, made while the textures load (or from their cache)
 #endif
 
       bool showLoadingUI = false;

@@ -56,6 +56,8 @@ target_sources(vpinball PRIVATE
    # Simplified render meshes of heavy tables (meshoptimizer's simplifier)
    src/steamframe/MeshSimplifier.h
    src/steamframe/MeshSimplifier.cpp
+   src/steamframe/MeshLevelCache.h
+   src/steamframe/MeshLevelCache.cpp
 
    # Straight edges of flashers kept whole (VR room floors far from the table)
    src/steamframe/FlasherOutline.h
@@ -85,6 +87,7 @@ target_sources(vpinball PRIVATE
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
+   third-party/include/meshoptimizer/indexcodec.cpp
 
    # Fork Awesome icons of the menus, merged into LiveUI's font (upstream moved to a subset of Lucide on 2026-11-09)
    src/steamframe/fonts/ForkAwesomeIcons.h
@@ -111,6 +114,7 @@ target_compile_definitions(vpinball PRIVATE
 set_source_files_properties(
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp
+   third-party/include/meshoptimizer/indexcodec.cpp
    PROPERTIES SKIP_PRECOMPILE_HEADERS ON
 )
 
