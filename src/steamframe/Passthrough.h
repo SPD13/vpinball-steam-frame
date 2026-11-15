@@ -45,6 +45,7 @@ bool IsRoomCollectionName(const string& collectionName);
 // Table start (Renderer constructor): finds the parts of the room of the played table
 void ClassifyTable(PinTable* table);
 bool IsRoom(const IEditable* part);
+void AddRoomPart(const IEditable* part); // A part of a room added after the table started (the room of the default cabinet, DefaultCabinet.h)
 void Clear();
 
 // One line for the menu, and for the notification of the input action

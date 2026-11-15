@@ -14,6 +14,8 @@
 #include "renderer/Texture.h"
 #include "steamframe/CabinetBackglass.h"
 #include "steamframe/Launcher.h"
+#include "steamframe/Passthrough.h"
+#include "ui/VPXFileFeedback.h"
 
 #include "cgltf/cgltf.h"
 #include <nlohmann/json.hpp>
@@ -79,8 +81,8 @@ std::unique_ptr<DefaultCabinet> DefaultCabinet::Create(Player* player)
    const char* env = getenv("VPX_DEFAULT_CABINET");
    if (env && env[0] == '0')
       return nullptr;
-   const bool forced = env && env[0] == '1';
-   if ((!player->IsVR() && !forced) || player->m_isLobby || Launcher::IsMadeForVR(player->m_ptable))
+   const bool forced = env && (env[0] == '1' || env[0] == '2'); // 2: also on the tables made for VR (tests)
+   if ((!player->IsVR() && !forced) || player->m_isLobby || (Launcher::IsMadeForVR(player->m_ptable) && !(env && env[0] == '2')))
       return nullptr;
    auto cabinet = std::make_unique<DefaultCabinet>(player);
    bool loaded = false;
@@ -164,24 +166,8 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          << (m_launcher == CF::Launcher::Spring ? "spring plunger" : "launch button") << " at x " << launcherX << " m (" << plungers.size() << " plunger(s))";
 
    // Two part groups: the cabinet, and its legs, stretched to the floor
-   const bool forced = !m_player->IsVR();
-   const auto newGroup = [&](const string& name, PartGroupData::SpaceReference space) -> PartGroup*
-   {
-      IEditable* const part = EditableRegistry::CreateAndInit(eItemPartGroup, table, 0.f, 0.f);
-      if (part == nullptr)
-         return nullptr;
-      PartGroup* const group = static_cast<PartGroup*>(part);
-      group->SetName(table->GetUniqueName(name));
-      group->m_d.m_spaceReference = space;
-      group->m_d.m_playerModeVisibilityMask = forced ? PartGroupData::PMVM_ALL : (PartGroupData::PMVM_VIRTUAL_REALITY | PartGroupData::PMVM_MIXED_REALITY);
-      table->AddPart(part);
-      part->Release();
-      part->SetPartGroup(nullptr);
-      m_parts.push_back(part);
-      return group;
-   };
-   m_cabinetGroup = newGroup("SF_DefaultCabinet"s, PartGroupData::SpaceReference::SR_CABINET);
-   m_feetGroup = newGroup("SF_DefaultCabinetFeet"s, PartGroupData::SpaceReference::SR_CABINET_FEET);
+   m_cabinetGroup = NewGroup("SF_DefaultCabinet"s, PartGroupData::SpaceReference::SR_CABINET);
+   m_feetGroup = NewGroup("SF_DefaultCabinetFeet"s, PartGroupData::SpaceReference::SR_CABINET_FEET);
    if (m_cabinetGroup == nullptr || m_feetGroup == nullptr)
    {
       cgltf_free(data);
@@ -216,10 +202,126 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       m_hidImplicitBackglass = true;
    }
 
+   // The room around it
+   LoadRoom();
+
    // Images and materials are looked up by name through maps built when the table was loaded
    table->RemoveInvalidReferences();
    PLOGI << "[DefaultCabinet] Added " << m_parts.size() << " parts, " << m_images.size() << " images, " << m_materials.size() << " materials";
    return true;
+}
+
+PartGroup* DefaultCabinet::NewGroup(const string& name, PartGroupData::SpaceReference space)
+{
+   PinTable* const table = m_player->m_ptable;
+   IEditable* const part = EditableRegistry::CreateAndInit(eItemPartGroup, table, 0.f, 0.f);
+   if (part == nullptr)
+      return nullptr;
+   PartGroup* const group = static_cast<PartGroup*>(part);
+   group->SetName(table->GetUniqueName(name));
+   group->m_d.m_spaceReference = space;
+   // Out of a headset (desktop tests), shown in every mode
+   group->m_d.m_playerModeVisibilityMask = !m_player->IsVR() ? PartGroupData::PMVM_ALL : (PartGroupData::PMVM_VIRTUAL_REALITY | PartGroupData::PMVM_MIXED_REALITY);
+   table->AddPart(part);
+   part->Release();
+   part->SetPartGroup(nullptr);
+   m_parts.push_back(part);
+   return group;
+}
+
+// The room of the lobby (the one chosen for it, the game room by default; none for the empty room) around the cabinet: its parts are
+// moved from its table to the played one, in the room space, where the player stands at the middle of the bottom edge of the table in
+// both. Baked lighting, drawn unlit. Passthrough leaves them out like the room of a table.
+void DefaultCabinet::LoadRoom()
+{
+   if (const char* env = getenv("VPX_DEFAULT_ROOM"); env && env[0] == '0')
+      return;
+   const std::filesystem::path path = g_launcher ? g_launcher->GetLobbyTablePath() : g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "lobby-gameroom.vpx");
+   if (!Launcher::IsLobbyRoomFile(path) || !FileExists(path))
+   {
+      PLOGI << "[DefaultCabinet] No room (empty room chosen for the lobby)";
+      return;
+   }
+   CComObject<PinTable>* room = nullptr;
+   CComObject<PinTable>::CreateInstance(&room);
+   if (room == nullptr)
+      return;
+   room->AddRef();
+   VPXFileFeedback feedback;
+   const HRESULT hr = room->LoadGameFromFilename(path, feedback);
+   if (FAILED(hr))
+   {
+      PLOGE << "[DefaultCabinet] Cannot load the room " << path;
+      room->Release();
+      return;
+   }
+
+   PinTable* const table = m_player->m_ptable;
+   PartGroup* const group = NewGroup("SF_DefaultRoom"s, PartGroupData::SpaceReference::SR_ROOM);
+   const float dx = m_centerX - 0.5f * (room->m_left + room->m_right), dy = m_bottomY - room->m_bottom;
+   std::vector<std::pair<string, string>> movedImages; // Name in the room, name in the table
+   std::vector<std::pair<string, string>> copiedMaterials;
+   int count = 0;
+   for (IEditable* part : room->GetParts())
+   {
+      if (part->GetItemType() != eItemPrimitive || group == nullptr)
+         continue;
+      const Primitive* const source = static_cast<const Primitive*>(part);
+      if (!source->m_d.m_visible) // The marker that keeps the near plane of the desktop view of the lobby close
+         continue;
+      Primitive* const prim = static_cast<Primitive*>(EditableRegistry::CreateAndInit(eItemPrimitive, table, 0.f, 0.f));
+      if (prim == nullptr)
+         continue;
+      prim->m_d = source->m_d;
+      prim->m_mesh = source->m_mesh;
+      prim->m_desktopBackdrop = false;
+      prim->m_d.m_vPosition.x += dx;
+      prim->m_d.m_vPosition.y += dy;
+      prim->SetName(table->GetUniqueName("SF_Room_"s + source->GetName()));
+      // Its texture leaves the room's table for the played one
+      if (!source->m_d.m_szImage.empty())
+      {
+         const auto moved = std::ranges::find_if(movedImages, [&](const auto& m) { return m.first == source->m_d.m_szImage; });
+         if (moved != movedImages.end())
+            prim->m_d.m_szImage = moved->second;
+         else if (Texture* const image = room->GetImage(source->m_d.m_szImage); image)
+         {
+            RemoveFromVectorSingle(room->m_vimage, image);
+            image->m_name = "SF_Room_" + image->m_name;
+            table->m_vimage.push_back(image);
+            m_images.push_back(image);
+            movedImages.emplace_back(source->m_d.m_szImage, image->m_name);
+            prim->m_d.m_szImage = image->m_name;
+         }
+         else
+            prim->m_d.m_szImage.clear();
+      }
+      if (!source->m_d.m_szMaterial.empty())
+      {
+         const auto copied = std::ranges::find_if(copiedMaterials, [&](const auto& m) { return m.first == source->m_d.m_szMaterial; });
+         if (copied != copiedMaterials.end())
+            prim->m_d.m_szMaterial = copied->second;
+         else if (const Material* const material = room->GetMaterial(source->m_d.m_szMaterial); material && material != room->GetMaterial(string()))
+         {
+            Material* const copy = new Material(*material);
+            copy->m_name = "SF_Room_" + material->m_name;
+            table->AddMaterial(copy);
+            m_materials.push_back(copy);
+            copiedMaterials.emplace_back(source->m_d.m_szMaterial, copy->m_name);
+            prim->m_d.m_szMaterial = copy->m_name;
+         }
+         else
+            prim->m_d.m_szMaterial.clear();
+      }
+      table->AddPart(prim);
+      prim->Release();
+      prim->SetPartGroup(group);
+      m_parts.push_back(prim);
+      VPX::Passthrough::AddRoomPart(prim);
+      count++;
+   }
+   room->Release();
+   PLOGI << "[DefaultCabinet] Room " << PathToUTF8(path.filename()) << ": " << count << " parts, " << movedImages.size() << " images";
 }
 
 Material* DefaultCabinet::GetMaterial(const cgltf_data* data, const cgltf_material* material, const std::string& folder, std::string& image, float& unlit)

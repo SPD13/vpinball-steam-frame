@@ -118,7 +118,7 @@ bool IsPreview()
 bool IsInRoomGroup(const IEditable* part)
 {
    for (const PartGroup* group = part->GetPartGroup(); group != nullptr; group = group->GetPartGroup())
-      if (group->m_d.m_spaceReference == PartGroupData::SpaceReference::SR_ROOM || lowerCase(group->GetName()).find("room") != string::npos)
+      if (group->m_d.m_spaceReference == PartGroupData::SpaceReference::Room || lowerCase(group->GetName()).find("room") != string::npos)
          return true;
    return false;
 }
@@ -244,11 +244,9 @@ Reason Classify(IEditable* part, const PinTable& table, bool inRoomCollection)
       && box.min.y < table.m_bottom + kCollectionFront;
    if (box.Width() > kRoomSize || (box.Height() > kRoomSize && !overCabinet))
       return Reason::Size;
-   // Parts placed relative to the feet of the cabinet have their height from the floor
-   const bool fromFloor = part->GetPartGroup() && part->GetPartGroup()->GetReferenceSpace() == PartGroupData::SpaceReference::SR_CABINET_FEET;
    if (part->GetItemType() == eItemPrimitive && box.Size() >= kOutsideMinSize
       && (box.max.x < table.m_left - kVolumeSide || box.min.x > table.m_right + kVolumeSide || box.max.y < table.m_top - kVolumeBack
-         || box.min.y > table.m_bottom + kVolumeFront || (!fromFloor && !overCabinet && box.max.z < kVolumeFloor))) // The casters of the cabinet are on the floor
+         || box.min.y > table.m_bottom + kVolumeFront || (!overCabinet && box.max.z < kVolumeFloor))) // The casters of the cabinet are on the floor
       return Reason::Outside;
    if (inRoomCollection
       && (box.min.x < table.m_left - kCollectionSide || box.max.x > table.m_right + kCollectionSide || box.min.y < table.m_top - kCollectionBack
@@ -409,6 +407,8 @@ void ClassifyTable(PinTable* table)
 }
 
 bool IsRoom(const IEditable* part) { return s_roomParts.contains(part); }
+
+void AddRoomPart(const IEditable* part) { s_roomParts.insert(part); }
 
 void Clear() { s_roomParts.clear(); }
 
