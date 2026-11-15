@@ -108,6 +108,11 @@ public:
       // Optional: called with the tables after each scan and import, from the thread doing it, for the fixes of the tables added or
       // changed (see TableFixes::OnTablesScanned). It must not call the operations of the library that modify it.
       std::function<void(const std::vector<Table>& tables)> onScanned;
+      // Optional: whether a table is open in the player. Such a table is not moved into a folder of its own (see OrganizeRootUpload).
+      std::function<bool(const std::filesystem::path& tablePath)> isTableInUse;
+      // Optional: called when a table of the library uploaded again to the root of the tables folder was moved into a folder of its own, from the thread doing it, for the
+      // settings naming the table by its path (the lobby room)
+      std::function<void(const std::filesystem::path& from, const std::filesystem::path& to)> onTableMoved;
    };
 
    explicit TableLibrary(Config config);
@@ -118,6 +123,16 @@ public:
    // Files modified during the last 'settleSeconds' are considered as still being copied and left for the
    // next rescan: use 0 when the caller knows that transfers are done (startup, web server event, button).
    void Rescan(const ProgressCallback& onProgress = nullptr, int settleSeconds = 0);
+
+   // One folder per table: the files that only need a name to match their table (backglass, settings, script, images) then find it without
+   // doubt, which the many tables of the root defeat. Called by the web server for a file uploaded to the root of the tables folder:
+   // - a .vpx is moved into a new folder named after it (as Import does), with its companion files (<table>.*), and its backglass uploaded
+   //   first under another name. A table replacing one of the root keeps its entry, its 'cache/<table>' folder and a copy of the root 'user'
+   //   and 'music' folders the player shares between the tables of the root;
+   // - a .directb2s goes along the only table without backglass whose file name holds all of its words, or all of whose words it holds, and
+   //   is renamed after it.
+   // The tables already at the root are left there. Returns false when the library was busy: the scan that follows the upload does it.
+   bool OrganizeRootUpload(const std::filesystem::path& file);
 
    // Same, on a worker thread, for callers that must not block like a UI: poll IsScanning/GetRevision for the outcome.
    // A request made while a scan is running triggers another scan afterward, so that no change is missed.
@@ -235,6 +250,12 @@ private:
    int MoveBundleRoms(const std::filesystem::path& folder, bool isTableFolder);
    bool MoveRom(const std::filesystem::path& rom, const std::filesystem::path& destFolder);
    void MoveRootRoms(const std::vector<Table>& tables);
+   void OrganizePendingUploads(std::vector<Table>& tables);
+   void OrganizeRootFile(std::vector<Table>& tables, const std::filesystem::path& file);
+   std::vector<std::filesystem::path> ListRootFiles() const;
+   std::optional<std::filesystem::path> FindBackglassTable(const std::filesystem::path& backglass, const std::vector<std::filesystem::path>& rootFiles) const;
+   void PlaceRootBackglass(const std::filesystem::path& backglass);
+   void MoveRootTable(std::vector<Table>& tables, const std::filesystem::path& vpx);
    std::filesystem::path GetRejectedArchivesPath() const;
    void LoadRejectedArchives();
    void SaveRejectedArchives() const;
@@ -250,6 +271,7 @@ private:
    std::mutex m_operationMutex; // Serializes the operations modifying the library (they may be long: unzip, copy...)
    mutable std::mutex m_mutex; // Protects m_tables, never held during file operations
    std::vector<Table> m_tables;
+   std::vector<std::filesystem::path> m_pendingRootUploads; // Protected by m_mutex (see OrganizeRootUpload)
    bool m_loaded = false;
    std::set<std::string> m_rejectedArchives; // Bundles without table, to avoid extracting them at each rescan (kept in rejected-archives.json)
    bool m_rejectedArchivesLoaded = false;

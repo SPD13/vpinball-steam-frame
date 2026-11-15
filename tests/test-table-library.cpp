@@ -373,6 +373,97 @@ TEST_CASE("TableLibrary: deleting a table never removes more than the table")
    CHECK(nlohmann::json::parse(Fixture::Read(f.json)).at("tableCount") == 1);
 }
 
+TEST_CASE("TableLibrary: tables uploaded to the root get a folder of their own, with their files")
+{
+   Fixture f;
+   Fixture::Touch(f.tables / "Star Trek.vpx");
+   Fixture::Touch(f.tables / "Star Trek.png");
+   Fixture::Touch(f.tables / "Star Trek.Pro.vpx");
+   Fixture::Touch(f.tables / "Star Trek.Pro.png");
+   Fixture::Touch(f.tables / "Corvette (Bally 1994).vpx");
+   Fixture::Touch(f.tables / "cache" / "Star Trek.Pro" / "used_textures.xml");
+   Fixture::Touch(f.tables / "user" / "VPReg.ini", "scores");
+   Fixture::Touch(f.tables / "music" / "theme.ogg", "music");
+   Fixture::Touch(f.tables / "Led" / "Led Zeppelin Pinball 2.5.vpx");
+   Fixture::Touch(f.tables / "Bond" / "Bond.vpx");
+   Fixture::Touch(f.tables / "Bond" / "Bond.directb2s");
+
+   std::vector<std::pair<fs::path, fs::path>> moves;
+   TableLibrary::Config config = f.Config();
+   config.isTableInUse = [](const fs::path& path) { return path.filename() == "Played.vpx"; };
+   config.onTableMoved = [&moves](const fs::path& from, const fs::path& to) { moves.emplace_back(from, to); };
+   TableLibrary library(config);
+   library.Rescan();
+   const std::vector<string> rootTables { "Bond/Bond.vpx", "Corvette (Bally 1994).vpx", "Led/Led Zeppelin Pinball 2.5.vpx", "Star Trek.Pro.vpx", "Star Trek.vpx" };
+   CHECK(Paths(library) == rootTables); // The tables already at the root stay there
+   string uuid;
+   for (const Table& table : library.GetTables())
+      if (table.path == "Star Trek.Pro.vpx")
+         uuid = table.uuid;
+   REQUIRE_FALSE(uuid.empty());
+
+   // A table of the root uploaded again: it keeps its entry, cache and saved values, and only takes its own files
+   CHECK(library.OrganizeRootUpload(f.tables / "Star Trek.Pro.vpx"));
+   const std::optional<Table> starTrek = library.GetTable(uuid);
+   REQUIRE(starTrek.has_value());
+   CHECK(starTrek->path == "Star-Trek-Pro/Star Trek.Pro.vpx");
+   CHECK(starTrek->image == "Star-Trek-Pro/Star Trek.Pro.png");
+   CHECK(fs::exists(f.tables / "Star Trek.png"));
+   CHECK(fs::exists(f.tables / "Star-Trek-Pro" / "cache" / "Star Trek.Pro" / "used_textures.xml"));
+   CHECK(Fixture::Read(f.tables / "Star-Trek-Pro" / "user" / "VPReg.ini") == "scores");
+   CHECK(Fixture::Read(f.tables / "Star-Trek-Pro" / "music" / "theme.ogg") == "music");
+   CHECK(fs::exists(f.tables / "user" / "VPReg.ini")); // Still used by the tables left at the root
+   CHECK(moves == std::vector<std::pair<fs::path, fs::path>> { { f.tables / "Star Trek.Pro.vpx", f.tables / "Star-Trek-Pro" / "Star Trek.Pro.vpx" } });
+
+   // A new table, its backglass uploaded first under another name
+   Fixture::Touch(f.tables / "Metallica Remastered - Pro.directb2s", "b2s");
+   CHECK(library.OrganizeRootUpload(f.tables / "Metallica Remastered - Pro.directb2s")); // No table yet: stays
+   CHECK(fs::exists(f.tables / "Metallica Remastered - Pro.directb2s"));
+   Fixture::Touch(f.tables / "Metallica Remastered (Pro) - fAthAwg v1.3c.vpx");
+   CHECK(library.OrganizeRootUpload(f.tables / "Metallica Remastered (Pro) - fAthAwg v1.3c.vpx"));
+   const fs::path metallica = f.tables / "Metallica-Remastered-Pro--fAthAwg-v1-3c";
+   CHECK(fs::exists(metallica / "Metallica Remastered (Pro) - fAthAwg v1.3c.vpx"));
+   CHECK(Fixture::Read(metallica / "Metallica Remastered (Pro) - fAthAwg v1.3c.directb2s") == "b2s");
+   CHECK_FALSE(fs::exists(metallica / "user")); // Nothing saved for a new table
+   CHECK(moves.size() == 1);
+
+   // A new table, then its backglass, before the scan registering the table
+   Fixture::Touch(f.tables / "Medieval_Madness.vpx");
+   CHECK(library.OrganizeRootUpload(f.tables / "Medieval_Madness.vpx"));
+   CHECK(fs::exists(f.tables / "Medieval-Madness" / "Medieval_Madness.vpx"));
+   Fixture::Touch(f.tables / "Medieval Madness (Williams 1997).directb2s"); // More words than the table's name
+   CHECK(library.OrganizeRootUpload(f.tables / "Medieval Madness (Williams 1997).directb2s"));
+   CHECK(fs::exists(f.tables / "Medieval-Madness" / "Medieval_Madness.directb2s"));
+   Fixture::Touch(f.tables / "Medieval Madness 2.directb2s"); // Its table has a backglass now: stays
+   CHECK(library.OrganizeRootUpload(f.tables / "Medieval Madness 2.directb2s"));
+   CHECK(fs::exists(f.tables / "Medieval Madness 2.directb2s"));
+
+   // Backglasses: to a table in a folder, renamed along a table of the root, or left when the table has one or several tables match
+   Fixture::Touch(f.tables / "Led Zeppelin Pinball.directb2s");
+   CHECK(library.OrganizeRootUpload(f.tables / "Led Zeppelin Pinball.directb2s"));
+   CHECK(fs::exists(f.tables / "Led" / "Led Zeppelin Pinball 2.5.directb2s"));
+   Fixture::Touch(f.tables / "Corvette.directb2s");
+   CHECK(library.OrganizeRootUpload(f.tables / "Corvette.directb2s"));
+   CHECK(fs::exists(f.tables / "Corvette (Bally 1994).directb2s"));
+   CHECK(fs::exists(f.tables / "Corvette (Bally 1994).vpx"));
+   Fixture::Touch(f.tables / "Bond 60th.directb2s");
+   CHECK(library.OrganizeRootUpload(f.tables / "Bond 60th.directb2s"));
+   CHECK(fs::exists(f.tables / "Bond 60th.directb2s"));
+   Fixture::Touch(f.tables / "Star.directb2s"); // Star Trek (root) and Star Trek.Pro (folder)
+   CHECK(library.OrganizeRootUpload(f.tables / "Star.directb2s"));
+   CHECK(fs::exists(f.tables / "Star.directb2s"));
+
+   // A table in play stays at the root
+   Fixture::Touch(f.tables / "Played.vpx");
+   CHECK(library.OrganizeRootUpload(f.tables / "Played.vpx"));
+   CHECK(fs::exists(f.tables / "Played.vpx"));
+
+   library.Rescan();
+   CHECK(Paths(library) == std::vector<string> { "Bond/Bond.vpx", "Corvette (Bally 1994).vpx", "Led/Led Zeppelin Pinball 2.5.vpx", "Medieval-Madness/Medieval_Madness.vpx",
+      "Metallica-Remastered-Pro--fAthAwg-v1-3c/Metallica Remastered (Pro) - fAthAwg v1.3c.vpx", "Played.vpx", "Star Trek.vpx", "Star-Trek-Pro/Star Trek.Pro.vpx" });
+   CHECK(fs::exists(f.tables / "Star Trek.vpx")); // Scans move nothing
+}
+
 TEST_CASE("TableLibrary: play statistics and favorites are kept apart from tables.json")
 {
    Fixture f;

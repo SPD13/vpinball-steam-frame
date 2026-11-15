@@ -712,6 +712,17 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
 - **Backglass name.** B2S only loads `<table>.directb2s` or `<folder>.directb2s`, and downloads seldom have that name: when a `.vpx` or a
   `.directb2s` is uploaded to a table folder holding one of each, and the backglass matches neither name, the web server renames it
   `<table>.directb2s` (`Cabinet::MatchDirectB2SName`, from `WebServer::Upload`; logged `Backglass ... renamed ... after its table`).
+- **One folder per table (2026-11-15).** That matching needs the table alone in its folder, which the many tables at the root of the tables
+  folder defeat. `WebServer::Upload` calls `TableLibrary::OrganizeRootUpload` for a `.vpx` or `.directb2s` uploaded to the root (queued for
+  the next `Rescan` when a scan holds the library). A `.vpx` moves into a new folder named as `Import` names it (`GetUniqueFolder`), with its
+  companion files at the root (`<table>.*`, the longest table name wins) and a backglass uploaded before it under another name. When it
+  replaces a registered root table, the entry keeps its uuid (path and image updated), `cache/<table>` moves along, the root `user` and
+  `music` folders are copied, and `Config::onTableMoved` updates `lobby-room.json` (`Launcher::OnTableMoved`). A `.directb2s` named after no
+  root table goes with the only table without backglass (found in the folder, so before the scan registers a new table) whose name words
+  contain its words or are contained in them (4 letters at least), renamed `<table>.directb2s`; several matches leave it in place. A table
+  in play (`Config::isTableInUse`) stays. The tables already at the root are not moved: scans move nothing (the owner's Frame was migrated
+  once, by hand, with a build that did). Logged `TableLibrary: Moved ... into its own folder` and `TableLibrary: Backglass ... moved along
+  its table`. Tests in `tests/test-table-library.cpp`.
 - **Room.** The room chosen for the lobby (section 9; the game room by default, none for the empty room) stands around the cabinet:
   `DefaultCabinet::LoadRoom` loads its table (`Launcher::GetLobbyTablePath`) and moves its primitives, images and materials to the played
   table, in a part group in the room space (prefix `SF_Room_`). The player stands at the middle of the bottom edge of the table in both,

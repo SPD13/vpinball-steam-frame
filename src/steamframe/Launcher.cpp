@@ -136,6 +136,13 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
          case VPinballLib::TableLibrary::LogLevel::Error: PLOGE << "TableLibrary: " << message; break;
          }
       };
+      // Tables uploaded to the root get a folder of their own, but not while they are played (their settings, cache and saved values are found along the file)
+      config.isTableInUse = [](const std::filesystem::path& tablePath)
+      {
+         std::error_code ec;
+         return g_pplayer != nullptr && !g_pplayer->m_isLobby && g_pplayer->m_ptable != nullptr && std::filesystem::equivalent(g_pplayer->m_ptable->m_filename, tablePath, ec);
+      };
+      config.onTableMoved = [](const std::filesystem::path& from, const std::filesystem::path& to) { g_launcher->OnTableMoved(from, to); };
       m_tableLibrary = std::make_unique<VPinballLib::TableLibrary>(std::move(config));
    }
    return *m_tableLibrary;
@@ -620,6 +627,37 @@ std::optional<Launcher::LobbyRoom> Launcher::GetLobbyRoom()
       PLOGE << "Failed to read lobby-room.json: " << e.what();
       return std::nullopt;
    }
+}
+
+void Launcher::OnTableMoved(const std::filesystem::path& from, const std::filesystem::path& to)
+{
+   const std::filesystem::path jsonPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "lobby-room.json");
+   nlohmann::ordered_json json;
+   try
+   {
+      std::ifstream file(jsonPath);
+      if (!file.is_open())
+         return;
+      json = nlohmann::ordered_json::parse(file);
+   }
+   catch (const std::exception&)
+   {
+      return;
+   }
+   const string path = json.value("table", ""s);
+   std::filesystem::path tablePath = std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str()));
+   if (tablePath.is_relative())
+      tablePath = GetTableLibrary().GetTablesPath() / tablePath;
+   if (tablePath.lexically_normal() != from.lexically_normal())
+      return;
+   std::filesystem::path newPath = to;
+   const std::filesystem::path relative = to.lexically_normal().lexically_relative(GetTableLibrary().GetTablesPath().lexically_normal());
+   if (!relative.empty() && *relative.begin() != "..")
+      newPath = relative;
+   const std::u8string utf8Path = newPath.generic_u8string();
+   json["table"] = string(utf8Path.begin(), utf8Path.end());
+   std::ofstream(jsonPath, std::ios::trunc) << json.dump(2);
+   PLOGI << "Lobby room table moved to " << newPath;
 }
 
 int Launcher::UseTableRoomInLobby(PinTable* table)
