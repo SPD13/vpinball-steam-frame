@@ -17,6 +17,12 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf/cgltf.h"
 
+#define XXH_INLINE_ALL
+#include "xxhash.h"
+
+#include <future>
+#include <mutex>
+
 // Controllers stay readable under the dim lighting of many tables: part of their color is shown unlit
 static constexpr float controllerUnlitPart = 0.5f;
 
@@ -51,21 +57,80 @@ VRControllerModels::~VRControllerModels()
 {
    for (const auto& model : m_models)
       Release(*model);
-   if (m_stickerTexture)
-      m_rd->m_texMan.UnloadTexture(m_stickerTexture.get());
 }
 
+// The textures stay in the read model (process cache): only their copy on this render device is dropped
 void VRControllerModels::Release(Model& model) const
 {
    for (const auto& texture : model.textures)
       if (texture)
          m_rd->m_texMan.UnloadTexture(texture.get());
+   if (model.sticker)
+      m_rd->m_texMan.UnloadTexture(model.sticker.get());
    model.textures.clear();
+   model.sticker.reset();
    model.primitives.clear();
 }
 
-std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id, const vector<uint8_t>& glb, const vector<string>& animatableNodes) const
+VRControllerModels::ReadState VRControllerModels::GetReadModel(uint64_t id, const std::shared_ptr<const vector<uint8_t>>& glb, const vector<string>& animatableNodes,
+   std::shared_ptr<const ReadModel>& out)
 {
+   // Found by the runtime's id and the asset's content: the VR device reads the assets again for each table
+   struct Entry
+   {
+      uint64_t id;
+      uint64_t hash;
+      vector<string> animatableNodes;
+      std::shared_future<std::shared_ptr<const ReadModel>> model;
+   };
+   static std::mutex mutex;
+   static vector<Entry> cache;
+   const uint64_t hash = XXH3_64bits(glb->data(), glb->size());
+   std::shared_future<std::shared_ptr<const ReadModel>> model;
+   {
+      const std::lock_guard lock(mutex);
+      auto it = std::ranges::find_if(cache, [&](const Entry& e) { return e.id == id && e.hash == hash && e.animatableNodes == animatableNodes; });
+      if (it == cache.end())
+      {
+         cache.push_back(Entry { id, hash, animatableNodes, std::async(std::launch::async, &VRControllerModels::Read, id, glb, animatableNodes).share() });
+         it = cache.end() - 1;
+      }
+      model = it->model;
+   }
+   if (model.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+      return ReadState::Reading;
+   out = model.get();
+   return out ? ReadState::Read : ReadState::Failed;
+}
+
+std::unique_ptr<VRControllerModels::Model> VRControllerModels::Build(const ReadModel& read) const
+{
+   auto model = std::make_unique<Model>();
+   model->id = read.id;
+   model->nodes = read.nodes;
+   model->textures = read.textures;
+   model->sticker = read.sticker;
+   model->primitives.reserve(read.primitives.size());
+   for (const ReadPrimitive& primitive : read.primitives)
+   {
+      Primitive out;
+      auto vb = std::make_shared<VertexBuffer>(m_rd, static_cast<unsigned int>(primitive.vertices.size()), reinterpret_cast<const float*>(primitive.vertices.data()));
+      auto ib = std::make_shared<IndexBuffer>(m_rd, primitive.indices);
+      out.mesh = std::make_shared<MeshBuffer>(primitive.name, vb, ib, true);
+      out.texture = primitive.texture;
+      out.material = primitive.material;
+      out.alphaTest = primitive.alphaTest;
+      out.transparent = primitive.transparent;
+      out.sticker = primitive.sticker;
+      model->primitives.push_back(std::move(out));
+   }
+   return model;
+}
+
+// On a thread of its own (see GetReadModel)
+std::shared_ptr<const VRControllerModels::ReadModel> VRControllerModels::Read(uint64_t id, std::shared_ptr<const vector<uint8_t>> glbAsset, vector<string> animatableNodes)
+{
+   const vector<uint8_t>& glb = *glbAsset;
    cgltf_options options {};
    cgltf_data* data = nullptr;
    if (cgltf_parse(&options, glb.data(), glb.size(), &data) != cgltf_result_success)
@@ -81,7 +146,7 @@ std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id,
       return nullptr;
    }
 
-   auto model = std::make_unique<Model>();
+   auto model = std::make_shared<ReadModel>();
    model->id = id;
 
    // Textures: images stored in the binary (PNG or JPEG)
@@ -174,10 +239,10 @@ std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id,
             }
          }
 
-         Primitive out;
-         auto vb = std::make_shared<VertexBuffer>(m_rd, static_cast<unsigned int>(vertices.size()), reinterpret_cast<const float*>(vertices.data()));
-         auto ib = std::make_shared<IndexBuffer>(m_rd, indices);
-         out.mesh = std::make_shared<MeshBuffer>(std::format("VRController.{}.{}.{}", id, m, p), vb, ib, true);
+         ReadPrimitive out;
+         out.name = std::format("VRController.{}.{}.{}", id, m, p);
+         out.vertices = std::move(vertices);
+         out.indices = std::move(indices);
 
          // Without material, glTF uses a white, fully rough material. The metallic-roughness texture is not used (only factors apply per mesh):
          // a mesh which has one is shaded as a non metal, since its metallic factor then usually only scales the texture.
@@ -257,7 +322,7 @@ std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id,
          for (const int p : model->nodes[nodeIndex[i]].primitives)
          {
             // The logo is round on a transparent background: the sticker is alpha blended over the body
-            Primitive& primitive = model->primitives[p];
+            ReadPrimitive& primitive = model->primitives[p];
             primitive.sticker = true;
             primitive.transparent = true;
             primitive.material.m_cBase = RGB(255, 255, 255);
@@ -269,6 +334,20 @@ std::unique_ptr<VRControllerModels::Model> VRControllerModels::Load(uint64_t id,
    for (size_t i = 0; i < animatableNodes.size(); i++)
       if (!animatableFound[i])
          PLOGW << "OpenXR controller model " << id << ": animatable node '" << animatableNodes[i] << "' not found in the asset";
+
+   // Our logo for the sticker, read once
+   if (std::ranges::any_of(model->primitives, [](const ReadPrimitive& primitive) { return primitive.sticker; }))
+   {
+      static std::once_flag stickerOnce;
+      static std::shared_ptr<BaseTexture> sticker;
+      std::call_once(stickerOnce, []
+         {
+            sticker = BaseTexture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "controller-sticker.png"));
+            if (sticker == nullptr)
+               PLOGE << "Controller sticker image not found (assets/controller-sticker.png)";
+         });
+      model->sticker = sticker;
+   }
 
    PLOGI << "OpenXR controller model " << id << ": " << model->nodes.size() << " nodes, " << model->primitives.size() << " meshes, " << data->images_count << " textures";
    cgltf_free(data);
@@ -292,10 +371,13 @@ bool VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice, bo
       if (controller.asset == nullptr || std::ranges::find(m_failedIds, controller.id) != m_failedIds.end()
          || std::ranges::any_of(m_models, [&](const std::unique_ptr<Model>& model) { return model->id == controller.id; }))
          continue;
-      if (auto model = Load(controller.id, *controller.asset, controller.animatableNodes); model)
-         m_models.push_back(std::move(model));
-      else
-         m_failedIds.push_back(controller.id);
+      std::shared_ptr<const ReadModel> read;
+      switch (GetReadModel(controller.id, controller.asset, controller.animatableNodes, read))
+      {
+      case ReadState::Reading: break; // Drawn once read
+      case ReadState::Read: m_models.push_back(Build(*read)); break;
+      case ReadState::Failed: m_failedIds.push_back(controller.id); break;
+      }
    }
 
    Shader* const shader = m_rd->m_basicShader;
@@ -376,18 +458,8 @@ bool VRControllerModels::Render(Renderer* renderer, const VRDevice& vrDevice, bo
                continue;
             }
             BaseTexture* texture = (primitive.texture >= 0 && primitive.texture < static_cast<int>(model.textures.size())) ? model.textures[primitive.texture].get() : nullptr;
-            if (primitive.sticker)
-            {
-               if (!m_stickerTextureLoaded)
-               {
-                  m_stickerTextureLoaded = true;
-                  m_stickerTexture = BaseTexture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "controller-sticker.png"));
-                  if (m_stickerTexture == nullptr)
-                     PLOGE << "Controller sticker image not found (assets/controller-sticker.png)";
-               }
-               if (m_stickerTexture)
-                  texture = m_stickerTexture.get();
-            }
+            if (primitive.sticker && model.sticker)
+               texture = model.sticker.get();
             m_rd->ResetRenderState();
             // The room space is mirrored compared to the glTF space, which reverses the winding of the triangles: both sides are drawn
             m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
@@ -439,7 +511,7 @@ bool Renderer::RenderVRControllerMask()
    if (m_stereo3D != STEREO_VR || g_pplayer->m_vrDevice == nullptr || m_vrControllerModels == nullptr || !m_renderDevice->GetCurrentPass()->m_rt->HasDepth())
       return false;
    m_renderDevice->Clear(clearType::ZBUFFER, 0);
-   SetSpaceReference(PartGroupData::SpaceReference::SR_ROOM, false);
+   SetSpaceReference(PartGroupData::SpaceReference::Room, false);
    const bool drawn = m_vrControllerModels->Render(this, *g_pplayer->m_vrDevice, true);
    m_renderDevice->ResetRenderState();
    return drawn;
