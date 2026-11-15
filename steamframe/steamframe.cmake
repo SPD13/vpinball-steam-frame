@@ -57,6 +57,10 @@ target_sources(vpinball PRIVATE
    src/steamframe/MeshSimplifier.h
    src/steamframe/MeshSimplifier.cpp
 
+   # Straight edges of flashers kept whole (VR room floors far from the table)
+   src/steamframe/FlasherOutline.h
+   src/steamframe/FlasherOutline.cpp
+
    # Light maps without their dimmest triangles, switched live
    src/steamframe/LightMapPruning.h
    src/steamframe/LightMapPruning.cpp
