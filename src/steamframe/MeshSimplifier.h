@@ -13,7 +13,8 @@
 // the view at its full render resolution: about 1 VP unit at 0.5 m on the Frame at 2160x2160); the reflection probe allows more. Leaning
 // in brings back the full mesh.
 //
-// Not simplified: animated meshes, grouped parts, small meshes, and additive parts and light maps that do not lie on a simplified part.
+// Not simplified: animated meshes, parts merged by their collection's group elements, small meshes, and additive parts and light maps
+// that do not lie on a simplified part.
 // Meshes that coincide (same index list and vertex positions, like a part and its 'off' copy) are simplified once and share the result, so
 // that stacked parts stay exactly on top of each other. Meshes exported as separate triangles are simplified from a welded copy, and their
 // levels use a single vertex per place: they also lose the 3 vertex shader runs per triangle of the full mesh.
