@@ -1789,35 +1789,7 @@ void VRDevice::AttachTable()
    m_controllerModelsDirty = true;
 
    // Evaluate scene size to be able to define a good far plane
-   // Adjust near/far plane for each projected bounding box
-   vector<Vertex3Ds> bounds;
-   bounds.reserve(16);
-   Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
-   Vertex3Ds sceneMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-   for (IEditable* editable : g_pplayer->m_ptable->GetParts())
-   {
-      bool prevVisibility;
-      Primitive* prim = editable->GetItemType() == ItemTypeEnum::eItemPrimitive ? static_cast<Primitive*>(editable) : nullptr;
-      if (prim)
-      {
-         prevVisibility = prim->m_d.m_visible;
-         prim->m_d.m_visible = true;
-      }
-      editable->GetBoundingVertices(bounds, nullptr);
-      if (prim)
-         prim->m_d.m_visible = prevVisibility;
-      for (const auto& v : bounds)
-      {
-         sceneMin.x = min(sceneMin.x, v.x);
-         sceneMin.y = min(sceneMin.y, v.y);
-         sceneMin.z = min(sceneMin.z, v.z);
-         sceneMax.x = max(sceneMax.x, v.x);
-         sceneMax.y = max(sceneMax.y, v.y);
-         sceneMax.z = max(sceneMax.z, v.z);
-      }
-      bounds.clear();
-   }
-   m_sceneSize = (sceneMax - sceneMin).Length();
+   UpdateSceneSize();
 
    // Initialize passthrough if supported (Meta Quest MR feature)
    if (m_passthroughExtensionSupported && g_pplayer && g_settingsService.GetActiveSettings().GetPlayerVR_UsePassthroughColor())
@@ -1870,6 +1842,41 @@ void VRDevice::AttachTable()
    // Applied when the session starts running (see PollEvents), so here for a session kept from the previous table
    if (m_sessionRunning)
       ApplyDisplayRefreshRate();
+}
+
+// The far plane covers the whole table: again when parts are added to it after it was attached (the default VR cabinet's room, see
+// src/steamframe/DefaultCabinet.cpp), whose far walls would otherwise be cut off
+void VRDevice::UpdateSceneSize()
+{
+   vector<Vertex3Ds> bounds;
+   bounds.reserve(16);
+   Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
+   Vertex3Ds sceneMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   for (IEditable* editable : g_pplayer->m_ptable->GetParts())
+   {
+      bool prevVisibility;
+      Primitive* prim = editable->GetItemType() == ItemTypeEnum::eItemPrimitive ? static_cast<Primitive*>(editable) : nullptr;
+      if (prim)
+      {
+         prevVisibility = prim->m_d.m_visible;
+         prim->m_d.m_visible = true;
+      }
+      editable->GetBoundingVertices(bounds, nullptr);
+      if (prim)
+         prim->m_d.m_visible = prevVisibility;
+      for (const auto& v : bounds)
+      {
+         sceneMin.x = min(sceneMin.x, v.x);
+         sceneMin.y = min(sceneMin.y, v.y);
+         sceneMin.z = min(sceneMin.z, v.z);
+         sceneMax.x = max(sceneMax.x, v.x);
+         sceneMax.y = max(sceneMax.y, v.y);
+         sceneMax.z = max(sceneMax.z, v.z);
+      }
+      bounds.clear();
+   }
+   m_sceneSize = (sceneMax - sceneMin).Length();
+   PLOGI << "VR scene size: " << m_sceneSize << " VPU (far plane)";
 }
 
 void VRDevice::SetTableCaptureViewPoses(std::vector<XrView>& views, float vpuToWorldScale, TableCaptureView captureView) const

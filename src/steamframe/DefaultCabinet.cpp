@@ -12,6 +12,7 @@
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "renderer/Texture.h"
+#include "renderer/VRDevice.h"
 #include "steamframe/CabinetBackglass.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
@@ -104,6 +105,9 @@ std::unique_ptr<DefaultCabinet> DefaultCabinet::Create(Player* player)
       cabinet->Remove();
       return nullptr;
    }
+   // The VR far plane was set from the table alone when it was attached: the room's far walls and the view out of its windows were cut off
+   if (player->m_vrDevice)
+      player->m_vrDevice->UpdateSceneSize();
    return cabinet;
 }
 
