@@ -709,6 +709,9 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   start and launch buttons move when pressed.
 - **Backbox.** The table's `.directb2s` shows in the backglass window (an external render flasher, window Backglass), otherwise the generic
   backglass art; the score view (DMD, segments) shows in the window of the speaker panel. The implicit VR backglass is hidden.
+- **Backglass name.** B2S only loads `<table>.directb2s` or `<folder>.directb2s`, and downloads seldom have that name: when a `.vpx` or a
+  `.directb2s` is uploaded to a table folder holding one of each, and the backglass matches neither name, the web server renames it
+  `<table>.directb2s` (`Cabinet::MatchDirectB2SName`, from `WebServer::Upload`; logged `Backglass ... renamed ... after its table`).
 - **Room.** The room chosen for the lobby (section 9; the game room by default, none for the empty room) stands around the cabinet:
   `DefaultCabinet::LoadRoom` loads its table (`Launcher::GetLobbyTablePath`) and moves its primitives, images and materials to the played
   table, in a part group in the room space (prefix `SF_Room_`). The player stands at the middle of the bottom edge of the table in both,
@@ -722,7 +725,7 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   lockbar). Checked on the Mac (desktop views of the upstream example table; the test hooks `Doc/test-hooks/cab-shot-hooks.py`); not yet
   in the headset.
 
-Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/steamframe/Passthrough.h/.cpp`, `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
+Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/steamframe/CabinetBackglass.h/.cpp`, `lib/src/WebServer.cpp`, `src/steamframe/Passthrough.h/.cpp`, `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
 `src/assets/vr-cabinet/` (new), `steamframe/vr-cabinet/` (new, the Blender scripts), `tests/test-cabinet-fit.cpp` (new, built alone as
 written at its top).
 

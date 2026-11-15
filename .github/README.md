@@ -31,6 +31,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Lobby rooms**: the lobby is a real room around the player, built in Blender with its lighting baked into its textures, so it costs almost nothing per frame on the Frame. Three rooms are shipped: the **Game room**, a lounge at night with arcade cabinets, a pinball machine, a neon sign and a city skyline through a big window (the default); the **Modern room**, with an oak slat wall, cove lighting and a sofa; and the **Sunlit studio**, with sunbeams from a garden through tall windows, dartboards and a desk. The previous lobby, a floor of tiles, is kept as the **Empty room**. All are made from CC0 assets and artwork drawn for them ([credits](/steamframe/lobby-room/CREDITS.md), and [how they are made](/steamframe/lobby-room/DESIGNING-ROOMS.md) to design more).
 - **Lobby room selector**: "Choose a lobby room", in the Menu and lobby section at the top of the VR & Room screen (and in the System screen), shows a picture of each room; the room picked is used at once and kept for the next starts.
 - **Use any VR table room as the lobby**: while playing a table that has a VR room, "Use this VR room in the lobby" in the menu makes the lobby load the room of that table (its walls, floor and scenery, without the table or its cabinet), so the tables are chosen in that room; "Use the default lobby room" brings back the lobby room chosen with the selector.
+- **A cabinet and a room for every table, exclusive to this fork**: tables made for desktops and real cabinets, with no VR room or cabinet of their own, no longer show a playfield floating in the air. They stand in a pinball cabinet, a standard body with generic art and a plunger or a launch button to match the table, inside the lobby room you chose; the table's backglass shows on the backbox when its `.directb2s` file is next to the table ([see below](#tables-with-no-cabinet)).
 - **Table picker** in the in-game menu ("Tables"), which is also the start screen in launcher mode: choose and switch tables without leaving the player.
 - **Lists of tables** as tabs: All, Recent, Newly added, Most played, Favorites, plus a MENU tab for the library and application options. The tabs are large buttons, easy to hit with a mouse or a VR pointer.
 - **Thumbnails**: a grid of table images, loaded in the background with a spinner on each tile meanwhile; a list view is also available. A table without an image gets a screenshot when it is closed, and "Replace table image" takes a new one.
@@ -46,7 +47,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Tables that rename their game**: some tables, often mods, ask PinMAME for their game under another name (the Simpsons Treehouse of Horror mod asks for `simpprtyh` instead of `simpprty`) and tell you to add an alias to `VPMAlias.txt`. The game finds that alias by itself in the table's files (readme, script, ROM, colorization folders) and adds it, and a ROM shipped in a folder of its own (`MutedRom/`) is moved to the ROM folder. The aliases can be checked and edited in the browser, in the file manager's **⋮ > Advanced > PinMAME ROM aliases** (see [PinMAME ROM aliases](#pinmame-rom-aliases)).
 - **Fixes for broken tables and ROMs**: some tables and games do not work as they are, because of a bug in their script or a setting of their ROM. The game ships fixes for the ones found so far, each with the record of what it changes and why. Tables you add get the fixes they need by themselves; the ones already on the Frame get them with **Patch table** in their menu, in the headset or in the browser. The table files themselves are never changed (see [How to patch a broken table?](#how-to-patch-a-broken-table)).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu.
-- **Passthrough, exclusive to this fork**: play in your own room. The headset shows your real room around the cabinet instead of the virtual room of the table and of the lobby: the walls, floors and scenery of every table are left out, its cabinet and backglass stay. **Y** switches it on and off at any time, in a table or in the lobby, and the game starts again as you left it; also in **VR & Room > Passthrough**. The loading message between two tables floats in your room too. Tables without a cabinet model show their playfield floating in the room ([see below](#passthrough)).
+- **Passthrough, exclusive to this fork**: play in your own room. The headset shows your real room around the cabinet instead of the virtual room of the table and of the lobby: the walls, floors and scenery of every table are left out, its cabinet and backglass stay. **Y** switches it on and off at any time, in a table or in the lobby, and the game starts again as you left it; also in **VR & Room > Passthrough**. The loading message between two tables floats in your room too. Tables without a cabinet model get the default cabinet, without its room ([see below](#passthrough)).
 - **Cabinet positioning mode, exclusive to this fork**: stand the cabinet against a real piece of furniture. The headset shows your room, a bar joins the two controllers with the lockbar drawn on it, and the lockbar follows them as you hold them on a real edge, a desk or a shelf; a press fixes the cabinet there, for every table. The cabinet keeps its size, and it can't be fixed outside the play area set in SteamVR: the lockbar turns orange near its edge and red outside ([see below](#cabinet-position)).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
@@ -517,7 +518,7 @@ Press **Y** to see your own room around the cabinet: the headset shows the real 
 
 Good to know:
 
-- Tables made with no cabinet show their playfield floating in your room.
+- Tables made with no cabinet stand in the default cabinet ([see below](#tables-with-no-cabinet)), without the room around it.
 - If you had already given **Y** another action, Y keeps it and the passthrough has no button: give it one in **Controls**, "Toggle Passthrough".
 - Combined with the cabinet positioning mode below, the cabinet can stand against a real desk or table of your room.
 
@@ -569,6 +570,26 @@ The lobby is the room around you while you choose a table. The game ships four r
 **▶ [See this in video](https://youtu.be/ncKmyZOIl-E)**
 
 **▶ [See instructions](/docs/tutorials/Lobby%20Rooms.md)**
+
+## Tables with no cabinet
+
+Many tables were made to be played on a computer screen or in a real cabinet, with three screens: they hold only the playfield, without the cabinet, the backbox or the room that a VR table brings. In a headset, such a table would be a playfield floating in the air. The game sees that the table has no VR room or cabinet of its own, and gives it a default cabinet and room instead:
+
+- **The cabinet**: a standard pinball cabinet, modeled on the Williams machines of the 1990s, with generic art: legs, coin door, lockbar, flipper and start buttons, and a backbox with its backglass and speaker panel. It is fitted to the table: its width, length and slope follow the playfield, and it stands at the lockbar height of the table. It moves with the **Cabinet position** settings like any table ([see above](#cabinet-position)).
+- **The ball launcher**: a spring plunger when the table has one, which you pull with the plunger control and whose rod and spring follow the table's plunger; a launch button on the front of the cabinet when the table only launches the ball by itself. The flipper, start and launch buttons move when you press them.
+- **The displays**: the table's backglass shows in the window of the backbox, and its DMD or score displays in the window of the speaker panel. Without a backglass file, the backbox shows the generic art.
+- **The room**: the lobby room you chose (**VR & Room > Choose a lobby room**) stands around the cabinet, the Game room by default. With the **Empty room**, the cabinet stands alone; with the passthrough on, it stands in your own room.
+
+Tables that come with their own VR room or cabinet keep theirs: nothing is added to them. The table file is never changed: the cabinet and the room are added when the table starts, and leave with it.
+
+### The backglass
+
+The backglass of a table is a `.directb2s` file, often downloaded separately from the table, from the same pages. To show it on the cabinet:
+
+- **Upload it into the same folder as the table**, with the browser (**Wi-Fi upload**, then the folder of the table in the file manager). A backglass in another folder is not found.
+- **Its name must match the table's**: the game looks for `<name of the table>.directb2s` (or the name of the table's folder), without regard to upper or lower case. Downloaded backglasses seldom have that name (`Led Zeppelin Pinball.directb2s` for `Led Zeppelin Pinball 2.5.vpx`), so the game renames it for you when it is uploaded: when the folder holds one table and one backglass, the backglass takes the name of the table, whichever of the two is uploaded first. With several tables or several backglasses in a folder, rename the file yourself with the file manager.
+
+Some tables draw their DMD with a PinUP Player pack instead of a backglass file: that pack must be added too for the DMD to show.
 
 ## Names and thumbnails
 
