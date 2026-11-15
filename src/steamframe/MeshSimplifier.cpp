@@ -78,11 +78,45 @@ MeshSimplifier& MeshSimplifier::Get()
    return instance;
 }
 
+// Parts merged into one mesh by their collection's 'group elements' (Primitive::RenderSetup draws the group's first part with the meshes of
+// the others): only the dynamic 3D meshes of the collection with the material and texture of its first dynamic 3D mesh, when there are two
+// or more. The other parts of such a collection are drawn on their own and are simplified like any part: the four statues of the KISS
+// (Stern 2015) 2.0 VR room (VR_MegaRoom, 2.49 M triangles) are static, each with its own texture.
 static bool IsGrouped(const Primitive* p)
 {
+   if (!p->m_d.m_use3DMesh || p->m_d.m_staticRendering)
+      return false;
    for (const Collection* collection : p->m_vCollection)
-      if (collection->m_groupElements)
+   {
+      if (!collection->m_groupElements)
+         continue;
+      // As Primitive::RenderSetup: each of the group's material and texture is the first one met that is set
+      const Material* groupMaterial = nullptr;
+      const Texture* groupTexel = nullptr;
+      int merged = 0;
+      bool member = false;
+      for (IEditable* const part : collection->GetParts())
+      {
+         if (part->GetItemType() != eItemPrimitive)
+            continue;
+         const Primitive* const prim = static_cast<const Primitive*>(part);
+         if (!prim->m_d.m_use3DMesh || prim->m_d.m_staticRendering)
+            continue;
+         const Material* const mat = p->m_ptable->GetMaterial(prim->m_d.m_szMaterial);
+         const Texture* const texel = p->m_ptable->GetImage(prim->m_d.m_szImage);
+         if (groupMaterial == nullptr)
+            groupMaterial = mat;
+         if (groupTexel == nullptr)
+            groupTexel = texel;
+         if (mat == groupMaterial && texel == groupTexel)
+         {
+            merged++;
+            member |= prim == p;
+         }
+      }
+      if (member && merged > 1)
          return true;
+   }
    return false;
 }
 
