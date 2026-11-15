@@ -5,6 +5,7 @@
 #include "CabinetFit.h"
 #include "parts/PartGroup.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -50,6 +51,7 @@ public:
    void Remove(); // At the end of the table session: the parts, images and materials leave the table
 
    VPX::CabinetFit::Launcher GetLauncher() const { return m_launcher; }
+   bool IsOwnPart(const IEditable* part) const { return std::ranges::find(m_parts, part) != m_parts.end(); } // The cabinet's and the room's parts
 
 private:
    bool Load(const std::filesystem::path& folder);

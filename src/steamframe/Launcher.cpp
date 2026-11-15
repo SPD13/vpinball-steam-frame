@@ -8,6 +8,7 @@
 #include "steamframe/CabinetBackglass.h"
 #include "steamframe/CabinetLauncherPage.h"
 #include "steamframe/CabinetDisplays.h"
+#include "steamframe/DefaultCabinet.h"
 #include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
 #include "steamframe/PupPacks.h"
@@ -19,6 +20,7 @@
 #include "steamframe/VRRoomOption.h"
 #include "steamframe/vrui/VRUI.h"
 #include "parts/Collection.h"
+#include "parts/flasher.h"
 #include "parts/Material.h"
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
@@ -385,9 +387,16 @@ bool Launcher::IsMadeForVR(PinTable* table)
 {
    if (IsVRTableFile(table->m_filename))
       return true;
+   // The parts the player adds to the table it plays are not the table's: in a headset its implicit VR backglass is named 'vr_backglass',
+   // and the default cabinet and its room are in the VR cabinet and room spaces
+   const Player* const player = g_pplayer && g_pplayer->m_ptable == table ? g_pplayer : nullptr;
    for (IEditable* part : table->GetParts())
    {
       if (part->GetItemType() == ItemTypeEnum::eItemPartGroup)
+         continue;
+      if (player
+         && (part == static_cast<IEditable*>(player->m_implicitVRBackglass) || part == static_cast<IEditable*>(player->m_implicitPlayfieldMesh)
+            || (player->m_defaultCabinet && player->m_defaultCabinet->IsOwnPart(part))))
          continue;
       if (IsVRPartName(part->GetName()))
          return true;
@@ -1077,8 +1086,8 @@ void Launcher::OnPlayerCreated(Player* player, bool isLobby)
    if (!isLobby)
    {
       const bool madeForVR = IsMadeForVR(player->m_ptable);
-      PLOGI << "Table made for VR: " << (madeForVR ? "yes" : "no (no VR room or cabinet)");
-      if (player->m_vrDevice && !madeForVR)
+      PLOGI << "Table made for VR: " << (madeForVR ? "yes" : player->m_defaultCabinet ? "no (no VR room or cabinet), default cabinet shown" : "no (no VR room or cabinet)");
+      if (player->m_vrDevice && !madeForVR && !player->m_defaultCabinet)
          player->m_liveUI->ShowMessage("Table not made for VR"s,
             "This table has no VR room or cabinet: it was made for desktops and cabinets.\n"
             "In the headset, only its playfield is shown, floating in the void, without a cabinet or a backglass.\n"

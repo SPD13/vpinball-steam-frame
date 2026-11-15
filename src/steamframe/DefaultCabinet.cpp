@@ -82,8 +82,13 @@ std::unique_ptr<DefaultCabinet> DefaultCabinet::Create(Player* player)
    if (env && env[0] == '0')
       return nullptr;
    const bool forced = env && (env[0] == '1' || env[0] == '2'); // 2: also on the tables made for VR (tests)
-   if ((!player->IsVR() && !forced) || player->m_isLobby || (Launcher::IsMadeForVR(player->m_ptable) && !(env && env[0] == '2')))
+   if ((!player->IsVR() && !forced) || player->m_isLobby)
       return nullptr;
+   if (Launcher::IsMadeForVR(player->m_ptable) && !(env && env[0] == '2'))
+   {
+      PLOGI << "[DefaultCabinet] Not added: the table has its own VR room or cabinet";
+      return nullptr;
+   }
    auto cabinet = std::make_unique<DefaultCabinet>(player);
    bool loaded = false;
    try
