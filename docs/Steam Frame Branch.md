@@ -689,6 +689,36 @@ Files: `src/steamframe/FlasherOutline.h/.cpp` (new), `src/parts/flasher.cpp`, `s
 `src/steamframe/MeshLevelCache.h/.cpp` (new), `third-party/include/meshoptimizer/indexcodec.cpp` (new), `src/core/player.cpp`,
 `steamframe/steamframe.cmake`, docs.
 
+## 32. Default VR cabinet (2026-11-14)
+
+Tables made for desktops and cabinets (no VR room or cabinet, `Launcher::IsMadeForVR`, section 8) only show their playfield in a headset,
+floating in the room. They get a pinball cabinet instead: a Williams WPC standard body with generic art, made by the scripts of
+`steamframe/vr-cabinet` (Blender; dimensions from measured plans, no outside asset, see its README for the licensing) and shipped as
+`src/assets/vr-cabinet` (`vr-cabinet.glb` and its WEBP textures, 0.6 MB, 11 000 triangles).
+
+- **How.** `DefaultCabinet::Create`, called where `Player::InitTableSession` adds its implicit parts (before the parts are set up for
+  rendering), adds the cabinet to the played table: primitives in two part groups, one in the VR cabinet space and one in the cabinet feet
+  space (the legs, stretched to the floor), with their images and materials (prefix `SF_Cab_`; the lookup maps are rebuilt with
+  `PinTable::RemoveInvalidReferences`). They leave the table in `Player::ShutdownTableSession`: the file never sees them.
+- **Fit.** The model is drawn around a nominal WPC playfield (20.25" x 42", 6.5°) and fitted to the table by zones (`CabinetFit`): the coin
+  door keeps its size, the sides follow the playfield width, the front keeps its place, the back (backbox, back legs) follows the playfield
+  length, the cabinet follows the table's lockbar height, and the top edge of the sides rises along the table's slope. Odd values are
+  kept to those of a real machine.
+- **Launcher.** The table's rightmost manual plunger gives a spring plunger in front of it; a table with only automatic plungers (or none)
+  gets a launch button (`CabinetFit::ChooseLauncher`). The rod and its spring follow the table's plunger (`Plunger::Position`), the flipper,
+  start and launch buttons move when pressed.
+- **Backbox.** The table's `.directb2s` shows in the backglass window (an external render flasher, window Backglass), otherwise the generic
+  backglass art; the score view (DMD, segments) shows in the window of the speaker panel. The implicit VR backglass is hidden.
+- **Switch.** `VPX_DEFAULT_CABINET=0` turns it off; `=1` adds it out of a headset too, for desktop tests (the cabinet then stands where
+  the table's own cabinet settings put it). Logged: `[DefaultCabinet] Table ... spring plunger at x ...`, `Added 35 parts, 6 images, 16 materials`.
+- **Not yet.** A room around it (the game room of the lobby), a setting in the menu, per-table art, hiding the parts some desktop tables
+  draw at the place of the cabinet (wood rails, lockbar). Checked on the Mac (desktop views of the upstream example table); not yet in the
+  headset.
+
+Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp` (new), `src/core/player.h/.cpp`, `steamframe/steamframe.cmake`,
+`src/assets/vr-cabinet/` (new), `steamframe/vr-cabinet/` (new, the Blender scripts), `tests/test-cabinet-fit.cpp` (new, built alone as
+written at its top).
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -739,6 +769,10 @@ src/steamframe/TableFixes.h
 src/steamframe/TableFixes.cpp           fixes of the tables and ROMs: recipes, script patches, state (section 17)
 src/steamframe/VRRoomOption.h
 src/steamframe/VRRoomOption.cpp         VR room option left off by the script, turned on in a headset (section 29)
+src/steamframe/DefaultCabinet.h
+src/steamframe/DefaultCabinet.cpp       default VR cabinet of the tables without a VR room (section 32)
+src/steamframe/CabinetFit.h
+src/steamframe/CabinetFit.cpp           fit of that cabinet to a table, choice of its ball launcher (section 32)
 plugins/pinmame/RomFix.h
 plugins/pinmame/RomFix.cpp              ROM procedures of the fixes, run by the PinMAME plugin (section 17)
 src/assets/fixes/fixes.json             the recipes of the fixes (section 17)
