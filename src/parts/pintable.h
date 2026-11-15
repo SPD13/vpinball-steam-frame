@@ -808,6 +808,13 @@ public:
    float m_AOScale;
    float m_SSRScale;
    float m_groundToLockbarHeight = CMTOVPU(91.f); // Height of lockbar from ground (corresponding to cab model for VR)
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: how deep the playfield lies under the lockbar, to place the cabinet and room spaces, when set. The default VR
+   // cabinet (src/steamframe/DefaultCabinet.h) sets the depth of a real cabinet for the tables made for desktops, whose glass height is
+   // often far from it. The glass itself, a physics part, stays at m_glassBottomHeight.
+   float m_cabinetGlassBottomHeight = 0.f;
+   float GetCabinetGlassBottomHeight() const { return m_cabinetGlassBottomHeight > 0.f ? m_cabinetGlassBottomHeight : m_glassBottomHeight; }
+#endif
 
    // How the scene is laid out between the playfield and the room (authored cabinet geometry plus
    // the session's room positioning adjustments): the single definition the renderer folds into the

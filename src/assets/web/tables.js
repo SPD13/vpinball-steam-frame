@@ -225,7 +225,7 @@ function createTile(uuid) {
       <span class="table-tile-badge" hidden>Playing</span>
       <span class="table-tile-pup" hidden title="Its PinUP Player pack is installed">PuP</span>
       <a class="table-tile-unknown" href="vpx.html?aliases" hidden>&#9888; Unknown game</a>
-      <span class="table-tile-novr" hidden title="No VR room or cabinet: this table was made for desktops and cabinets, only its playfield shows in the headset">No VR room</span>
+      <span class="table-tile-novr" hidden title="No VR room or cabinet: this table was made for desktops and cabinets, it plays in a default pinball cabinet, in the room of the lobby">No VR room</span>
       <a class="table-tile-fix" href="vpx.html?fixes" hidden></a>
       <button type="button" class="table-tile-star">${ICONS.star}</button>
     </div>

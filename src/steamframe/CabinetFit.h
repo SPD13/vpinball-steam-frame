@@ -14,7 +14,8 @@
 // - lengthwise, the front (lockbar, buttons, coin door, front legs) keeps its place, the back (backbox, back legs) moves by the
 //   difference of length, and the middle (the sides) is stretched;
 // - in height, the whole cabinet follows the table's lockbar height; the top of the sides rises from the front along the table's slope
-//   (plus the flare of the glass of the model), so the top edge at the back and the backbox move up or down; the bottom stays level.
+//   (plus the flare of the glass of the model, or the angle the table asks for), so the top edge at the back and the backbox move up or
+//   down; the bottom stays level.
 // Parts that must not be stretched at all (the start button, the launchers) are 'rigid': they move as a whole with their anchor.
 
 #include <array>
@@ -56,6 +57,7 @@ struct Table
    float slope = 0.f; // Degrees
    float lockbarTop = 0.f;
    float glassBottom = 0.f;
+   float topAngle = 0.f; // Degrees, of the top edge of the sides to the playfield: 0 for the model's (DefaultCabinet raises it along the table's own side rails)
 };
 
 class Fit

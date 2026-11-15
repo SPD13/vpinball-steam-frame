@@ -163,6 +163,7 @@ public:
    }
 
    RenderTarget* GetPostProcessRenderTarget1();
+   const RenderTarget* PeekPostProcessRenderTarget1() const { return m_pPostProcessRenderTarget1; } // Without creating it (Renderer::IsFXAALumaInAlpha)
    RenderTarget* GetPostProcessRenderTarget2();
    RenderTarget* GetPostProcessRenderTarget3(); // Third post process buffer (SMAA): the previous back buffer when it has the post process size
    RenderTarget* GetPostProcessRenderTarget(RenderTarget* renderedRT);
@@ -201,6 +202,9 @@ public:
    RenderTarget* ApplyStereo(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
 
 private:
+#if defined(VPX_STEAM_FRAME)
+   friend class Renderer; // Steam Frame Edition: Renderer::ApplySceneBufferFormat makes the targets again in another format (src/steamframe/SceneBufferFormat.cpp)
+#endif
    void SetupSpaceViews(); // Define the per reference space view/projection pairs of a render (from the scene layout)
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts

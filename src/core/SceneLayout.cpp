@@ -86,7 +86,12 @@ void SceneLayout::EnsureUpdated() const
 {
    if (m_table == nullptr)
       return; // Driven through explicit Update calls (tests)
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the depth of a real cabinet when the default VR cabinet sets one (as VRDevice::RenderFrame does), see PinTable::GetCabinetGlassBottomHeight
+   const TableGeometry geometry { m_table->m_right - m_table->m_left, m_table->m_bottom - m_table->m_top, m_table->m_groundToLockbarHeight, m_table->GetCabinetGlassBottomHeight() };
+#else
    const TableGeometry geometry { m_table->m_right - m_table->m_left, m_table->m_bottom - m_table->m_top, m_table->m_groundToLockbarHeight, m_table->m_glassBottomHeight };
+#endif
    const float liveSlope = m_table->GetPlayfieldSlope();
    if (!m_dirty && geometry == m_geometry && liveSlope == m_setup.liveSlope)
       return;

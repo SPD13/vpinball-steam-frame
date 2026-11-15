@@ -10,6 +10,10 @@
 #include "parts/PartGroup.h"
 #include "parts/plunger.h"
 #include "parts/primitive.h"
+#include "parts/ramp.h"
+#include "parts/surface.h"
+#include "physics/physconst.h"
+#include "math/MeshUtils.h"
 #include "renderer/Renderer.h"
 #include "renderer/Texture.h"
 #include "renderer/VRDevice.h"
@@ -19,6 +23,7 @@
 #include "ui/VPXFileFeedback.h"
 
 #include "cgltf/cgltf.h"
+#include <array>
 #include <nlohmann/json.hpp>
 
 namespace CF = VPX::CabinetFit;
@@ -69,6 +74,158 @@ Nominal ReadNominal(const nlohmann::json& json)
    return n;
 }
 
+// How deep the playfield lies under the top of the lockbar, and how steeply the top edge of the sides rises along it. The tables made
+// for desktops set their glass height freely, often far above a real cabinet's, or never (top and bottom equal): the playfield sat deep
+// in the cabinet, under sides standing well above the table's own side rails. The cabinet takes the depth of a real one instead, and
+// wraps around the long parts the table has along its sides (rails, side blades), its top edge as low as it can be over them: deeper, or
+// rising faster toward the back, as they need. Toys standing near a side (a flasher dome in a corner) do not count. The side walls of a
+// desktop table, taller than the sides of any cabinet (Metallica's stand 16 cm high along its whole length, for the view on a screen),
+// are left to be hidden: the cabinet takes their place. Never deeper than the glass.
+struct PlayfieldDepth
+{
+   float depth; // VPU
+   float topAngle = 0.f; // Degrees to the playfield, 0 for the model's
+   string raisedBy;
+   vector<IEditable*> desktopSides; // To hide
+};
+
+PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float k)
+{
+   const float rise = (nominal.lockbarTop - nominal.zFrontTop) * k; // Lockbar top above the top edge of the sides, at the front
+   const float modelAngle = atan2f(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - ANGTORAD(nominal.slope);
+   constexpr float kMaxAngle = ANGTORAD(8.f);
+   const float maxDepth = 0.10f * k; // A cabinet deeper than that is not a real one
+   const float margin = 0.005f * k;
+   const float inside = 0.04f * k, outside = (nominal.halfWidth - 0.5f * nominal.playfieldWidth) * k; // Along the sides, up to the inner face of the cabinet
+   const float front = table->m_bottom - nominal.yFront * k; // The front face of the cabinet
+   const float length = table->m_bottom - table->m_top;
+   const float step = 0.02f * length; // Outlines are followed by steps, their long straight sides having no point between their ends
+
+   // The highest point of the long side parts, by slices of the length from the front
+   constexpr int kSlices = 64;
+   std::array<float, kSlices> highest;
+   std::array<string, kSlices> partOf;
+   highest.fill(-FLT_MAX);
+   PlayfieldDepth best { nominal.glassBottom * k };
+   for (IEditable* part : table->GetParts())
+   {
+      vector<vec3> points;
+      const auto submit = [&](float x, float y, float z)
+      {
+         if ((x > table->m_left + inside && x < table->m_right - inside) || x < table->m_left - outside || x > table->m_right + outside || y < table->m_top || y > front)
+            return;
+         points.emplace_back(x, y, z);
+      };
+      const auto submitSegment = [&](const Vertex2D& a, const Vertex2D& b, float za, float zb)
+      {
+         const int steps = max(1, static_cast<int>(sqrtf((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)) / step));
+         for (int i = 0; i <= steps; i++)
+         {
+            const float t = static_cast<float>(i) / static_cast<float>(steps);
+            submit(lerp(a.x, b.x, t), lerp(a.y, b.y, t), lerp(za, zb, t));
+         }
+      };
+      switch (part->GetItemType())
+      {
+      case eItemPrimitive:
+      {
+         Primitive* const primitive = static_cast<Primitive*>(part);
+         if (!primitive->m_d.m_visible || primitive == g_pplayer->m_implicitPlayfieldMesh)
+            break;
+         const Matrix3D& transform = primitive->RecalculateMatrices();
+         for (const Vertex3D_NoTex2& v : primitive->m_mesh.m_vertices)
+         {
+            const vec3 p = transform * vec3(v.x, v.y, v.z);
+            submit(p.x, p.y, p.z);
+         }
+         break;
+      }
+      case eItemRamp:
+      {
+         const Ramp* const ramp = static_cast<Ramp*>(part);
+         if (!ramp->m_d.m_visible)
+            break;
+         const float walls = max(ramp->m_d.m_leftwallheightvisible, ramp->m_d.m_rightwallheightvisible);
+         int count = 0;
+         float* heights = nullptr;
+         const Vertex2D* const edges = ramp->GetRampVertex(count, &heights, nullptr, nullptr, nullptr, HIT_SHAPE_DETAIL_LEVEL, true);
+         for (int i = 0; i + 1 < count; i++) // Both edges: the second one goes back along the ramp
+         {
+            submitSegment(edges[i], edges[i + 1], heights[i] + walls, heights[i + 1] + walls);
+            submitSegment(edges[count * 2 - 1 - i], edges[count * 2 - 2 - i], heights[i] + walls, heights[i + 1] + walls);
+         }
+         delete[] edges;
+         delete[] heights;
+         break;
+      }
+      case eItemSurface:
+      {
+         const Surface* const wall = static_cast<Surface*>(part);
+         if (!wall->m_d.m_sideVisible && !wall->m_d.m_topBottomVisible)
+            break;
+         vector<RenderVertex> outline;
+         wall->m_curve.GetRgVertex(outline);
+         for (size_t i = 0; i < outline.size(); i++)
+            submitSegment(outline[i], outline[(i + 1) % outline.size()], wall->m_d.m_heighttop, wall->m_d.m_heighttop);
+         break;
+      }
+      default: break;
+      }
+      if (points.empty())
+         continue;
+      const auto [first, last] = std::ranges::minmax(points, {}, [](const vec3& p) { return p.y; });
+      if (last.y - first.y < 0.25f * length) // Not along the side
+         continue;
+      // Taller than a real cabinet could cover, even with its top edge rising as fast as it may: a side wall of the desktop table
+      float need = 0.f;
+      for (const vec3& p : points)
+         need = max(need, p.z - max(0.f, table->m_bottom - p.y) * tanf(kMaxAngle) + rise + margin);
+      if (need > maxDepth)
+      {
+         best.desktopSides.push_back(part);
+         continue;
+      }
+      for (const vec3& p : points)
+      {
+         const int slice = clamp(static_cast<int>(max(0.f, table->m_bottom - p.y) / length * kSlices), 0, kSlices - 1);
+         if (p.z > highest[slice])
+         {
+            highest[slice] = p.z;
+            partOf[slice] = part->GetName();
+         }
+      }
+   }
+
+   // The top edge as low as it can be, on average along the length, from the angle of the model to the steepest
+   float bestHeight = FLT_MAX;
+   for (float angle = modelAngle; angle <= kMaxAngle + 1e-4f; angle += ANGTORAD(0.1f))
+   {
+      const float tanTop = tanf(angle);
+      PlayfieldDepth candidate { nominal.glassBottom * k, angle == modelAngle ? 0.f : RADTOANG(angle) };
+      for (int i = 0; i < kSlices; i++)
+      {
+         if (highest[i] == -FLT_MAX)
+            continue;
+         const float need = highest[i] - (static_cast<float>(i) / kSlices * length) * tanTop + rise + margin; // Front of the slice: the edge is lowest there
+         if (need > candidate.depth)
+         {
+            candidate.depth = need;
+            candidate.raisedBy = partOf[i];
+         }
+      }
+      const float height = candidate.depth + 0.5f * length * tanTop;
+      if (height < bestHeight - 0.5f) // A steeper edge only when it is lower
+      {
+         bestHeight = height;
+         best.depth = candidate.depth;
+         best.topAngle = candidate.topAngle;
+         best.raisedBy = candidate.raisedBy;
+      }
+   }
+   best.depth = min(best.depth, table->m_glassBottomHeight);
+   return best;
+}
+
 // Moves of the animated parts, model units (meters)
 constexpr float kPlungerTravel = 2.8f * 0.0254f; // Knob, from rest to fully pulled
 constexpr float kLaunchButtonTravel = 0.15f * 0.0254f;
@@ -77,10 +234,16 @@ constexpr float kStartButtonTravel = 0.12f * 0.0254f;
 
 }
 
+bool DefaultCabinet::IsEnabled()
+{
+   const char* env = getenv("VPX_DEFAULT_CABINET");
+   return !(env && env[0] == '0');
+}
+
 std::unique_ptr<DefaultCabinet> DefaultCabinet::Create(Player* player)
 {
    const char* env = getenv("VPX_DEFAULT_CABINET");
-   if (env && env[0] == '0')
+   if (!IsEnabled())
       return nullptr;
    const bool forced = env && (env[0] == '1' || env[0] == '2'); // 2: also on the tables made for VR (tests)
    if ((!player->IsVR() && !forced) || player->m_isLobby)
@@ -150,7 +313,37 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
    geometry.playfieldLength = (table->m_bottom - table->m_top) / k;
    geometry.slope = table->GetPlayfieldSlope();
    geometry.lockbarTop = table->m_groundToLockbarHeight / k;
-   geometry.glassBottom = table->m_glassBottomHeight / k;
+   // The depth of the playfield under the lockbar, for the VR spaces (and the desktop view of the cabinet) too
+   const PlayfieldDepth depth = GetPlayfieldDepth(table, nominal, k);
+   table->m_cabinetGlassBottomHeight = depth.depth;
+   PLOGI << "[DefaultCabinet] Playfield " << depth.depth / k << " m under the lockbar (table glass " << table->m_glassBottomHeight / k << " m), top edge "
+         << (depth.topAngle > 0.f ? std::to_string(depth.topAngle) + " degrees to it" : "of the model"s) << (depth.raisedBy.empty() ? ""s : ", for '" + depth.raisedBy + '\'');
+   geometry.glassBottom = depth.depth / k;
+   geometry.topAngle = depth.topAngle;
+   for (IEditable* part : depth.desktopSides)
+   {
+      // Hidden only: they still hold the ball in
+      HiddenPart hidden { part };
+      if (part->GetItemType() == eItemSurface)
+      {
+         Surface* const wall = static_cast<Surface*>(part);
+         hidden.sideVisible = wall->m_d.m_sideVisible;
+         hidden.topVisible = wall->m_d.m_topBottomVisible;
+         wall->m_d.m_sideVisible = wall->m_d.m_topBottomVisible = false;
+      }
+      else if (part->GetItemType() == eItemPrimitive)
+         static_cast<Primitive*>(part)->m_d.m_visible = false;
+      else if (part->GetItemType() == eItemRamp)
+         static_cast<Ramp*>(part)->m_d.m_visible = false;
+      m_hiddenParts.push_back(hidden);
+      PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: a side of the desktop table, taller than the cabinet";
+   }
+   // The art of the walls (Metallica's side blades), cut along the top edge of the sides
+   const float topAngle = depth.topAngle > 0.f ? ANGTORAD(depth.topAngle) : atan2f(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - ANGTORAD(nominal.slope);
+   const float sideTop = depth.depth - (nominal.lockbarTop - nominal.zFrontTop) * k - 0.002f * k;
+   for (const HiddenPart& hidden : m_hiddenParts)
+      if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible)
+         AddSideBlade(static_cast<Surface*>(hidden.part), sideTop, tanf(topAngle));
    const Fit fit(nominal, geometry);
 
    // The launcher, from the plungers of the table
@@ -198,10 +391,17 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       if (corners == extras.end() || !corners->is_array() || corners->size() != 12)
          continue;
       const std::vector<float> c = corners->get<std::vector<float>>();
-      if (role == "backglass" && !VPX::Cabinet::FindDirectB2S(table->m_filename).empty())
-         CreateFlasher(c, fit, VPXWindowId::VPXWINDOW_Backglass, "SF_Cab_Backglass"s);
+      if (role == "backglass")
+      {
+         m_backglassWindow = GetWindow(c, fit);
+         if (!VPX::Cabinet::FindDirectB2S(table->m_filename).empty())
+            CreateFlasher(m_backglassWindow, VPXWindowId::VPXWINDOW_Backglass, "SF_Cab_Backglass"s);
+      }
       else if (role == "display")
-         CreateFlasher(c, fit, VPXWindowId::VPXWINDOW_ScoreView, "SF_Cab_Display"s);
+      {
+         m_displayWindow = GetWindow(c, fit);
+         m_displayFlasher = CreateFlasher(m_displayWindow, VPXWindowId::VPXWINDOW_ScoreView, "SF_Cab_Display"s);
+      }
    }
    cgltf_free(data);
    // The implicit VR backglass would float above the backbox (black without a backglass to show)
@@ -523,9 +723,78 @@ void DefaultCabinet::LoadNode(const cgltf_data* data, const cgltf_node& node, co
    }
 }
 
-Flasher* DefaultCabinet::CreateFlasher(const std::vector<float>& corners, const Fit& fit, int window, const std::string& name)
+// The sides of a wall of the table, as the wall draws them (Surface::GenerateMesh: outline, side image and material, texture coordinates),
+// up to the top edge of the sides of the cabinet at most: the art is cut, not squeezed. In the playfield space, drawn only.
+void DefaultCabinet::AddSideBlade(Surface* wall, float sideTop, float tanTop)
 {
    PinTable* const table = m_player->m_ptable;
+   vector<RenderVertex> outline;
+   wall->m_curve.GetRgVertex(outline);
+   if (outline.size() < 2)
+      return;
+   float* texcoords = nullptr;
+   if (table->GetImage(wall->m_d.m_szSideImage))
+      wall->m_curve.GetTextureCoords(outline, &texcoords);
+   if (NormalizeWindingOrder(outline) && texcoords)
+      std::reverse(texcoords, texcoords + outline.size());
+   const float bottom = wall->m_d.m_heightbottom, top = wall->m_d.m_heighttop;
+   const auto cutTop = [&](const RenderVertex& v) { return clamp(sideTop + max(0.f, table->m_bottom - v.y) * tanTop, bottom, top); };
+
+   Primitive* const prim = static_cast<Primitive*>(EditableRegistry::CreateAndInit(eItemPrimitive, table, 0.f, 0.f));
+   if (prim == nullptr)
+   {
+      delete[] texcoords;
+      return;
+   }
+   prim->SetName(table->GetUniqueName("SF_Cab_Blade_"s + wall->GetName()));
+   prim->m_desktopBackdrop = false;
+   prim->m_d.m_use3DMesh = true;
+   prim->m_d.m_vPosition = Vertex3Ds(0.f, 0.f, 0.f);
+   prim->m_d.m_vSize.Set(1.f, 1.f, 1.f);
+   for (float& v : prim->m_d.m_aRotAndTra)
+      v = 0.f;
+   prim->m_d.m_staticRendering = true;
+   prim->m_d.m_collidable = false;
+   prim->m_d.m_toy = true;
+   prim->m_d.m_visible = true;
+   prim->m_d.m_backfacesEnabled = true;
+   prim->m_d.m_disableLightingBelow = wall->m_d.m_disableLightingBelow;
+   prim->m_d.m_szMaterial = wall->m_d.m_szSideMaterial;
+   prim->m_d.m_szImage = texcoords ? wall->m_d.m_szSideImage : string();
+
+   const size_t n = outline.size();
+   vector<Vertex3D_NoTex2>& vertices = prim->m_mesh.m_vertices;
+   vector<unsigned int>& indices = prim->m_mesh.m_indices;
+   vertices.resize(n * 4);
+   indices.resize(n * 6);
+   for (size_t i = 0; i < n; i++)
+   {
+      const RenderVertex& a = outline[i];
+      const RenderVertex& b = outline[(i + 1) % n];
+      const float dx = a.x - b.x, dy = a.y - b.y, len = sqrtf(dx * dx + dy * dy);
+      const float nx = len > 0.f ? dy / len : 0.f, ny = len > 0.f ? -dx / len : 0.f;
+      const float ta = cutTop(a), tb = cutTop(b);
+      const float ua = texcoords ? texcoords[i] : 0.f, ub = texcoords ? texcoords[(i + 1) % n] : 0.f;
+      const auto tv = [&](float z) { return top > bottom ? 1.f - (z - bottom) / (top - bottom) : 0.f; };
+      Vertex3D_NoTex2* const v = &vertices[i * 4];
+      v[0] = { a.x, a.y, bottom, nx, ny, 0.f, ua, 1.f };
+      v[1] = { a.x, a.y, ta, nx, ny, 0.f, ua, tv(ta) };
+      v[2] = { b.x, b.y, tb, nx, ny, 0.f, ub, tv(tb) };
+      v[3] = { b.x, b.y, bottom, nx, ny, 0.f, ub, 1.f };
+      const unsigned int o = static_cast<unsigned int>(i * 4);
+      const unsigned int quad[6] = { o, o + 1, o + 2, o, o + 2, o + 3 };
+      std::copy(quad, quad + 6, &indices[i * 6]);
+   }
+   delete[] texcoords;
+   prim->m_mesh.m_validBounds = false;
+   table->AddPart(prim);
+   prim->Release();
+   m_parts.push_back(prim);
+   PLOGI << "[DefaultCabinet] Side blade from '" << wall->GetName() << "' (" << wall->m_d.m_szSideImage << "), cut at " << sideTop << " VPU at the front";
+}
+
+DefaultCabinet::Window DefaultCabinet::GetWindow(const std::vector<float>& corners, const Fit& fit) const
+{
    // Corners counter clockwise from the bottom left, model units
    Point c[4];
    for (int i = 0; i < 4; i++)
@@ -539,15 +808,20 @@ Flasher* DefaultCabinet::CreateFlasher(const std::vector<float>& corners, const 
    const float cx = m_centerX + 0.25f * (c[0][0] + c[1][0] + c[2][0] + c[3][0]) * k;
    const float cy = m_bottomY - 0.25f * (c[0][1] + c[1][1] + c[2][1] + c[3][1]) * k;
    const float cz = 0.25f * (c[0][2] + c[1][2] + c[2][2] + c[3][2]) * k;
+   return Window { cx, cy, cz, width, height, -90.f - lean, true };
+}
 
-   Flasher* const flasher = static_cast<Flasher*>(EditableRegistry::CreateAndInit(eItemFlasher, table, cx, cy));
+Flasher* DefaultCabinet::CreateFlasher(const Window& w, int window, const std::string& name)
+{
+   PinTable* const table = m_player->m_ptable;
+   Flasher* const flasher = static_cast<Flasher*>(EditableRegistry::CreateAndInit(eItemFlasher, table, w.x, w.y));
    if (flasher == nullptr)
       return nullptr;
    flasher->SetName(table->GetUniqueName(name));
    constexpr float defaultSize = 100.f; // Size of a new flasher
-   flasher->Scale(width / defaultSize, height / defaultSize, Vertex2D {}, true);
-   flasher->m_d.m_rotX = -90.f - lean;
-   flasher->m_d.m_height = cz;
+   flasher->Scale(w.width / defaultSize, w.height / defaultSize, Vertex2D {}, true);
+   flasher->m_d.m_rotX = w.rotX;
+   flasher->m_d.m_height = w.z;
    flasher->m_d.m_renderMode = FlasherData::EXT_RENDER;
    flasher->m_d.m_renderStyle = window;
    flasher->m_d.m_isVisible = true;
@@ -555,12 +829,21 @@ Flasher* DefaultCabinet::CreateFlasher(const std::vector<float>& corners, const 
    flasher->Release();
    flasher->SetPartGroup(m_cabinetGroup);
    m_parts.push_back(flasher);
-   PLOGI << "[DefaultCabinet] " << name << ": " << width << " x " << height << " VPU at " << cx << ", " << cy << ", " << cz << ", leaning " << lean << " degrees";
+   PLOGI << "[DefaultCabinet] " << name << ": " << w.width << " x " << w.height << " VPU at " << w.x << ", " << w.y << ", " << w.z << ", leaning " << -90.f - w.rotX << " degrees";
    return flasher;
 }
 
 void DefaultCabinet::Update()
 {
+   // The side walls of the desktop table stay hidden: scripts show them again with their options (Metallica's 'Side Blades')
+   for (const HiddenPart& hidden : m_hiddenParts)
+      switch (hidden.part->GetItemType())
+      {
+      case eItemSurface: static_cast<Surface*>(hidden.part)->m_d.m_sideVisible = static_cast<Surface*>(hidden.part)->m_d.m_topBottomVisible = false; break;
+      case eItemPrimitive: static_cast<Primitive*>(hidden.part)->m_d.m_visible = false; break;
+      case eItemRamp: static_cast<Ramp*>(hidden.part)->m_d.m_visible = false; break;
+      default: break;
+      }
    const InputManager& input = m_player->m_pininput;
    const float k = m_vpuPerMeter;
    float pull = 0.f; // Knob travel out of its rest place, model units (negative when the rod shoots forward)
@@ -598,6 +881,10 @@ void DefaultCabinet::Update()
 void DefaultCabinet::Remove()
 {
    PinTable* const table = m_player->m_ptable;
+   // The parts that joined its groups (the displays of PinUP Player, CabinetDisplays) stay in the table: they leave them
+   for (IEditable* part : table->GetParts())
+      if (part->GetPartGroup() && (part->GetPartGroup() == m_cabinetGroup || part->GetPartGroup() == m_feetGroup) && !IsOwnPart(part))
+         part->SetPartGroup(nullptr);
    // Parts first (in reverse order: the groups were added first), then what they use
    for (auto it = m_parts.rbegin(); it != m_parts.rend(); ++it)
       if (FindIndexOf(table->GetParts(), *it) != -1)
@@ -621,5 +908,20 @@ void DefaultCabinet::Remove()
    if (m_hidImplicitBackglass && m_player->m_implicitVRBackglass)
       m_player->m_implicitVRBackglass->m_d.m_isVisible = true; // It was visible
    m_hidImplicitBackglass = false;
+   table->m_cabinetGlassBottomHeight = 0.f;
+   for (const HiddenPart& hidden : m_hiddenParts)
+      if (FindIndexOf(table->GetParts(), hidden.part) != -1)
+      {
+         if (hidden.part->GetItemType() == eItemSurface)
+         {
+            static_cast<Surface*>(hidden.part)->m_d.m_sideVisible = hidden.sideVisible;
+            static_cast<Surface*>(hidden.part)->m_d.m_topBottomVisible = hidden.topVisible;
+         }
+         else if (hidden.part->GetItemType() == eItemPrimitive)
+            static_cast<Primitive*>(hidden.part)->m_d.m_visible = true;
+         else if (hidden.part->GetItemType() == eItemRamp)
+            static_cast<Ramp*>(hidden.part)->m_d.m_visible = true;
+      }
+   m_hiddenParts.clear();
    table->RemoveInvalidReferences();
 }

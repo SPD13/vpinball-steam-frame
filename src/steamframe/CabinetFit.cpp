@@ -26,9 +26,10 @@ Fit::Fit(const Nominal& nominal, const Table& table)
    m_table.slope = Sanitize(table.slope, nominal.slope, 2.f, 12.f);
    m_table.lockbarTop = Sanitize(table.lockbarTop, nominal.lockbarTop, 0.60f, 1.30f);
    m_table.glassBottom = Sanitize(table.glassBottom, nominal.glassBottom, 0.02f, 0.20f);
-   // The top edge keeps its angle to the playfield (the glass flares toward the back the same way)
-   const float topAngle = std::atan2(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront);
-   m_tanTop = std::tan(topAngle + (m_table.slope - nominal.slope) * kDegToRad);
+   // The top edge keeps its angle to the playfield (the glass flares toward the back the same way), or takes the one asked for
+   const float modelAngle = std::atan2(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - nominal.slope * kDegToRad;
+   m_table.topAngle = table.topAngle > 0.f ? std::clamp(table.topAngle, 0.f, 10.f) : modelAngle / kDegToRad;
+   m_tanTop = std::tan((m_table.slope + m_table.topAngle) * kDegToRad);
 }
 
 float Fit::MapX(float x) const
