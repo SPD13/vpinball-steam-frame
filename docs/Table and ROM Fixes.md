@@ -554,3 +554,24 @@ checked and do not match.
 on the Frame.
 
 History: version 1, 2026-11-15.
+
+### <a id="pulp-fiction-vr-dmd"></a>Pulp Fiction (JP's style Original): DMD on the cabinet
+
+Applies to: tables whose file name contains `Pulp Fiction` or `pulp_fiction` (checked with *pulp_fiction.vpx*, an Original table built
+on JP Salas' table framework, `cGameName = "pulp fiction"`, no ROM, with a `.directb2s`, shown in the default VR cabinet). Another version
+without the lines is reported as "not needed".
+
+**Symptom.** In VR the DMD floats beside the playfield, outside the cabinet, and the DMD window of the speaker panel stays black.
+
+**Cause.** The same as [Big Lebowski](#big-lebowski-vr-dmd): the script picks its DMD at its start with
+`If Table1.ShowDT = True then UseFlexDMD = False`, so in VR, where `ShowDT` follows the desktop/cabinet setting (desktop by default), it
+keeps the desktop digit flashers (`digitgrid`) and never starts FlexDMD, which the DMD of the default cabinet shows. The script has no VR
+mode (no `RenderingMode` test).
+
+**Fix.** The same patch: `If Table1.ShowDT = True And RenderingMode <> 2 then`. In VR the script starts FlexDMD and hides the desktop
+flashers itself (`DMD_Init`: `Digits(i).Visible = False`, `digitgrid.Visible = False`). Desktop and cabinet modes are unchanged.
+
+**Checked** on the Mac, 2026-11-15, as for Big Lebowski: the recipe's patch applied once to the table's script (CRLF), the patched
+script run with the default cabinet forced and `Standalone.RenderingModeOverride = 2`. **To check** on the Frame.
+
+History: version 1, 2026-11-15.
