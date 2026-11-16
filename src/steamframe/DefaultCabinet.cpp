@@ -89,6 +89,9 @@ struct PlayfieldDepth
    string raisedBy;
    vector<IEditable*> desktopSides; // To hide
    vector<IEditable*> desktopFront; // To hide too: the lockbar of the desktop table
+   float backY = 0.f; // Where the playfield ends at the back: the table's top, or the front face of its back wall
+   IEditable* backWall = nullptr;
+   bool hideBackWall = false; // Above the top edge of the cabinet there
 };
 
 // The box of what a part shows (ramps, walls, primitives), in table coordinates. False for the other parts and the hidden ones.
@@ -289,6 +292,25 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
    }
    best.depth = min(best.depth, table->m_glassBottomHeight);
 
+   // The back wall of a desktop table: a thin wall across the whole width near the back, standing well above the playfield (Black Knight Sword of
+   // Rage's, 19 cm high, 10 cm before the end of the table). What lies behind it is never seen: the playfield ends there, and the cabinet is fitted
+   // to that length. Taller than the top edge of the cabinet there, it is hidden like the side walls.
+   best.backY = table->m_top;
+   for (IEditable* part : table->GetParts())
+   {
+      Vertex3Ds lo, hi;
+      if (part->GetItemType() != eItemSurface || !GetShownBounds(part, lo, hi) || hi.x - lo.x < 0.8f * (table->m_right - table->m_left) || hi.y - lo.y > 0.05f * k || hi.y <= table->m_top || hi.y > table->m_top + 0.15f * length
+         || hi.z < 0.05f * k)
+         continue;
+      if (best.backWall == nullptr || hi.y > best.backY)
+      {
+         best.backY = hi.y;
+         best.backWall = part;
+         const float tanBest = tanf(best.topAngle > 0.f ? ANGTORAD(best.topAngle) : modelAngle);
+         best.hideBackWall = hi.z > best.depth - rise + (table->m_bottom - hi.y) * tanBest - margin;
+      }
+   }
+
    // The lockbar of a desktop table: a part across the front edge of the playfield, about as wide as the table, standing above the top of
    // the cabinet's lockbar (Black Knight Sword of Rage's, 0.12 m over it, for the view on a screen). The cabinet has its own. The parts
    // further in front, or much higher, belong to a VR room.
@@ -389,7 +411,6 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
    const Nominal nominal = ReadNominal(figures);
    CF::Table geometry;
    geometry.playfieldWidth = (table->m_right - table->m_left) / k;
-   geometry.playfieldLength = (table->m_bottom - table->m_top) / k;
    geometry.slope = table->GetPlayfieldSlope();
    geometry.lockbarTop = table->m_groundToLockbarHeight / k;
    // The launcher, from the plungers of the table
@@ -418,9 +439,18 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          << (depth.topAngle > 0.f ? std::to_string(depth.topAngle) + " degrees to it" : "of the model"s) << (depth.raisedBy.empty() ? ""s : ", for '" + depth.raisedBy + '\'');
    geometry.glassBottom = depth.depth / k;
    geometry.topAngle = depth.topAngle;
-   geometry.launcherLift = lift / k;
+   geometry.playfieldLength = (table->m_bottom - depth.backY) / k;
+   if (depth.backWall)
+      PLOGI << "[DefaultCabinet] The playfield ends at the back wall '" << depth.backWall->GetName() << "', " << (depth.backY - table->m_top) / k
+            << " m before the end of the table: cabinet fitted to " << geometry.playfieldLength << " m";
+   // The launcher's rod in line with the plunger pulled by the player: the axis of its rod, above the surface it stands on (Plunger::RenderSetup)
+   if (m_plunger)
+      geometry.launcherRod = (table->GetSurfaceHeight(m_plunger->m_d.m_szSurface, m_plunger->m_d.m_v.x, m_plunger->m_d.m_v.y) + m_plunger->m_d.m_zAdjust
+         + m_plunger->m_d.m_width) / k;
    vector<IEditable*> toHide = depth.desktopSides;
    toHide.insert(toHide.end(), depth.desktopFront.begin(), depth.desktopFront.end());
+   if (depth.hideBackWall)
+      toHide.push_back(depth.backWall);
    for (IEditable* part : toHide)
    {
       // Hidden only: they still hold the ball in
@@ -438,13 +468,17 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          static_cast<Ramp*>(part)->m_d.m_visible = false;
       m_hiddenParts.push_back(hidden);
       const bool front = std::ranges::find(depth.desktopFront, part) != depth.desktopFront.end();
-      PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: " << (front ? "the lockbar of the desktop table, above the cabinet's" : "a side of the desktop table, taller than the cabinet");
+      PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: "
+            << (front                     ? "the lockbar of the desktop table, above the cabinet's"
+                   : part == depth.backWall ? "the back wall of the desktop table, above the cabinet"
+                                            : "a side of the desktop table, taller than the cabinet");
    }
    // The art of the walls (Metallica's side blades), cut along the top edge of the sides
    const float topAngle = depth.topAngle > 0.f ? ANGTORAD(depth.topAngle) : atan2f(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - ANGTORAD(nominal.slope);
    const float sideTop = depth.depth - (nominal.lockbarTop - nominal.zFrontTop) * k - 0.002f * k;
    for (const HiddenPart& hidden : m_hiddenParts)
-      if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible && std::ranges::find(depth.desktopFront, hidden.part) == depth.desktopFront.end())
+      if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible && std::ranges::find(depth.desktopFront, hidden.part) == depth.desktopFront.end()
+         && hidden.part != depth.backWall)
          AddSideBlade(static_cast<Surface*>(hidden.part), sideTop, tanf(topAngle));
    const Fit fit(nominal, geometry);
 
