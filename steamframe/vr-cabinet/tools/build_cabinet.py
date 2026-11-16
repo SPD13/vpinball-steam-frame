@@ -8,6 +8,7 @@
 #   anchor:  [x, y, z] of a rigid node
 #   space:   "cabinet" (VR cabinet space) or "feet" (legs, stretched to the floor)
 #   variant: "spring" or "button" for the parts of one launcher only
+#   display: "dmd" or "full" for the parts of one speaker panel only: a 4:1 DMD window, or a 16:9 full DMD screen (PinUP Player packs)
 #   role:    part animated or placed by the application (plunger_rod, plunger_spring, launch_button, flipper_left, flipper_right, backglass,
 #            display)
 # The coordinates are those of the design (dims.py: Z up, meters), exported without the glTF Y-up conversion.
@@ -83,8 +84,10 @@ IMG = {
 }
 SPK_H = D.BB_SPEAKER[1] - D.BB_SPEAKER[0]
 DMD_RECT = ((D.BB_INNER_W - D.DMD_W) / 2, (SPK_H - D.DMD_H) / 2 - 0.1 * IN, (D.BB_INNER_W + D.DMD_W) / 2, (SPK_H + D.DMD_H) / 2 - 0.1 * IN)
-IMG["speaker"] = save_png("cab_speaker_panel", art.speaker_panel(D.BB_INNER_W, SPK_H, DMD_RECT,
-    [(D.BB_INNER_W / 2 - D.SPEAKER_X, SPK_H / 2, D.SPEAKER_R), (D.BB_INNER_W / 2 + D.SPEAKER_X, SPK_H / 2, D.SPEAKER_R)]))
+SPEAKERS = [(D.BB_INNER_W / 2 - D.SPEAKER_X, SPK_H / 2, D.SPEAKER_R), (D.BB_INNER_W / 2 + D.SPEAKER_X, SPK_H / 2, D.SPEAKER_R)]
+IMG["speaker"] = save_png("cab_speaker_panel", art.speaker_panel(D.BB_INNER_W, SPK_H, DMD_RECT, SPEAKERS))
+FULL_DMD_RECT = ((D.BB_INNER_W - D.FULL_DMD_W) / 2, (SPK_H - D.FULL_DMD_H) / 2, (D.BB_INNER_W + D.FULL_DMD_W) / 2, (SPK_H + D.FULL_DMD_H) / 2)
+IMG["speaker_full"] = save_png("cab_speaker_panel_full", art.speaker_panel(D.BB_INNER_W, SPK_H, FULL_DMD_RECT, SPEAKERS))
 
 M = {
     "art_side": material("CabArtSide", roughness=0.28, image=IMG["side"], clearcoat=1),
@@ -102,6 +105,7 @@ M = {
     "launch": material("CabLaunchButton", hexc("#e0141c"), roughness=0.2, unlit=0.2),
     "rubber": material("CabRubber", hexc("#060606"), roughness=0.9),
     "speaker": material("CabSpeakerPanel", image=IMG["speaker"], roughness=0.45),
+    "speaker_full": material("CabSpeakerPanelFull", image=IMG["speaker_full"], roughness=0.45),
     "backglass": material("CabBackglass", image=IMG["backglass"], roughness=0.1, unlit=1),
     "glass": material("CabDisplayGlass", hexc("#050506"), roughness=0.05),
 }
@@ -509,7 +513,9 @@ def front_rect(node, name, x0, x1, v0, v1, inset, mat, uv=(0, 1, 0, 1), role=Non
 FH = D.BB_H / math.cos(lean)  # Length of the front, bottom to top
 sp0, sp1 = D.BB_SPEAKER
 tl0, tl1 = D.BB_TRANSLITE
-front_rect("Backbox", "SpeakerPanel", -BXI, BXI, sp0, sp1, 0.3 * IN, M["speaker"])
+# Two speaker panels, one shown (see NODES): a 4:1 DMD window, or a 16:9 full DMD screen
+front_rect("SpeakerPanel", "SpeakerPanel", -BXI, BXI, sp0, sp1, 0.3 * IN, M["speaker"])
+front_rect("SpeakerPanelFull", "SpeakerPanelFull", -BXI, BXI, sp0, sp1, 0.3 * IN, M["speaker_full"])
 front_rect("Backbox", "Backglass", -D.TRANSLITE_W / 2, D.TRANSLITE_W / 2, tl0, tl1, 0.5 * IN, M["backglass"])
 # Black frame around the backglass, chrome channel between the panels, black strips at the bottom and the top of the front
 front_rect("Backbox", "TransliteFrameL", -BXI, -D.TRANSLITE_W / 2, tl0, tl1, 0.45 * IN, M["black"])
@@ -519,7 +525,9 @@ front_rect("Backbox", "BottomStrip", -BXI, BXI, 0, sp0, 0.0, M["black"])
 front_rect("Backbox", "TopStrip", -BXI, BXI, tl1, FH, 0.0, M["black"])
 # Display window, dark glass in front of the speaker panel; the application draws the display in front of it
 dx0, dv0, dx1, dv1 = -D.DMD_W / 2, sp0 + (SPK_H - D.DMD_H) / 2 + 0.1 * IN, D.DMD_W / 2, sp0 + (SPK_H + D.DMD_H) / 2 + 0.1 * IN
-front_rect("Backbox", "DisplayGlass", dx0, dx1, dv0, dv1, 0.28 * IN, M["glass"])
+front_rect("SpeakerPanel", "DisplayGlass", dx0, dx1, dv0, dv1, 0.28 * IN, M["glass"])
+fx0, fv0, fx1, fv1 = -D.FULL_DMD_W / 2, sp0 + (SPK_H - D.FULL_DMD_H) / 2, D.FULL_DMD_W / 2, sp0 + (SPK_H + D.FULL_DMD_H) / 2
+front_rect("SpeakerPanelFull", "DisplayGlassFull", fx0, fx1, fv0, fv1, 0.28 * IN, M["glass"])
 
 # Hinge brackets at the back of the backbox
 for sx in (-1, 1):
@@ -530,7 +538,9 @@ for sx in (-1, 1):
 RECTS = {
     "BackglassRect": ("backglass", [on_front(x, v, 0.48 * IN) for x, v in ((-D.TRANSLITE_W / 2, tl0), (D.TRANSLITE_W / 2, tl0), (D.TRANSLITE_W / 2, tl1), (-D.TRANSLITE_W / 2, tl1))]),
     "DisplayRect": ("display", [on_front(x, v, 0.26 * IN) for x, v in ((dx0, dv0), (dx1, dv0), (dx1, dv1), (dx0, dv1))]),
+    "FullDisplayRect": ("display", [on_front(x, v, 0.26 * IN) for x, v in ((fx0, fv0), (fx1, fv0), (fx1, fv1), (fx0, fv1))]),
 }
+RECT_DISPLAY = {"DisplayRect": "dmd", "FullDisplayRect": "full"}  # Rectangles of one speaker panel only
 
 
 # ---------------------------------------------------------------------------------------------------------------------------
@@ -546,6 +556,8 @@ NODES = {
     "FlipperRight": dict(fit="deform", space="cabinet", role="flipper_right"),
     "StartButton": dict(fit="rigid", space="cabinet", anchor=[D.START_X, YF, D.START_Z], role="start_button"),
     "Backbox": dict(fit="deform", space="cabinet"),
+    "SpeakerPanel": dict(fit="deform", space="cabinet", display="dmd"),
+    "SpeakerPanelFull": dict(fit="deform", space="cabinet", display="full"),
     "Legs": dict(fit="deform", space="feet"),
     "PlungerHousing": dict(fit="rigid", space="cabinet", anchor=list(hole), variant="spring"),
     "PlungerSpring": dict(fit="rigid", space="cabinet", anchor=list(hole), variant="spring", role="plunger_spring"),
@@ -583,6 +595,8 @@ for name, (role, corners) in RECTS.items():
     e["vpx_space"] = "cabinet"
     e["vpx_fit"] = "deform"
     e["vpx_corners"] = [c for p in corners for c in p]
+    if name in RECT_DISPLAY:
+        e["vpx_display"] = RECT_DISPLAY[name]
     exported.append(e)
 scene["vpx_cabinet"] = json.dumps(D.nominal())
 

@@ -24,6 +24,7 @@ W=<work folder>
 $B -b --factory-startup --python $T/build_cabinet.py -- $W --blend      # $W/asset: vr-cabinet.glb + textures, $W/art: PNG previews
 $B -b $W/cabinet.blend --python $T/render_cabinet.py -- $W/preview 64 spring threequarter player side back plunger
 $B -b $W/cabinet.blend --python $T/render_cabinet.py -- $W/preview 64 button plunger
+$B -b $W/cabinet.blend --python $T/render_cabinet.py -- $W/preview 64 spring+full backbox    # the full DMD speaker panel
 cp $W/asset/* <vpinball>/src/assets/vr-cabinet/
 ```
 
@@ -42,6 +43,8 @@ Z = 0 the floor (exported without the glTF Y-up conversion). Each node has extra
 - `vpx_fit`: `deform` (every vertex goes through the fit, `src/steamframe/CabinetFit.h`) or `rigid` (moved as a whole from `vpx_anchor`);
 - `vpx_space`: `cabinet` or `feet` (the legs, stretched to the floor by the VR cabinet feet space);
 - `vpx_variant`: `spring` or `button`, the parts of one launcher;
+- `vpx_display`: `dmd` or `full`, the parts and the `display` rectangle of one speaker panel: a 4:1 DMD window, or a 16:9 full DMD screen
+  (7" high, 14.3") shown only when the table's PinUP Player pack draws its full DMD in the score view (`CabinetDisplays::DrawsFullDMD`);
 - `vpx_role`: parts animated or placed by the application (`plunger_rod`, `plunger_spring`, `launch_button`, `flipper_left`,
   `flipper_right`, `start_button`), and the two rectangles `backglass` and `display` (`vpx_corners`);
 - materials: `vpx_image` (texture file, without `.webp`), `vpx_unlit` (0..1), `vpx_clearcoat`.

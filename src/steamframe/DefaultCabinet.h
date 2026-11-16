@@ -37,7 +37,8 @@ class IEditable;
 // button when it only has automatic plungers. The plunger rod follows the table's plunger, the buttons move when pressed.
 //
 // The implicit VR backglass (B2S) moves to the backglass window of the backbox, and a score view display (DMD, segments) is added in the
-// window of the speaker panel.
+// window of the speaker panel: a 4:1 DMD window, or a 16:9 full DMD screen when the table's PinUP Player pack draws one there
+// (CabinetDisplays::DrawsFullDMD).
 //
 // The room chosen for the lobby (the game room by default, none for the empty room) is added around it, in the room space: its parts are
 // moved from the lobby room's table (src/assets/lobby-*.vpx, steamframe/lobby-room) to the played one. Passthrough leaves it out.
@@ -56,6 +57,7 @@ public:
    void Remove(); // At the end of the table session: the parts, images and materials leave the table
 
    VPX::CabinetFit::Launcher GetLauncher() const { return m_launcher; }
+   bool HasFullDMD() const { return m_fullDMD; } // The speaker panel holds a 16:9 full DMD screen instead of a 4:1 DMD window
    bool IsOwnPart(const IEditable* part) const { return std::ranges::find(m_parts, part) != m_parts.end(); } // The cabinet's and the room's parts
 
    // The windows of the backbox, where the displays of PinUP Player go (CabinetDisplays): the backglass window, even when it keeps the
@@ -78,6 +80,8 @@ private:
    void LoadRoom();
    PartGroup* NewGroup(const std::string& name, PartGroupData::SpaceReference space);
    void LoadNode(const struct cgltf_data* data, const struct cgltf_node& node, const VPX::CabinetFit::Fit& fit, float launcherX, const std::string& folder);
+   // A node or rectangle of the model for one speaker panel only ('vpx_display' extra: "dmd" or "full") is loaded with that panel only
+   bool IsDisplayChosen(const std::string& display) const { return display.empty() || display == (m_fullDMD ? "full" : "dmd"); }
    Window GetWindow(const std::vector<float>& corners, const VPX::CabinetFit::Fit& fit) const;
    Flasher* CreateFlasher(const Window& w, int window, const std::string& name);
    void AddSideBlade(class Surface* wall, float sideTop, float tanTop);
@@ -110,6 +114,7 @@ private:
    std::vector<std::pair<const struct cgltf_material*, Material*>> m_materialMap;
    std::vector<std::pair<Material*, std::string>> m_materialImages;
    VPX::CabinetFit::Launcher m_launcher = VPX::CabinetFit::Launcher::Spring;
+   bool m_fullDMD = false;
    Plunger* m_plunger = nullptr; // The manual plunger the rod follows
    float m_springLength = 0.f; // VPU
    float m_vpuPerMeter = 0.f;

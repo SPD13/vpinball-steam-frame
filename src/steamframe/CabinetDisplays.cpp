@@ -151,6 +151,14 @@ void CabinetDisplays::LoadPlacements()
 ///////////////////////////////////////////////////////////////////////////////
 // Creation
 
+bool CabinetDisplays::DrawsFullDMD(const PinTable* table)
+{
+   const PupPacks::TableUse use = PupPacks::GetTableUse(table->m_script_text);
+   const std::filesystem::path packFolder
+      = PupPacks::FindPackFolder(use.names, table->m_filename.parent_path(), g_launcher ? g_launcher->GetSharedPupVideosPath() : std::filesystem::path());
+   return !packFolder.empty() && HasFullDMDScreen(packFolder, lowerCase(table->m_script_text));
+}
+
 std::unique_ptr<CabinetDisplays> CabinetDisplays::Create(Player* player)
 {
    const char* forced = getenv("VPX_CABINET_DISPLAYS");

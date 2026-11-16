@@ -492,6 +492,20 @@ bool DrawsFullDMD(const vector<Screen>& screens)
    const bool hasChildren = std::any_of(screens.begin(), screens.end(), [](const Screen& s) { return s.parent == 5; });
    if (fullDMD->parent >= 0 && !hasChildren)
       return false;
+   // Nor when the screen at the top of its tree is one a window draws: it is drawn there (Aladdin: screen 5 positioned on the backglass)
+   if (fullDMD->parent >= 0)
+   {
+      int top = 5;
+      for (int depth = 0; depth < 16; depth++)
+      {
+         const auto it = std::find_if(screens.begin(), screens.end(), [top](const Screen& p) { return p.number == top; });
+         if (it == screens.end() || it->parent < 0)
+            break;
+         top = it->parent;
+      }
+      if (top == 0 || top == 1 || top == 2 || top == 6)
+         return false;
+   }
    // Something visible in its tree: itself, or a screen positioned on it, directly or through other screens
    return std::any_of(screens.begin(), screens.end(), [&screens](const Screen& s)
    {
