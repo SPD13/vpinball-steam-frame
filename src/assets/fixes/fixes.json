@@ -204,6 +204,26 @@
           "replace": "\tReplayAt = CLng(Table1.Option(\"Replay At\",10000000,100000000,10000000,60000000,0))\t\t' Replay At 60,000,000 Default. CLng added by the Steam Frame Edition (fix black-knight-sor-pup-registry): FormatNumber of the Single given by Table1.Option fails (\"6E+07\")\n"
         }
       ]
+    },
+    {
+      "id": "led-zeppelin-pup-dmd",
+      "version": 1,
+      "title": "Led Zeppelin Pinball (Original): DMD from its PuP pack",
+      "symptom": "The DMD of the cabinet stays black: the scores only show on the reels of the backglass.",
+      "cause": "The table has two modes chosen by a constant of its script: without PuP (scores on the backglass reels, music from a folder) and with its PuP pack (a full DMD, music from the pack). It ships with HasPuP = False, so its DMD is never shown, even with the pack installed.",
+      "change": "When the pack 'ledzeppelin' is in PinUP Player's folder, the script uses its PuP mode: the DMD of the cabinet shows the pack's scores, videos and messages, and the music comes from the pack. Without the pack, nothing changes.",
+      "doc": "led-zeppelin-pup-dmd",
+      "match": {
+        "files": [
+          "led zeppelin pinball"
+        ]
+      },
+      "script": [
+        {
+          "find": "Const HasPuP = False    'Set to True if you want the PupDMD (See Options below for Pup Users) - Do Not use directb2S when this is true\n",
+          "replace": "Dim HasPuP : HasPuP = SFPuPPackFound(\"ledzeppelin\") ' Const HasPuP = False before the Steam Frame Edition (fix led-zeppelin-pup-dmd): the PuP mode, which has the DMD, when the pack is installed\nFunction SFPuPPackFound(pack) ' Added by the Steam Frame Edition (fix led-zeppelin-pup-dmd): is the pack in PinUP Player's folder?\n\tDim root\n\tSFPuPPackFound = False\n\tOn Error Resume Next\n\troot = CreateObject(\"PinUpPlayer.PinDisplay\").GetRoot\n\tIf root <> \"\" Then SFPuPPackFound = CreateObject(\"Scripting.FileSystemObject\").FolderExists(root & pack)\n\tOn Error GoTo 0\nEnd Function\n"
+        }
+      ]
     }
   ]
 }
