@@ -34,7 +34,8 @@ class IEditable;
 // cabinet, are hidden (not removed: they still hold the ball in); their art stays, on side blades cut along the top edge of the cabinet.
 // So is the lockbar of a desktop table, across the front edge and above the top of the cabinet's lockbar.
 // When the table's plunger stands on a raised surface (a shooter lane on a wall), the playfield lies that much deeper, and the launcher
-// lines up with that surface as it does with the playfield of other tables.
+// rod comes out in line with the table's plunger rod. When a wall across the width marks the back of a desktop table's playfield, the
+// cabinet is fitted to the playfield up to that wall, and the wall is hidden when it stands above the cabinet.
 //
 // The ball launcher matches the table (CabinetFit::ChooseLauncher): a spring plunger in front of the table's manual plunger, or a launch
 // button when it only has automatic plungers. The plunger rod follows the table's plunger, the buttons move when pressed.
