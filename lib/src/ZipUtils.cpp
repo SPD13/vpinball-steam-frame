@@ -305,3 +305,62 @@ bool ZipUtils::Extract(const std::filesystem::path& sourcePath, const std::files
    PLOGE.printf("Unsupported archive: %s", sourcePath.string().c_str());
    return false;
 }
+
+bool ZipUtils::ListFiles(const std::filesystem::path& sourcePath, std::vector<string>& files)
+{
+   files.clear();
+   const string ext = sourcePath.has_extension() ? lowerCase(sourcePath.extension().string()) : string();
+#ifdef VPX_ARCHIVE_SUPPORT
+   if (ext == ".rar" || ext == ".7z") {
+      archive* const reader = archive_read_new();
+      archive_read_support_format_rar(reader);
+      archive_read_support_format_rar5(reader);
+      archive_read_support_format_7zip(reader);
+#ifdef _WIN32
+      const int opened = archive_read_open_filename_w(reader, sourcePath.wstring().c_str(), 64 * 1024);
+#else
+      const int opened = archive_read_open_filename(reader, sourcePath.string().c_str(), 64 * 1024);
+#endif
+      if (opened != ARCHIVE_OK) {
+         archive_read_free(reader);
+         return false;
+      }
+      archive_entry* entry;
+      int result;
+      while ((result = archive_read_next_header(reader, &entry)) == ARCHIVE_OK || result == ARCHIVE_WARN) {
+         const char* const utf8Name = archive_entry_pathname_utf8(entry);
+         if (utf8Name && archive_entry_filetype(entry) == AE_IFREG) {
+            string name = utf8Name;
+            std::replace(name.begin(), name.end(), '\\', '/');
+            if (!IsExcludedPath(name))
+               files.push_back(name);
+         }
+         archive_read_data_skip(reader);
+      }
+      archive_read_free(reader);
+      return result == ARCHIVE_EOF;
+   }
+#endif
+   if (ext != ".zip" && ext != ".vpxz")
+      return false;
+   mz_zip_archive archive {};
+   if (!mz_zip_reader_init_file(&archive, PathToUTF8(sourcePath).c_str(), 0))
+      return false;
+   bool success = true;
+   const mz_uint totalEntries = mz_zip_reader_get_num_files(&archive);
+   for (mz_uint i = 0; i < totalEntries; ++i) {
+      mz_zip_archive_file_stat fileStat;
+      if (!mz_zip_reader_file_stat(&archive, i, &fileStat)) {
+         success = false;
+         break;
+      }
+      string name = GetEntryName(archive, i, fileStat);
+      if (fileStat.m_is_directory || name.empty() || (name.back() == '/' && fileStat.m_uncomp_size == 0))
+         continue;
+      std::replace(name.begin(), name.end(), '\\', '/');
+      if (!IsExcludedPath(name))
+         files.push_back(name);
+   }
+   mz_zip_reader_end(&archive);
+   return success;
+}

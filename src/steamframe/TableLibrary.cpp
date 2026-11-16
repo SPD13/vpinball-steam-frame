@@ -916,6 +916,131 @@ void TableLibrary::OrganizePendingUploads(std::vector<Table>& tables)
       OrganizeRootFile(tables, file);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Music archives
+
+namespace {
+
+// Lower case extension of an archive entry ('Music/A-TRACK 1.mp3' gives '.mp3')
+string EntryExtension(const string& entry)
+{
+   const size_t slash = entry.rfind('/');
+   const size_t dot = entry.rfind('.');
+   return (dot == string::npos || (slash != string::npos && dot < slash)) ? string() : ToLower(entry.substr(dot));
+}
+
+// The entry of 'folder' named 'name' whatever its case (music is found whatever the case of its path, so 'Aliens' and 'ALIENS' are one folder)
+fs::path FindChildNoCase(const fs::path& folder, const fs::path& name)
+{
+   std::error_code ec;
+   if (fs::exists(folder / name, ec))
+      return folder / name;
+   const string lowerName = ToLower(name.string());
+   for (auto it = fs::directory_iterator(folder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (ToLower(it->path().filename().string()) == lowerName)
+         return it->path();
+   return folder / name;
+}
+
+// Moves the content of 'source' into 'dest', merging the folders and replacing the files. Returns the number of files moved.
+int MergeInto(const fs::path& source, const fs::path& dest)
+{
+   std::error_code ec;
+   fs::create_directories(dest, ec);
+   int moved = 0;
+   std::vector<fs::path> entries;
+   for (auto it = fs::directory_iterator(source, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+      if (!IsHidden(it->path()))
+         entries.push_back(it->path());
+   for (const fs::path& entry : entries) {
+      const fs::path target = FindChildNoCase(dest, entry.filename());
+      const bool entryIsFolder = fs::is_directory(entry, ec);
+      if (fs::exists(target, ec)) {
+         const bool targetIsFolder = fs::is_directory(target, ec);
+         if (entryIsFolder && targetIsFolder) {
+            moved += MergeInto(entry, target);
+            continue;
+         }
+         if (entryIsFolder != targetIsFolder) // A file and a folder of the same name: the one in place stays
+            continue;
+         fs::remove(target, ec);
+      }
+      ec.clear();
+      fs::rename(entry, target, ec);
+      if (ec) {
+         ec.clear();
+         continue;
+      }
+      if (entryIsFolder) {
+         for (auto it = fs::recursive_directory_iterator(target, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
+            moved += it->is_regular_file(ec) ? 1 : 0;
+      }
+      else
+         moved++;
+   }
+   return moved;
+}
+
+}
+
+bool TableLibrary::ExtractMusicArchive(const fs::path& archive)
+{
+   if (!m_config.listArchive || !m_config.unzip || !IsArchive(archive) || IsHidden(archive))
+      return false;
+   const fs::path folder = archive.parent_path();
+   if (!IsInsideTables(folder)) // Archives at the root are bundles, imported by the scans
+      return false;
+   if (!m_config.sharedPupVideosPath.empty() && folder.lexically_normal() == m_config.sharedPupVideosPath.lexically_normal()) // Packs, imported by the scans
+      return false;
+
+   static const std::set<string> audioExtensions { ".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac", ".opus", ".wma" };
+   static const std::set<string> otherExtensions { ".txt", ".md", ".nfo", ".pdf", ".url", ".jpg", ".jpeg", ".png", ".gif", ".webp" }; // Readme and covers
+   std::vector<string> entries;
+   if (!m_config.listArchive(archive, entries))
+      return false;
+   int audioFiles = 0;
+   bool allInMusicFolder = true; // 'Music/A-TRACK 1.mp3': the archive holds the 'music' folder itself
+   for (const string& entry : entries) {
+      const size_t slash = entry.rfind('/');
+      const string name = slash == string::npos ? entry : entry.substr(slash + 1);
+      if (name.empty() || name[0] == '.') // .DS_Store, resource forks
+         continue;
+      const string extension = EntryExtension(entry);
+      if (audioExtensions.contains(extension))
+         audioFiles++;
+      else if (!otherExtensions.contains(extension))
+         return false;
+      const size_t firstSlash = entry.find('/');
+      if (firstSlash == string::npos || ToLower(entry.substr(0, firstSlash)) != "music")
+         allInMusicFolder = false;
+   }
+   if (audioFiles == 0)
+      return false;
+
+   // Into the 'music' folder of the table folder, whatever its case, or the folder itself when the archive was uploaded into the music folder
+   std::error_code ec;
+   const fs::path musicFolder = ToLower(folder.filename().string()) == "music" ? folder : FindChildNoCase(folder, "music");
+   const fs::path tempFolder = folder / (".music-" + GenerateUUID({}));
+   fs::create_directories(tempFolder, ec);
+   if (ec || !m_config.unzip(archive, tempFolder, nullptr)) {
+      Log(LogLevel::Error, "Failed to extract the music archive " + archive.string());
+      fs::remove_all(tempFolder, ec);
+      return false;
+   }
+   int moved = 0;
+   if (allInMusicFolder) {
+      for (auto it = fs::directory_iterator(tempFolder, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+         if (!IsHidden(it->path()) && it->is_directory(ec))
+            moved += MergeInto(it->path(), musicFolder);
+   }
+   else
+      moved = MergeInto(tempFolder, musicFolder);
+   fs::remove_all(tempFolder, ec);
+   fs::remove(archive, ec);
+   Log(LogLevel::Info, "Extracted " + std::to_string(moved) + " music file(s) from " + archive.filename().string() + " into " + musicFolder.string());
+   return true;
+}
+
 void TableLibrary::OrganizeRootFile(std::vector<Table>& tables, const fs::path& file)
 {
    std::error_code ec;

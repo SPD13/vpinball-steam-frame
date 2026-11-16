@@ -87,6 +87,8 @@ public:
       ZipFunction zip; // Usually ZipUtils::Zip, needed by Export
       ZipFunction unzip; // Usually ZipUtils::Extract, needed to import the bundles of 'archiveExtensions'
       std::vector<std::string> archiveExtensions { ".zip", ".vpxz" }; // Lower case, with the dot: bundles imported with 'unzip'
+      // Optional: the files of an archive without extracting it (usually ZipUtils::ListFiles), needed by ExtractMusicArchive
+      std::function<bool(const std::filesystem::path& sourcePath, std::vector<std::string>& files)> listArchive;
       LogCallback log;
       // Optional: which PinUP Player packs a table uses, read from its script (see PupPacks::GetTableUse), and the folder of the packs shared by
       // the tables (they are also looked for in a 'pupvideos' folder along each table)
@@ -133,6 +135,12 @@ public:
    //   is renamed after it.
    // The tables already at the root are left there. Returns false when the library was busy: the scan that follows the upload does it.
    bool OrganizeRootUpload(const std::filesystem::path& file);
+
+   // An archive holding only music (audio files, and readme or cover files), uploaded into a table folder ('Music - Aliens.zip'): tables
+   // play their music from the 'music' folder along them, so the files are extracted there (a 'music' folder at the top of the archive
+   // is not doubled) and the archive is deleted. Other archives are left alone: ROMs must stay zipped, AltSound packs have a csv. Called
+   // by the web server for the archives uploaded below the root of the tables folder. Returns true when the archive was extracted.
+   bool ExtractMusicArchive(const std::filesystem::path& archive);
 
    // Same, on a worker thread, for callers that must not block like a UI: poll IsScanning/GetRevision for the outcome.
    // A request made while a scan is running triggers another scan afterward, so that no change is missed.

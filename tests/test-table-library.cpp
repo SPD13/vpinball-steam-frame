@@ -464,6 +464,71 @@ TEST_CASE("TableLibrary: tables uploaded to the root get a folder of their own, 
    CHECK(fs::exists(f.tables / "Star Trek.vpx")); // Scans move nothing
 }
 
+TEST_CASE("TableLibrary: music archives uploaded into a table folder are extracted into its music folder")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   config.listArchive = [](const fs::path& source, std::vector<string>& files) {
+      files.clear();
+      FILE* const pipe = popen(("unzip -Z1 '" + source.string() + "'").c_str(), "r");
+      if (!pipe)
+         return false;
+      char line[1024];
+      while (fgets(line, sizeof(line), pipe)) {
+         string name(line);
+         while (!name.empty() && (name.back() == '\n' || name.back() == '\r'))
+            name.pop_back();
+         if (!name.empty() && name.back() != '/' && name.rfind("__MACOSX", 0) != 0)
+            files.push_back(name);
+      }
+      return pclose(pipe) == 0;
+   };
+   TableLibrary library(config);
+
+   // The archive holds the music folder itself: not doubled, and merged with the folder already there whatever its case
+   Fixture::Touch(f.tables / "Aliens" / "Aliens 3.0.vpx");
+   Fixture::Touch(f.tables / "Aliens" / "Music" / "old.mp3", "old");
+   Fixture::Touch(f.root / "src1" / "Music" / "A-TRACK 1.mp3", "new");
+   Fixture::Touch(f.root / "src1" / "Music" / "old.mp3", "replaced");
+   Fixture::Touch(f.root / "src1" / "Music" / ".DS_Store");
+   Fixture::MakeZip(f.root / "src1", f.tables / "Aliens" / "Music - Aliens.zip");
+   CHECK(library.ExtractMusicArchive(f.tables / "Aliens" / "Music - Aliens.zip"));
+   CHECK(!fs::exists(f.tables / "Aliens" / "Music - Aliens.zip"));
+   CHECK(Fixture::Read(f.tables / "Aliens" / "Music" / "A-TRACK 1.mp3") == "new");
+   CHECK(Fixture::Read(f.tables / "Aliens" / "Music" / "old.mp3") == "replaced");
+   CHECK(!fs::exists(f.tables / "Aliens" / "music" / "Music"));
+   CHECK(!fs::exists(f.tables / "Aliens" / "Music" / "Music"));
+
+   // Folders and readme files go into a new music folder, as the script names them ('Zeppelin\1.mp3')
+   Fixture::Touch(f.tables / "Led" / "Led.vpx");
+   Fixture::Touch(f.root / "src2" / "Zeppelin" / "1.mp3");
+   Fixture::Touch(f.root / "src2" / "readme.txt");
+   Fixture::MakeZip(f.root / "src2", f.tables / "Led" / "Zeppelin.zip");
+   CHECK(library.ExtractMusicArchive(f.tables / "Led" / "Zeppelin.zip"));
+   CHECK(fs::exists(f.tables / "Led" / "music" / "Zeppelin" / "1.mp3"));
+   CHECK(fs::exists(f.tables / "Led" / "music" / "readme.txt"));
+
+   // ROMs, AltSound packs and archives at the root are left alone
+   Fixture::Touch(f.root / "src3" / "u18.bin");
+   Fixture::MakeZip(f.root / "src3", f.tables / "Led" / "afm_113b.zip");
+   Fixture::Touch(f.root / "src4" / "afm_113b" / "altsound.csv");
+   Fixture::Touch(f.root / "src4" / "afm_113b" / "music" / "1.ogg");
+   Fixture::MakeZip(f.root / "src4", f.tables / "Led" / "altsound.zip");
+   Fixture::Touch(f.root / "src5" / "1.mp3");
+   Fixture::MakeZip(f.root / "src5", f.tables / "music.zip");
+   CHECK(!library.ExtractMusicArchive(f.tables / "Led" / "afm_113b.zip"));
+   CHECK(!library.ExtractMusicArchive(f.tables / "Led" / "altsound.zip"));
+   CHECK(!library.ExtractMusicArchive(f.tables / "music.zip"));
+   CHECK(fs::exists(f.tables / "Led" / "afm_113b.zip"));
+   CHECK(fs::exists(f.tables / "Led" / "altsound.zip"));
+   CHECK(fs::exists(f.tables / "music.zip"));
+
+   // No scratch folder left
+   for (const fs::path& folder : { f.tables / "Aliens", f.tables / "Led" })
+      for (const auto& entry : fs::directory_iterator(folder))
+         CHECK(entry.path().filename().string()[0] != '.');
+}
+
 TEST_CASE("TableLibrary: play statistics and favorites are kept apart from tables.json")
 {
    Fixture f;
