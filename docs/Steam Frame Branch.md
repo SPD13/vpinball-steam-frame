@@ -726,8 +726,8 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   group of the cabinet) once the script has run 60 frames, while a part of it is visible and the window's external renderers drew nothing
   for 60 renders (`Flasher::m_extRenderEmptyRenders`, fork member: no FlexDMD, PinMAME or B2S display there). If a renderer starts drawing
   in the window, the display goes back to its place for the rest of the session; `Remove` puts it back too. A table whose script turns to
-  FlexDMD in VR hides the digits itself and is left alone, so the recipes `big-lebowski-vr-dmd` and `pulp-fiction-vr-dmd` stay: FlexDMD
-  draws brighter. Logged `[DefaultCabinet] Desktop display: 42 flashers ('digit041'...), 768 x 202 VPU ...` and `Desktop display moved
+  FlexDMD in VR hides the digits itself and is left alone. The table fixes `big-lebowski-vr-dmd` and `pulp-fiction-vr-dmd` (script
+  patches turning these tables to FlexDMD in VR) were removed: the move covers them, and any other table of the framework. Logged `[DefaultCabinet] Desktop display: 42 flashers ('digit041'...), 768 x 202 VPU ...` and `Desktop display moved
   into the DMD window`. Library survey (Frame, 2026-11-15, script `cluster.py` of the test hooks): only JP's digit displays match, and 3
   hidden VR parts (Dungeons and Dragons' backglass LEDs: they would only move when shown with nothing in the window).
 - **Backglass name.** B2S only loads `<table>.directb2s` or `<folder>.directb2s`, and downloads seldom have that name: when a `.vpx` or a
