@@ -458,3 +458,45 @@ the high score (550,000) and the scores, the credits counting the coins and drop
 rising from 0 to 8,750. **To check** on the Frame.
 
 History: version 1, 2026-11-06.
+
+### <a id="black-knight-sor-pup-registry"></a>Black Knight Sword of Rage: errors when the table starts
+
+Applies to: tables whose file name contains `Black Knight Sword of Rage` (checked with *Black Knight Sword Of Rage LE (Stern 2019)*, an
+original table without a ROM, with its PuP pack `bksor`).
+
+**Symptom.** Thousands of script errors in the log from the start of the table (`Compile error on line 269, col 0: Description
+unavailable`, then `Variable is undefined: 'rolling'`, `Object required` at `Cor.Update` and at every `PuPlayer.LabelSet`, type
+mismatches). The PuP pack shows nothing and the game does not work.
+
+**Cause.** The table. To find its callouts, the script reads the folder of PinUP Player in the Windows registry, at the top level of the
+script:
+
+```vb
+comClassID = CreateObject("WScript.Shell").RegRead("HKEY_CLASSES_ROOT\PinUpPlayer.PinDisplay\Clsid\")
+exePath    = CreateObject("WScript.Shell").RegRead("HKEY_CLASSES_ROOT\Wow6432Node\CLSID\" & comClassID & "\LocalServer32\")
+sysFolder  = CreateObject("Scripting.FileSystemObject").GetParentFolderName(exePath)
+calloutpath = sysFolder & "\PUPVideos\bksor\Callouts\"
+```
+
+There is no registry outside Windows: `RegRead` fails, and an error at the top level of a script stops it there. The 19,500 lines after
+it never run: PinUP Player is not started (`PuPStart`), and the arrays and objects of the game (`rolling`, `Cor`, `RampBalls`...) are not
+set up, so every timer fails at every tick. The script carries code for Linux (by FilthTribe211), commented out: it looks for the pack
+in a `pupvideos` folder of the current folder, which is not where the Steam Frame keeps it.
+
+A second error showed once the script ran: the attract mode shows `FormatNumber(ReplayAt, 0)`, and `ReplayAt` comes from `Table1.Option`,
+which gives a Single. The VBScript engine of VPX (libwinevbs, from Wine) formats a number from its text, and a Single of 60,000,000 reads
+`6E+07`, which the number formatter refuses: `Type mismatch`. Windows formats it. Scores are Doubles, whose text has no exponent up to
+15 digits.
+
+**Fix.** The registry lines are commented out, and so is the reading of the list of callouts (`zzzCalloutList.csv`). It is read just
+after `PuPStart`, when PinUP Player has found the pack: `PuPlayer.GetRoot` then gives the folder of the pack in play (the shared
+`pupvideos` folder, or the one next to the table), which also works with PinUP Player on Windows. `ReplayAt` is made a Long
+(`CLng(Table1.Option(...))`).
+
+**Checked** on the Mac, 2026-11-15, with the table and its pack without its videos, sounds and pictures, in an isolated preferences folder
+(`-PrefPath`), the script patched by `TableFixes::ApplyScriptPatch` as a `.vbs` next to the table, line ends kept. Unpatched: 10,950
+errors in 60 s. Patched: no script error, the callouts list read (520 lines, path made of `/` and `\`), with the pack in the shared
+`pupvideos` folder (`PUPFolder`) and with the pack next to the table. Left: 5 `Invalid label` errors of PinUP Player at the start (labels
+set by the script before it creates them). **To check** on the Frame.
+
+History: version 1, 2026-11-15.
