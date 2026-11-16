@@ -127,6 +127,19 @@ TEST_CASE("Cabinet fit: the launcher follows the table's playfield depth, within
    CHECK(n.plunger[2] + deep.LauncherOffset(n.plunger[0])[2] >= n.legTop + 0.03f - 1e-5f);
 }
 
+TEST_CASE("Cabinet fit: the launcher lines up with a raised shooter lane")
+{
+   const Nominal n;
+   Table t = NominalTable(n);
+   // The playfield 4 cm deeper, under a lane raised 4 cm (Black Knight Sword of Rage): the launcher stays where the nominal one is
+   t.glassBottom = n.glassBottom + 0.04f;
+   t.launcherLift = 0.04f;
+   const Fit fit(n, t);
+   CHECK(fit.LauncherOffset(n.plunger[0])[2] == doctest::Approx(0.f).epsilon(1e-4));
+   t.launcherLift = 1.f; // Higher than the glass is deep: limited to it
+   CHECK(Fit(n, t).GetTable().launcherLift == doctest::Approx(t.glassBottom));
+}
+
 TEST_CASE("Launcher: a spring plunger in front of the manual plunger, a button for the automatic ones")
 {
    SUBCASE("Manual plunger only")

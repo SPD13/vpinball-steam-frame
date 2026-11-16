@@ -58,6 +58,7 @@ struct Table
    float lockbarTop = 0.f;
    float glassBottom = 0.f;
    float topAngle = 0.f; // Degrees, of the top edge of the sides to the playfield: 0 for the model's (DefaultCabinet raises it along the table's own side rails)
+   float launcherLift = 0.f; // Height above the playfield of the surface the table's plunger stands on (a raised shooter lane), to which the launcher lines up
 };
 
 class Fit

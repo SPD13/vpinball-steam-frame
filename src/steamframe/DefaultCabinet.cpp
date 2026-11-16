@@ -150,7 +150,10 @@ bool GetShownBounds(IEditable* part, Vertex3Ds& lo, Vertex3Ds& hi)
    return lo.x <= hi.x;
 }
 
-PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float k)
+// 'lift': the height of the surface the table's plunger stands on, above the playfield (VPU, 0 when it stands on the playfield). The playfield
+// lies that much deeper than in a real cabinet, so that a raised shooter lane is where the playfield of a real one is, in line with the
+// launcher (Black Knight Sword of Rage's lane stands on a wall 4 cm high, along the right side up to the front).
+PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float k, float lift, const string& liftedBy)
 {
    const float rise = (nominal.lockbarTop - nominal.zFrontTop) * k; // Lockbar top above the top edge of the sides, at the front
    const float modelAngle = atan2f(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - ANGTORAD(nominal.slope);
@@ -167,7 +170,8 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
    std::array<float, kSlices> highest;
    std::array<string, kSlices> partOf;
    highest.fill(-FLT_MAX);
-   PlayfieldDepth best { nominal.glassBottom * k };
+   const float base = nominal.glassBottom * k + lift;
+   PlayfieldDepth best { base, 0.f, liftedBy };
    for (IEditable* part : table->GetParts())
    {
       vector<vec3> points;
@@ -262,7 +266,7 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
    for (float angle = modelAngle; angle <= kMaxAngle + 1e-4f; angle += ANGTORAD(0.1f))
    {
       const float tanTop = tanf(angle);
-      PlayfieldDepth candidate { nominal.glassBottom * k, angle == modelAngle ? 0.f : RADTOANG(angle) };
+      PlayfieldDepth candidate { base, angle == modelAngle ? 0.f : RADTOANG(angle), liftedBy };
       for (int i = 0; i < kSlices; i++)
       {
          if (highest[i] == -FLT_MAX)
@@ -388,13 +392,33 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
    geometry.playfieldLength = (table->m_bottom - table->m_top) / k;
    geometry.slope = table->GetPlayfieldSlope();
    geometry.lockbarTop = table->m_groundToLockbarHeight / k;
+   // The launcher, from the plungers of the table
+   std::vector<CF::PlungerPart> plungers;
+   std::vector<Plunger*> plungerParts;
+   for (IEditable* part : table->GetParts())
+      if (part->GetItemType() == eItemPlunger)
+      {
+         Plunger* const plunger = static_cast<Plunger*>(part);
+         plungers.push_back({ (plunger->m_d.m_v.x - m_centerX) / k, plunger->m_d.m_autoPlunger });
+         plungerParts.push_back(plunger);
+      }
+   const CF::LauncherChoice choice = CF::ChooseLauncher(plungers);
+   m_launcher = choice.launcher;
+   for (size_t i = 0; i < plungers.size(); i++)
+      if (m_launcher == CF::Launcher::Spring && !plungers[i].autoPlunger && choice.x && plungers[i].x == *choice.x)
+         m_plunger = plungerParts[i];
+   // The surface the plunger pulled by the player stands on (at most 8 cm above the playfield)
+   float lift = 0.f;
+   if (m_plunger && !m_plunger->m_d.m_szSurface.empty())
+      lift = std::clamp(table->GetSurfaceHeight(m_plunger->m_d.m_szSurface, m_plunger->m_d.m_v.x, m_plunger->m_d.m_v.y), 0.f, 0.08f * k);
    // The depth of the playfield under the lockbar, for the VR spaces (and the desktop view of the cabinet) too
-   const PlayfieldDepth depth = GetPlayfieldDepth(table, nominal, k);
+   const PlayfieldDepth depth = GetPlayfieldDepth(table, nominal, k, lift, lift > 0.f ? m_plunger->m_d.m_szSurface : string());
    table->m_cabinetGlassBottomHeight = depth.depth;
    PLOGI << "[DefaultCabinet] Playfield " << depth.depth / k << " m under the lockbar (table glass " << table->m_glassBottomHeight / k << " m), top edge "
          << (depth.topAngle > 0.f ? std::to_string(depth.topAngle) + " degrees to it" : "of the model"s) << (depth.raisedBy.empty() ? ""s : ", for '" + depth.raisedBy + '\'');
    geometry.glassBottom = depth.depth / k;
    geometry.topAngle = depth.topAngle;
+   geometry.launcherLift = lift / k;
    vector<IEditable*> toHide = depth.desktopSides;
    toHide.insert(toHide.end(), depth.desktopFront.begin(), depth.desktopFront.end());
    for (IEditable* part : toHide)
@@ -424,21 +448,6 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          AddSideBlade(static_cast<Surface*>(hidden.part), sideTop, tanf(topAngle));
    const Fit fit(nominal, geometry);
 
-   // The launcher, from the plungers of the table
-   std::vector<CF::PlungerPart> plungers;
-   std::vector<Plunger*> plungerParts;
-   for (IEditable* part : table->GetParts())
-      if (part->GetItemType() == eItemPlunger)
-      {
-         Plunger* const plunger = static_cast<Plunger*>(part);
-         plungers.push_back({ (plunger->m_d.m_v.x - m_centerX) / k, plunger->m_d.m_autoPlunger });
-         plungerParts.push_back(plunger);
-      }
-   const CF::LauncherChoice choice = CF::ChooseLauncher(plungers);
-   m_launcher = choice.launcher;
-   for (size_t i = 0; i < plungers.size(); i++)
-      if (m_launcher == CF::Launcher::Spring && !plungers[i].autoPlunger && choice.x && plungers[i].x == *choice.x)
-         m_plunger = plungerParts[i];
    const float launcherX = CF::LauncherX(choice, fit, nominal);
    // The speaker panel: a 16:9 full DMD screen when the PinUP Player pack draws one, the 4:1 DMD window otherwise
    m_fullDMD = CabinetDisplays::DrawsFullDMD(table);
