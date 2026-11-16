@@ -29,6 +29,7 @@ Fit::Fit(const Nominal& nominal, const Table& table)
    // The top edge keeps its angle to the playfield (the glass flares toward the back the same way), or takes the one asked for
    const float modelAngle = std::atan2(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - nominal.slope * kDegToRad;
    m_table.topAngle = table.topAngle > 0.f ? std::clamp(table.topAngle, 0.f, 10.f) : modelAngle / kDegToRad;
+   m_table.launcherLift = std::clamp(table.launcherLift, 0.f, m_table.glassBottom);
    m_tanTop = std::tan((m_table.slope + m_table.topAngle) * kDegToRad);
 }
 
@@ -92,12 +93,12 @@ Point Fit::RigidOffset(const Point& anchor) const
 Point Fit::LauncherOffset(float x) const
 {
    const Point& a = m_nominal.plunger;
-   // The rod stays at the same depth under the table's playfield as under the nominal one, on the front panel, above the legs, under the
-   // lip of the lockbar
+   // The rod stays at the same depth under the table's playfield (or the raised surface its plunger stands on) as under the nominal one,
+   // on the front panel, above the legs, under the lip of the lockbar
    const float depth = (m_nominal.lockbarTop - m_nominal.glassBottom) - a[2];
    const float frontTop = m_nominal.zFrontTop + HeightShift();
    const float low = std::max(m_nominal.zBottom + HeightShift() + 0.06f, m_nominal.legTop + HeightShift() + 0.03f);
-   const float z = std::clamp(m_table.lockbarTop - m_table.glassBottom - depth, low, std::max(low, frontTop - 0.04f));
+   const float z = std::clamp(m_table.lockbarTop - m_table.glassBottom + m_table.launcherLift - depth, low, std::max(low, frontTop - 0.04f));
    return { x - a[0], MapY(a[1]) - a[1], z - a[2] };
 }
 
