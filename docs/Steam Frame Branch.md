@@ -714,6 +714,22 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   (the model's `vpx_display` parts, `full` or `dmd`), chosen when the table loads by `CabinetDisplays::DrawsFullDMD`: the pack the script
   names (`PupPacks`) draws its screen 5 in the score view, by the plugin's rules (`PupPackOptions::DrawsFullDMD`; a screen 5 positioned in
   the backglass, as Aladdin's, does not count). Logged `[DefaultCabinet] Speaker panel: ...`.
+- **Desktop display (2026-11-15).** Some desktop tables draw their DMD with flashers of their own beside the playfield, placed for the
+  desktop view, and use FlexDMD only in cabinet mode (JP Salas' framework: 40 `digitNNN` flashers on `digitgrid`, about 1 m left of the
+  playfield, turned 43 to 50 degrees: *Pulp Fiction*, *Big Lebowski*). In a headset the display floated beside the cabinet and the DMD
+  window stayed black. `FindDesktopDisplay` (at load) looks for it: flashers in flasher mode beside the playfield (10 % of its width out
+  of either side; the backbox parts of VR tables stand behind it), turned the same way (0.5 degree) and linked within 150 VPU, the
+  largest group, of 8 parts at 8 places at least (not a stack of glows), standing up toward the viewer (not lying flat). It maps the
+  group's plane onto the window (its axes and depth, scaled to fit 94 % of the width or 88 % of the height, its back part 1 VPU in front of
+  the window), turned over when its back faced the desktop view. `UpdateDesktopDisplay` (each frame) moves it there
+  (`Flasher::PlaceOnCabinet`, fork method: drag points and rendered vertices scaled and moved, rotation and height of the window, part
+  group of the cabinet) once the script has run 60 frames, while a part of it is visible and the window's external renderers drew nothing
+  for 60 renders (`Flasher::m_extRenderEmptyRenders`, fork member: no FlexDMD, PinMAME or B2S display there). If a renderer starts drawing
+  in the window, the display goes back to its place for the rest of the session; `Remove` puts it back too. A table whose script turns to
+  FlexDMD in VR hides the digits itself and is left alone, so the recipes `big-lebowski-vr-dmd` and `pulp-fiction-vr-dmd` stay: FlexDMD
+  draws brighter. Logged `[DefaultCabinet] Desktop display: 42 flashers ('digit041'...), 768 x 202 VPU ...` and `Desktop display moved
+  into the DMD window`. Library survey (Frame, 2026-11-15, script `cluster.py` of the test hooks): only JP's digit displays match, and 3
+  hidden VR parts (Dungeons and Dragons' backglass LEDs: they would only move when shown with nothing in the window).
 - **Backglass name.** B2S only loads `<table>.directb2s` or `<folder>.directb2s`, and downloads seldom have that name: when a `.vpx` or a
   `.directb2s` is uploaded to a table folder holding one of each, and the backglass matches neither name, the web server renames it
   `<table>.directb2s` (`Cabinet::MatchDirectB2SName`, from `WebServer::Upload`; logged `Backglass ... renamed ... after its table`).

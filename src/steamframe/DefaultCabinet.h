@@ -44,6 +44,11 @@ class IEditable;
 // window of the speaker panel: a 4:1 DMD window, or a 16:9 full DMD screen when the table's PinUP Player pack draws one there
 // (CabinetDisplays::DrawsFullDMD).
 //
+// A desktop table that draws its display with flashers of its own beside the playfield (JP Salas' tables: 40 digit flashers on a grid,
+// to the left of the playfield for the desktop view), and uses FlexDMD only in cabinet mode, would show it floating outside the cabinet
+// and leave the DMD window black. Such a display (FindDesktopDisplay) moves into the DMD window while nothing else draws there and it is
+// shown, and goes back to its place if a renderer starts drawing in the window (MoveDesktopDisplay).
+//
 // The room chosen for the lobby (the game room by default, none for the empty room) is added around it, in the room space: its parts are
 // moved from the lobby room's table (src/assets/lobby-*.vpx, steamframe/lobby-room) to the played one. Passthrough leaves it out.
 //
@@ -89,6 +94,9 @@ private:
    Window GetWindow(const std::vector<float>& corners, const VPX::CabinetFit::Fit& fit) const;
    Flasher* CreateFlasher(const Window& w, int window, const std::string& name);
    void AddSideBlade(class Surface* wall, float sideTop, float tanTop);
+   void FindDesktopDisplay();
+   void UpdateDesktopDisplay();
+   void MoveDesktopDisplay(bool intoWindow);
    Material* GetMaterial(const struct cgltf_data* data, const struct cgltf_material* material, const std::string& folder, std::string& image, float& unlit);
 
    enum class Role { None, PlungerRod, PlungerSpring, LaunchButton, FlipperLeft, FlipperRight, StartButton };
@@ -114,6 +122,21 @@ private:
    std::vector<HiddenPart> m_hiddenParts; // The side walls of the desktop table, shown again at the end of the session
    Window m_backglassWindow, m_displayWindow;
    Flasher* m_displayFlasher = nullptr;
+   // The display a desktop table draws with flashers beside the playfield, and where its parts go in the DMD window
+   struct DesktopDisplayPart
+   {
+      Flasher* flasher;
+      PartGroup* group; // Its own part group, back when it leaves the window
+      Vertex2D center; // Its place
+      float height, rotX, rotY, rotZ;
+      Vertex2D windowCenter; // Its place in the window
+      float windowHeight;
+   };
+   std::vector<DesktopDisplayPart> m_desktopDisplay;
+   float m_desktopDisplayScale = 1.f;
+   float m_desktopDisplayRotX = 0.f; // Of its flashers in the window
+   enum class DesktopDisplayState { Outside, InWindow, Back } m_desktopDisplayState = DesktopDisplayState::Outside;
+   int m_updates = 0;
    bool m_hidImplicitBackglass = false; // The implicit VR backglass, replaced by the one of the backbox
    std::vector<std::pair<const struct cgltf_material*, Material*>> m_materialMap;
    std::vector<std::pair<Material*, std::string>> m_materialImages;

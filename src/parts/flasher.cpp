@@ -1281,7 +1281,11 @@ void Flasher::Render(const unsigned int renderMask)
       {
 #if defined(VPX_STEAM_FRAME)
          if (!m_desktopBackdrop && RenderCabinetDisplay(pos)) // The displays of PinUP Player on the cabinet (src/steamframe/CabinetDisplays.cpp)
+         {
+            m_extRenderEmptyRenders = 0;
             break;
+         }
+         m_extRenderEmptyRenders++; // Reset below when a renderer draws
 #endif
          // Render style is the window to embed (Playfield can not be embedded), which we repair as needed as it
          // can end up out of range when the render mode is changed without touching the render style
@@ -1333,7 +1337,12 @@ void Flasher::Render(const unsigned int renderMask)
          }
          for (auto &renderer : g_pplayer->m_ancillaryWndRenderers[wndId])
             if (renderer.Render(context, renderer.context))
+            {
+#if defined(VPX_STEAM_FRAME)
+               m_extRenderEmptyRenders = 0;
+#endif
                break;
+            }
          break;
       }
       }
