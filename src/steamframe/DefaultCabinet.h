@@ -25,8 +25,8 @@ class IEditable;
 // generic art, built by steamframe/vr-cabinet (src/assets/vr-cabinet: a glTF file and its textures).
 //
 // When the table session starts, before the parts are set up for rendering, the cabinet is added to the played table as parts of its
-// own: primitives in two part groups placed in the VR cabinet spaces (the legs in the 'cabinet feet' space, which stretches them to the
-// floor), with their images and materials. They are fitted to the table (CabinetFit: playfield width, length and slope, lockbar height,
+// own: primitives in a part group of the playfield space (built upright, then placed as the former cabinet space placed them, see
+// m_cabinetToPlayfield), with their images and materials. They are fitted to the table (CabinetFit: playfield width, length and slope, lockbar height,
 // playfield depth under the lockbar) and removed at the end of the session; the table file never sees them.
 //
 // The playfield lies as deep under the lockbar as in a real cabinet (PinTable::m_cabinetGlassBottomHeight, for the VR spaces), not at
@@ -35,7 +35,9 @@ class IEditable;
 // So is the lockbar of a desktop table, across the front edge and above the top of the cabinet's lockbar.
 // When the table's plunger stands on a raised surface (a shooter lane on a wall), the playfield lies that much deeper, and the launcher
 // rod comes out in line with the table's plunger rod. When a wall across the width marks the back of a desktop table's playfield, the
-// cabinet is fitted to the playfield up to that wall, and the wall is hidden when it stands above the cabinet.
+// cabinet is fitted to the playfield up to that wall, and the wall, when it stands above the cabinet, is cut along its top edge like the
+// side blades. A playfield longer than the nominal one first reaches the front of the backbox, then makes the body longer (Stern's 45"
+// playfields in a body about as long as a WPC's). The small parts left floating above the cabinet next to a hidden side are hidden too.
 //
 // The ball launcher matches the table (CabinetFit::ChooseLauncher): a spring plunger in front of the table's manual plunger, or a launch
 // button when it only has automatic plungers. The plunger rod follows the table's plunger, the buttons move when pressed.
@@ -81,7 +83,7 @@ public:
    const Window& GetBackglassWindow() const { return m_backglassWindow; }
    const Window& GetDisplayWindow() const { return m_displayWindow; }
    Flasher* GetDisplayFlasher() const { return m_displayFlasher; } // The table's score view (DMD, segments), hidden while PinUP Player shows its DMD there
-   // The part group in the VR cabinet space: the windows are in its coordinates, so the displays placed on them must join it
+   // The part group of the cabinet (in the playfield space): the displays placed on its windows join it
    PartGroup* GetCabinetGroup() const { return m_cabinetGroup; }
 
 private:
@@ -109,7 +111,11 @@ private:
 
    Player* const m_player;
    PartGroup* m_cabinetGroup = nullptr;
-   PartGroup* m_feetGroup = nullptr;
+   // The cabinet is built upright, Z up from the floor (the coordinates of the cabinet space, before upstream merged it into the playfield
+   // space, cca3bd8c8), then placed in the playfield space with this transform (see Attach)
+   Matrix3D m_cabinetToPlayfield;
+   float m_cabinetToPlayfieldRotX = 0.f; // Its rotation, around X, in degrees
+   Vertex3Ds CabinetToPlayfield(const Vertex3Ds& p) const { return m_cabinetToPlayfield * p; }
    std::vector<IEditable*> m_parts; // Everything added to the table (groups included)
    std::vector<Texture*> m_images;
    std::vector<Material*> m_materials;

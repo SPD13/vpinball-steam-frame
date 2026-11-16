@@ -23,6 +23,9 @@
 #include "steamframe/Passthrough.h"
 #include "ui/VPXFileFeedback.h"
 
+#if !defined(ENABLE_XR)
+#define CGLTF_IMPLEMENTATION // Otherwise in VRControllerModels.cpp, which is built with OpenXR only
+#endif
 #include "cgltf/cgltf.h"
 #include <array>
 #include <nlohmann/json.hpp>
@@ -67,6 +70,8 @@ Nominal ReadNominal(const nlohmann::json& json)
    get("z_front_top", n.zFrontTop);
    get("y_flat", n.yFlat);
    get("z_back_top", n.zBackTop);
+   get("y_back", n.yBack);
+   get("wall", n.wall);
    get("fit_x_keep", n.fitXKeep);
    get("fit_x_side", n.fitXSide);
    get("fit_y_front", n.fitYFront);
@@ -89,6 +94,7 @@ struct PlayfieldDepth
    string raisedBy;
    vector<IEditable*> desktopSides; // To hide
    vector<IEditable*> desktopFront; // To hide too: the lockbar of the desktop table
+   vector<IEditable*> desktopAttached; // To hide too: parts of the desktop sides, left floating above the cabinet
    float backY = 0.f; // Where the playfield ends at the back: the table's top, or the front face of its back wall
    IEditable* backWall = nullptr;
    bool hideBackWall = false; // Above the top edge of the cabinet there
@@ -145,7 +151,10 @@ bool GetShownBounds(IEditable* part, Vertex3Ds& lo, Vertex3Ds& hi)
       vector<RenderVertex> outline;
       wall->m_curve.GetRgVertex(outline);
       for (const RenderVertex& v : outline)
+      {
+         add(v.x, v.y, wall->m_d.m_heightbottom);
          add(v.x, v.y, wall->m_d.m_heighttop);
+      }
       break;
    }
    default: return false;
@@ -292,6 +301,29 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
    }
    best.depth = min(best.depth, table->m_glassBottomHeight);
 
+   // The parts held by the hidden side walls or rails (Black Knight Sword of Rage's plate on top of its right rail, 20 cm above the playfield):
+   // within 10 cm of one, they would float above the top edge of the cabinet. Hidden when entirely above it.
+   const float tanEdge = tanf(best.topAngle > 0.f ? ANGTORAD(best.topAngle) : modelAngle);
+   const auto edgeAt = [&](float y) { return best.depth - rise + (table->m_bottom - y) * tanEdge; };
+   vector<std::pair<Vertex3Ds, Vertex3Ds>> sideBounds;
+   for (IEditable* side : best.desktopSides)
+      if (Vertex3Ds lo, hi; GetShownBounds(side, lo, hi))
+         sideBounds.emplace_back(lo, hi);
+   const float near = 0.10f * k;
+   for (IEditable* part : table->GetParts())
+   {
+      Vertex3Ds lo, hi;
+      if (std::ranges::find(best.desktopSides, part) != best.desktopSides.end() || !GetShownBounds(part, lo, hi) || lo.z < edgeAt(lo.y) + margin
+         || hi.z > best.depth + 0.5f * k)
+         continue;
+      for (const auto& [slo, shi] : sideBounds) // All of it next to the side (not a VR room part reaching over it)
+         if (lo.x >= slo.x - near && hi.x <= shi.x + near && lo.y >= slo.y - near && hi.y <= shi.y + near)
+         {
+            best.desktopAttached.push_back(part);
+            break;
+         }
+   }
+
    // The back wall of a desktop table: a thin wall across the whole width near the back, standing well above the playfield (Black Knight Sword of
    // Rage's, 19 cm high, 10 cm before the end of the table). What lies behind it is never seen: the playfield ends there, and the cabinet is fitted
    // to that length. Taller than the top edge of the cabinet there, it is hidden like the side walls.
@@ -306,8 +338,7 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
       {
          best.backY = hi.y;
          best.backWall = part;
-         const float tanBest = tanf(best.topAngle > 0.f ? ANGTORAD(best.topAngle) : modelAngle);
-         best.hideBackWall = hi.z > best.depth - rise + (table->m_bottom - hi.y) * tanBest - margin;
+         best.hideBackWall = hi.z > edgeAt(hi.y) - margin;
       }
    }
 
@@ -370,8 +401,10 @@ std::unique_ptr<DefaultCabinet> DefaultCabinet::Create(Player* player)
       return nullptr;
    }
    // The VR far plane was set from the table alone when it was attached: the room's far walls and the view out of its windows were cut off
+#ifdef ENABLE_XR
    if (player->m_vrDevice)
       player->m_vrDevice->UpdateSceneSize();
+#endif
    return cabinet;
 }
 
@@ -435,6 +468,16 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
    // The depth of the playfield under the lockbar, for the VR spaces (and the desktop view of the cabinet) too
    const PlayfieldDepth depth = GetPlayfieldDepth(table, nominal, k, lift, lift > 0.f ? m_plunger->m_d.m_szSurface : string());
    table->m_cabinetGlassBottomHeight = depth.depth;
+   // The cabinet into the playfield space, as the former cabinet space placed it against the playfield: down by the depth of the playfield
+   // under the lockbar, and turned back by the slope of the playfield around its bottom edge (the coordinates of the scene layout, see
+   // SceneLayout::Recompute: X centered, Y from the bottom edge toward the back)
+   {
+      const Matrix3D coords = Matrix3D::MatrixScale(1.f, -1.f, 1.f) * Matrix3D::MatrixTranslate(-0.5f * (table->m_right - table->m_left), table->m_bottom - table->m_top, 0.f);
+      m_cabinetToPlayfield = coords * Matrix3D::MatrixTranslate(0.f, 0.f, -(table->m_groundToLockbarHeight - table->GetCabinetGlassBottomHeight()))
+         * Matrix3D::MatrixRotateX(ANGTORAD(-table->GetPlayfieldSlope())) * Matrix3D::MatrixInverse(coords);
+      const Vertex3Ds up = m_cabinetToPlayfield.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 1.f, 0.f));
+      m_cabinetToPlayfieldRotX = RADTOANG(atan2f(up.z, up.y));
+   }
    PLOGI << "[DefaultCabinet] Playfield " << depth.depth / k << " m under the lockbar (table glass " << table->m_glassBottomHeight / k << " m), top edge "
          << (depth.topAngle > 0.f ? std::to_string(depth.topAngle) + " degrees to it" : "of the model"s) << (depth.raisedBy.empty() ? ""s : ", for '" + depth.raisedBy + '\'');
    geometry.glassBottom = depth.depth / k;
@@ -449,7 +492,10 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          + m_plunger->m_d.m_width) / k;
    vector<IEditable*> toHide = depth.desktopSides;
    toHide.insert(toHide.end(), depth.desktopFront.begin(), depth.desktopFront.end());
-   if (depth.hideBackWall)
+   for (IEditable* part : depth.desktopAttached)
+      if (std::ranges::find(toHide, part) == toHide.end())
+         toHide.push_back(part);
+   if (depth.hideBackWall && std::ranges::find(toHide, depth.backWall) == toHide.end())
       toHide.push_back(depth.backWall);
    for (IEditable* part : toHide)
    {
@@ -470,7 +516,8 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       const bool front = std::ranges::find(depth.desktopFront, part) != depth.desktopFront.end();
       PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: "
             << (front                     ? "the lockbar of the desktop table, above the cabinet's"
-                   : part == depth.backWall ? "the back wall of the desktop table, above the cabinet"
+                   : part == depth.backWall ? "the back wall of the desktop table, above the cabinet (its art cut along the top edge)"
+                   : std::ranges::find(depth.desktopAttached, part) != depth.desktopAttached.end() ? "floating above the cabinet, by a hidden side of the desktop table"
                                             : "a side of the desktop table, taller than the cabinet");
    }
    // The art of the walls (Metallica's side blades), cut along the top edge of the sides
@@ -478,7 +525,7 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
    const float sideTop = depth.depth - (nominal.lockbarTop - nominal.zFrontTop) * k - 0.002f * k;
    for (const HiddenPart& hidden : m_hiddenParts)
       if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible && std::ranges::find(depth.desktopFront, hidden.part) == depth.desktopFront.end()
-         && hidden.part != depth.backWall)
+         && std::ranges::find(depth.desktopAttached, hidden.part) == depth.desktopAttached.end())
          AddSideBlade(static_cast<Surface*>(hidden.part), sideTop, tanf(topAngle));
    const Fit fit(nominal, geometry);
 
@@ -491,10 +538,9 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          << ", " << fit.GetTable().slope << ", " << fit.GetTable().lockbarTop << ", " << fit.GetTable().glassBottom << "); "
          << (m_launcher == CF::Launcher::Spring ? "spring plunger" : "launch button") << " at x " << launcherX << " m (" << plungers.size() << " plunger(s))";
 
-   // Two part groups: the cabinet, and its legs, stretched to the floor
-   m_cabinetGroup = NewGroup("SF_DefaultCabinet"s, PartGroupData::SpaceReference::SR_CABINET);
-   m_feetGroup = NewGroup("SF_DefaultCabinetFeet"s, PartGroupData::SpaceReference::SR_CABINET_FEET);
-   if (m_cabinetGroup == nullptr || m_feetGroup == nullptr)
+   // The part group of the cabinet and its legs, in the playfield space (upstream no longer stretches the legs to the floor, 047089400)
+   m_cabinetGroup = NewGroup("SF_DefaultCabinet"s, PartGroupData::SpaceReference::Playfield);
+   if (m_cabinetGroup == nullptr)
    {
       cgltf_free(data);
       return false;
@@ -593,7 +639,7 @@ void DefaultCabinet::LoadRoom()
    }
 
    PinTable* const table = m_player->m_ptable;
-   PartGroup* const group = NewGroup("SF_DefaultRoom"s, PartGroupData::SpaceReference::SR_ROOM);
+   PartGroup* const group = NewGroup("SF_DefaultRoom"s, PartGroupData::SpaceReference::Room);
    const float dx = m_centerX - 0.5f * (room->m_left + room->m_right), dy = m_bottomY - room->m_bottom;
    std::vector<std::pair<string, string>> movedImages; // Name in the room, name in the table
    std::vector<std::pair<string, string>> copiedMaterials;
@@ -734,10 +780,11 @@ void DefaultCabinet::LoadNode(const cgltf_data* data, const cgltf_node& node, co
    const bool rigid = extras.value("vpx_fit", "deform"s) == "rigid";
    const Point anchor = ReadPoint(extras, "vpx_anchor", { 0.f, 0.f, 0.f });
    const Point offset = !rigid ? Point { 0.f, 0.f, 0.f } : !variant.empty() ? fit.LauncherOffset(launcherX) : fit.RigidOffset(anchor);
-   PartGroup* const group = extras.value("vpx_space", "cabinet"s) == "feet" ? m_feetGroup : m_cabinetGroup;
+   PartGroup* const group = m_cabinetGroup; // Its legs too ("vpx_space": "feet")
    const float k = m_vpuPerMeter;
-   const auto toTable = [&](const Point& p) { return Vertex3Ds(m_centerX + p[0] * k, m_bottomY - p[1] * k, p[2] * k); };
-   const auto fitPoint = [&](const Point& p) { return rigid ? Point { p[0] + offset[0], p[1] + offset[1], p[2] + offset[2] } : fit.Deform(p); };
+   const auto toTable = [&](const Point& p) { return CabinetToPlayfield(Vertex3Ds(m_centerX + p[0] * k, m_bottomY - p[1] * k, p[2] * k)); };
+   const bool body = node.name && string(node.name) == "Body"; // Its head board and top follow the end of the playfield (Fit::DeformBody)
+   const auto fitPoint = [&](const Point& p) { return rigid ? Point { p[0] + offset[0], p[1] + offset[1], p[2] + offset[2] } : body ? fit.DeformBody(p) : fit.Deform(p); };
 
    // Outward direction of the moving part (model axes), and the point it scales from (the spring)
    Point axis = ReadPoint(extras, "vpx_axis", { 0.f, 0.f, 0.f });
@@ -817,9 +864,10 @@ void DefaultCabinet::LoadNode(const cgltf_data* data, const cgltf_node& node, co
          if (normal)
             cgltf_accessor_read_float(normal, v, n, 3);
          const float nx = world[0] * n[0] + world[4] * n[1] + world[8] * n[2], ny = world[1] * n[0] + world[5] * n[1] + world[9] * n[2], nz = world[2] * n[0] + world[6] * n[1] + world[10] * n[2];
-         out.nx = nx;
-         out.ny = -ny; // Y of the table points toward the player
-         out.nz = nz;
+         const Vertex3Ds nt = m_cabinetToPlayfield.MultiplyVectorNoTranslate(Vertex3Ds(nx, -ny, nz)); // Y of the table points toward the player
+         out.nx = nt.x;
+         out.ny = nt.y;
+         out.nz = nt.z;
          float t[2] = { 0.f, 0.f };
          if (uv)
             cgltf_accessor_read_float(uv, v, t, 2);
@@ -845,8 +893,9 @@ void DefaultCabinet::LoadNode(const cgltf_data* data, const cgltf_node& node, co
       m_parts.push_back(prim);
       if (role != Role::None)
       {
-         // Outward direction in table coordinates (Y mirrored)
-         Animated animated { prim, role, { axis[0], -axis[1], axis[2] } };
+         // Outward direction in table coordinates (Y mirrored), in the playfield space
+         const Vertex3Ds a = m_cabinetToPlayfield.MultiplyVectorNoTranslate(Vertex3Ds(axis[0], -axis[1], axis[2]));
+         Animated animated { prim, role, { a.x, a.y, a.z } };
          m_animated.push_back(animated);
       }
    }
@@ -937,7 +986,8 @@ DefaultCabinet::Window DefaultCabinet::GetWindow(const std::vector<float>& corne
    const float cx = m_centerX + 0.25f * (c[0][0] + c[1][0] + c[2][0] + c[3][0]) * k;
    const float cy = m_bottomY - 0.25f * (c[0][1] + c[1][1] + c[2][1] + c[3][1]) * k;
    const float cz = 0.25f * (c[0][2] + c[1][2] + c[2][2] + c[3][2]) * k;
-   return Window { cx, cy, cz, width, height, -90.f - lean, true };
+   const Vertex3Ds center = CabinetToPlayfield(Vertex3Ds(cx, cy, cz));
+   return Window { center.x, center.y, center.z, width, height, -90.f - lean + m_cabinetToPlayfieldRotX, true };
 }
 
 Flasher* DefaultCabinet::CreateFlasher(const Window& w, int window, const std::string& name)
@@ -1077,7 +1127,7 @@ void DefaultCabinet::MoveDesktopDisplay(bool intoWindow)
       if (intoWindow)
       {
          part.flasher->PlaceOnCabinet(s, part.windowCenter, part.windowHeight, m_desktopDisplayRotX, 0.f, 0.f);
-         part.flasher->SetPartGroup(m_cabinetGroup); // The window is in the coordinates of the VR cabinet space
+         part.flasher->SetPartGroup(m_cabinetGroup); // The window is in the coordinates of the cabinet, in the playfield space
       }
       else
       {
@@ -1182,7 +1232,7 @@ void DefaultCabinet::Remove()
    m_desktopDisplay.clear();
    // The parts that joined its groups (the displays of PinUP Player, CabinetDisplays) stay in the table: they leave them
    for (IEditable* part : table->GetParts())
-      if (part->GetPartGroup() && (part->GetPartGroup() == m_cabinetGroup || part->GetPartGroup() == m_feetGroup) && !IsOwnPart(part))
+      if (part->GetPartGroup() && part->GetPartGroup() == m_cabinetGroup && !IsOwnPart(part))
          part->SetPartGroup(nullptr);
    // Parts first (in reverse order: the groups were added first), then what they use
    for (auto it = m_parts.rbegin(); it != m_parts.rend(); ++it)
@@ -1190,7 +1240,7 @@ void DefaultCabinet::Remove()
          table->RemovePart(*it);
    m_parts.clear();
    m_animated.clear();
-   m_cabinetGroup = m_feetGroup = nullptr;
+   m_cabinetGroup = nullptr;
    for (Texture* image : m_images)
    {
       if (m_player->m_renderer)

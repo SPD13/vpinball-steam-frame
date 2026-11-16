@@ -48,7 +48,10 @@ float Fit::MapX(float x) const
 float Fit::MapY(float y) const
 {
    const float front = m_nominal.fitYFront, back = m_nominal.fitYBack;
-   const float d = m_table.playfieldLength - m_nominal.playfieldLength;
+   // The body grows with a playfield longer than the nominal one only beyond the allowance: the end of the playfield first moves closer to
+   // the backbox, up to its front, as Stern's 45" playfields fit in a body about as long as a WPC's (42"). It shrinks with a shorter one
+   const float longer = m_table.playfieldLength - m_nominal.playfieldLength;
+   const float d = longer > 0.f ? std::max(0.f, longer - m_nominal.backAllowance) : longer;
    if (y <= front)
       return y;
    if (y >= back)
@@ -82,6 +85,22 @@ Point Fit::Deform(const Point& p) const
    else // Legs: stretched for the feet to stay on the floor
       z *= (m_nominal.zBottom + HeightShift()) / m_nominal.zBottom;
    return { MapX(p[0]), y, z };
+}
+
+float Fit::HeadShift() const
+{
+   const float longer = m_table.playfieldLength - m_nominal.playfieldLength;
+   return longer > 0.f ? std::min(longer, m_nominal.backAllowance) : 0.f;
+}
+
+Point Fit::DeformBody(const Point& p) const
+{
+   Point out = Deform(p);
+   constexpr float eps = 1e-4f;
+   const float inner = m_nominal.halfWidth - m_nominal.wall;
+   if (std::fabs(p[0]) < inner - eps && p[1] >= m_nominal.yFlat - eps && p[1] < m_nominal.yBack - m_nominal.wall - eps && p[2] > m_nominal.zBottom + m_nominal.wall + eps)
+      out[1] += HeadShift();
+   return out;
 }
 
 Point Fit::RigidOffset(const Point& anchor) const

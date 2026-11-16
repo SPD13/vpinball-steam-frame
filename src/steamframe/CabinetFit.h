@@ -42,10 +42,13 @@ struct Nominal
    float zFrontTop = 0.894f; // Top edge of the body at the front ...
    float yFlat = 1.0890f; // ... rising up to there, then flat ...
    float zBackTop = 1.094f; // ... at that height
+   float yBack = 1.27f; // Back face of the body
+   float wall = 0.01905f; // Thickness of the boards of the body
    float fitXKeep = 0.175f; // Zones, see above
    float fitXSide = 0.2552f;
    float fitYFront = 0.10f;
    float fitYBack = 1.0668f;
+   float backAllowance = 0.041275f; // A longer playfield runs that much further back before the body grows: up to the front of the backbox (1.625")
    Point plunger { 0.237f, -0.0381f, 0.806f }; // Where the launchers are drawn (rod hole on the front face)
 };
 
@@ -80,6 +83,10 @@ public:
    float MapY(float y) const;
    float OuterHalfWidth() const { return MapX(m_nominal.halfWidth); } // Outside face of a side
    float HeightShift() const { return m_table.lockbarTop - m_nominal.lockbarTop; }
+   // How much further back than the nominal one the playfield ends in the body (see backAllowance), and the same point as Deform for the boards
+   // of the body, the head board and the top under the backbox moved back by that much so that the playfield reaches the front of the backbox
+   float HeadShift() const;
+   Point DeformBody(const Point& p) const;
 
 private:
    float TopZ(float y) const; // Top edge of the sides of the model

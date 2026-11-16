@@ -74,7 +74,7 @@ def nominal():
     """Figures the application needs, saved in the glTF file (extras of the scene)."""
     return {
         "playfield_width": PF_W, "playfield_length": PF_D, "slope": SLOPE, "lockbar_top": LOCKBAR_TOP, "glass_bottom": GLASS_BOTTOM,
-        "half_width": CAB_W / 2, "leg_top": LEG_TOP, "y_front": Y_FRONT, "z_bottom": Z_BOTTOM, "z_front_top": Z_FRONT_TOP, "y_flat": Y_FLAT, "z_back_top": Z_BACK_TOP,
+        "half_width": CAB_W / 2, "leg_top": LEG_TOP, "y_front": Y_FRONT, "z_bottom": Z_BOTTOM, "z_front_top": Z_FRONT_TOP, "y_flat": Y_FLAT, "z_back_top": Z_BACK_TOP, "y_back": Y_BACK, "wall": WALL,
         "fit_x_keep": FIT_X_KEEP, "fit_x_side": FIT_X_SIDE, "fit_y_front": FIT_Y_FRONT, "fit_y_back": FIT_Y_BACK,
         "plunger": [PLUNGER_X, Y_FRONT, PLUNGER_Z],
     }

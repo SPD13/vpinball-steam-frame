@@ -53,20 +53,43 @@ TEST_CASE("Cabinet fit: a longer playfield moves the back, keeps the front, and 
 {
    const Nominal n;
    Table t = NominalTable(n);
-   t.playfieldLength = n.playfieldLength + 0.0762f; // 45"
+   t.playfieldLength = n.playfieldLength + 0.0254f; // 43": up to the front of the backbox of a body as long as the nominal one
+   CHECK(Fit(n, t).MapY(1.27f) == doctest::Approx(1.27f));
+   const float grow = 0.1524f - n.backAllowance;
+   t.playfieldLength = n.playfieldLength + 0.1524f; // 48": the body grows by what is beyond the allowance
    const Fit fit(n, t);
    CHECK(fit.MapY(n.yFront) == doctest::Approx(n.yFront));
-   CHECK(fit.MapY(1.27f) == doctest::Approx(1.27f + 0.0762f)); // Back face
+   CHECK(fit.MapY(1.27f) == doctest::Approx(1.27f + grow)); // Back face
    // The front top edge stays, the back top edge rises with the longer slope
    const Point front = fit.Deform({ 0.2794f, n.yFront, n.zFrontTop });
    CHECK(front[2] == doctest::Approx(n.zFrontTop));
    const Point back = fit.Deform({ 0.2794f, n.yFlat, n.zBackTop });
    const float rise = (n.zBackTop - n.zFrontTop) / (n.yFlat - n.yFront);
-   CHECK(back[2] == doctest::Approx(n.zFrontTop + (n.yFlat + 0.0762f - n.yFront) * rise).epsilon(1e-4));
+   CHECK(back[2] == doctest::Approx(n.zFrontTop + (n.yFlat + grow - n.yFront) * rise).epsilon(1e-4));
    // The bottom stays level, and the backbox moves up as a whole
    CHECK(fit.Deform({ 0.2794f, 1.27f, n.zBottom })[2] == doctest::Approx(n.zBottom));
    const float lift = back[2] - n.zBackTop;
    CHECK(fit.Deform({ 0.f, 1.2f, 1.6f })[2] == doctest::Approx(1.6f + lift).epsilon(1e-4));
+}
+
+TEST_CASE("Cabinet fit: the head board follows a Stern playfield under the backbox")
+{
+   const Nominal n;
+   Table t = NominalTable(n);
+   t.playfieldLength = n.playfieldLength + 0.0254f; // 43": the body keeps its length...
+   const Fit fit(n, t);
+   CHECK(fit.HeadShift() == doctest::Approx(0.0254f));
+   // ... the head board and the front of the top move back with the end of the playfield, the back face and the sides stay
+   CHECK(fit.DeformBody({ 0.f, n.yFlat, n.zBackTop - 0.1f })[1] == doctest::Approx(n.yFlat + 0.0254f));
+   CHECK(fit.DeformBody({ 0.f, n.yBack, n.zBackTop - 0.1f })[1] == doctest::Approx(n.yBack));
+   CHECK(fit.DeformBody({ n.halfWidth, n.yFlat, n.zBackTop })[1] == doctest::Approx(n.yFlat));
+   // 45.6" (Black Knight Sword of Rage): the end of the playfield at the front of the backbox, the body longer by the rest
+   t.playfieldLength = n.playfieldLength + 0.0906f;
+   const Fit bk(n, t);
+   CHECK(bk.HeadShift() == doctest::Approx(n.backAllowance));
+   CHECK(bk.MapY(n.yBack) == doctest::Approx(n.yBack + 0.0906f - n.backAllowance));
+   // A nominal playfield moves nothing
+   CHECK(Fit(n, NominalTable(n)).HeadShift() == doctest::Approx(0.f));
 }
 
 TEST_CASE("Cabinet fit: a steeper table raises the back")
