@@ -527,3 +527,30 @@ recipe does, the default cabinet and its PuP displays (`VPX_CABINET_DISPLAYS=1`)
 mode, the overlay frame and the song change hint at Start, the songs' videos during the game. **To check** on the Frame.
 
 History: version 1, 2026-11-15.
+
+### <a id="big-lebowski-vr-dmd"></a>Big Lebowski (JP's style Original): DMD on the cabinet
+
+Applies to: tables whose file name contains `Big Lebowski` (checked with *big Lebowski3.6*, an Original table built on JP Salas' table
+framework, `cGameName = "Big Lebowsky"`, no ROM, shown in the default VR cabinet). Another version without the lines is reported as "not
+needed".
+
+**Symptom.** In VR the DMD floats on the left of the cabinet, beside the playfield, instead of in the DMD window of the speaker panel, which
+stays black.
+
+**Cause.** The table, not VPX. Its script, from JP Salas' framework, has two DMDs: 41 flashers (`digit001` to `digit041`, on `digitgrid`)
+placed beside the playfield for the desktop view, and a FlexDMD of 256 x 64 drawing the same characters and pictures. It picks one at its
+start: `If Table1.ShowDT = True then UseFlexDMD = False`. In VR, `ShowDT` follows the desktop/cabinet setting of the player (desktop by
+default, as upstream), and the script has no VR mode, so it keeps the desktop flashers and never starts FlexDMD, which is the source the DMD
+of the default cabinet shows. JP's tables made for VR (*DUNE*, *WildWest* in the library) use FlexDMD when `RenderingMode = 2`.
+
+**Fix.** The test becomes `If Table1.ShowDT = True And RenderingMode <> 2 then`: in VR the script uses FlexDMD. It then hides the desktop
+flashers itself (`Digits(i).Visible = False`, `digitgrid.Visible = False`), and the DMD of the cabinet shows its text and pictures. Desktop and
+cabinet modes are unchanged. Other desktop tables with the same lines without VR handling (*Bond 60th Dr.No*, *RobotInvasion*) were not
+checked and do not match.
+
+**Checked** on the Mac, 2026-11-15, the table with the script patched as the recipe does (sidecar `.vbs`), the default cabinet forced
+(`VPX_DEFAULT_CABINET=1`), desktop mode, `Standalone.RenderingModeOverride = 2` so that the script sees VR: the default cabinet is shown
+(speaker panel with its DMD window), and FlexDMD runs and draws the attract mode (`d_jppresents`, `d_title`, then the text lines). **To check**
+on the Frame.
+
+History: version 1, 2026-11-15.
