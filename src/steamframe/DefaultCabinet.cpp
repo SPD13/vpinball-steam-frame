@@ -528,6 +528,9 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       }
    }
    cgltf_free(data);
+   // A display drawn with flashers beside the playfield, for the desktop view
+   if (m_displayFlasher)
+      FindDesktopDisplay();
    // The implicit VR backglass would float above the backbox (black without a backglass to show)
    if (m_player->m_implicitVRBackglass && m_player->m_implicitVRBackglass->m_d.m_isVisible)
    {
@@ -959,8 +962,175 @@ Flasher* DefaultCabinet::CreateFlasher(const Window& w, int window, const std::s
    return flasher;
 }
 
+void DefaultCabinet::FindDesktopDisplay()
+{
+   PinTable* const table = m_player->m_ptable;
+   // Flashers beside the playfield, out of the cabinet, where a desktop view shows them (the backbox parts of a VR table stand behind it)
+   const float margin = 0.1f * (table->m_right - table->m_left);
+   std::vector<Flasher*> candidates;
+   for (IEditable* part : table->GetParts())
+   {
+      if (part->GetItemType() != eItemFlasher || IsOwnPart(part) || part->m_desktopBackdrop)
+         continue;
+      Flasher* const flasher = static_cast<Flasher*>(part);
+      if (flasher->m_d.m_renderMode != FlasherData::FLASHER)
+         continue;
+      const Vertex2D c = flasher->m_curve.GetCenter();
+      if (c.x < table->m_left - margin || c.x > table->m_right + margin)
+         candidates.push_back(flasher);
+   }
+   // Its parts: flashers turned the same way, close to each other (JP Salas' digits are 36 VPU apart, on a grid flasher)
+   const size_t n = candidates.size();
+   std::vector<size_t> root(n);
+   for (size_t i = 0; i < n; i++)
+      root[i] = i;
+   const auto find = [&root](size_t i) { while (root[i] != i) i = root[i] = root[root[i]]; return i; };
+   for (size_t i = 0; i < n; i++)
+      for (size_t j = i + 1; j < n; j++)
+      {
+         const FlasherData &a = candidates[i]->m_d, &b = candidates[j]->m_d;
+         if (fabsf(a.m_rotX - b.m_rotX) > 0.5f || fabsf(a.m_rotY - b.m_rotY) > 0.5f || fabsf(a.m_rotZ - b.m_rotZ) > 0.5f)
+            continue;
+         const Vertex2D ca = candidates[i]->m_curve.GetCenter(), cb = candidates[j]->m_curve.GetCenter();
+         const float dx = ca.x - cb.x, dy = ca.y - cb.y, dz = a.m_height - b.m_height;
+         if (dx * dx + dy * dy + dz * dz <= 150.f * 150.f)
+            root[find(i)] = find(j);
+      }
+   std::vector<size_t> count(n, 0);
+   size_t best = n;
+   for (size_t i = 0; i < n; i++)
+      if (++count[find(i)] > (best < n ? count[best] : 0))
+         best = find(i);
+   constexpr size_t kMinParts = 8; // A score display, not a few lights or shadows
+   if (best == n || count[best] < kMinParts)
+      return;
+   std::vector<Flasher*> parts;
+   std::vector<std::array<int, 3>> places; // Not a stack of glows at one place: its parts spread over it
+   for (size_t i = 0; i < n; i++)
+      if (find(i) == best)
+      {
+         parts.push_back(candidates[i]);
+         const Vertex2D c = candidates[i]->m_curve.GetCenter();
+         const std::array<int, 3> place { static_cast<int>(lroundf(c.x / 5.f)), static_cast<int>(lroundf(c.y / 5.f)), static_cast<int>(lroundf(candidates[i]->m_d.m_height / 5.f)) };
+         if (std::ranges::find(places, place) == places.end())
+            places.push_back(place);
+      }
+   if (places.size() < kMinParts)
+      return;
+
+   // Its plane: the axes of its flashers, its extent in it (their outlines) and its depth along their normal
+   const FlasherData& d0 = parts[0]->m_d;
+   const Matrix3D rot = (Matrix3D::MatrixRotateZ(ANGTORAD(d0.m_rotZ)) * Matrix3D::MatrixRotateY(ANGTORAD(d0.m_rotY))) * Matrix3D::MatrixRotateX(ANGTORAD(d0.m_rotX));
+   const Vertex3Ds u = rot.MultiplyVectorNoTranslate(Vertex3Ds(1.f, 0.f, 0.f)), v = rot.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 1.f, 0.f)),
+                   nrm = rot.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f));
+   float uMin = FLT_MAX, uMax = -FLT_MAX, vMin = FLT_MAX, vMax = -FLT_MAX, nMin = FLT_MAX, nMax = -FLT_MAX;
+   for (const Flasher* f : parts)
+   {
+      const Vertex2D c = f->m_curve.GetCenter(), lo = f->m_curve.GetMinBound(), hi = f->m_curve.GetMaxBound();
+      const Vertex3Ds p(c.x, c.y, f->m_d.m_height);
+      for (const Vertex2D& corner : { lo, hi, Vertex2D(lo.x, hi.y), Vertex2D(hi.x, lo.y) })
+      {
+         const Vertex3Ds w = p + u * (corner.x - c.x) + v * (corner.y - c.y);
+         uMin = min(uMin, w.Dot(u)); uMax = max(uMax, w.Dot(u));
+         vMin = min(vMin, w.Dot(v)); vMax = max(vMax, w.Dot(v));
+      }
+      nMin = min(nMin, p.Dot(nrm)); nMax = max(nMax, p.Dot(nrm));
+   }
+   const float width = uMax - uMin, height = vMax - vMin;
+   // A screen stands up toward the viewer: parts lying flat (lights on the floor of a room) are not one
+   if (width <= 1.f || height <= 1.f || width > 2.f * (table->m_right - table->m_left) || fabsf(nrm.z) > 0.95f)
+      return;
+
+   // The DMD window, facing the player in front of the cabinet. The display faced the desktop view, in front of the table and above it:
+   // turned over when its back was toward it, so that it still reads from the front
+   const Window& w = m_displayWindow;
+   const bool turnOver = nrm.Dot(Vertex3Ds(0.f, 1.f, 1.f)) < 0.f;
+   const float windowRotX = turnOver ? w.rotX + 180.f : w.rotX;
+   const Matrix3D windowRot = Matrix3D::MatrixRotateX(ANGTORAD(windowRotX));
+   const Vertex3Ds uw = windowRot.MultiplyVectorNoTranslate(Vertex3Ds(1.f, 0.f, 0.f)), vw = windowRot.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 1.f, 0.f)),
+                   nw = windowRot.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f));
+   m_desktopDisplayScale = std::min({ 0.94f * w.width / width, 0.88f * w.height / height, 4.f });
+   const float s = m_desktopDisplayScale;
+   // Its back part (the grid) just in front of the window, toward the player
+   const Vertex3Ds front = nw.y >= 0.f ? nw : nw * -1.f;
+   const float toFront = 0.5f * (nMax - nMin) * s + 1.f;
+   const Vertex3Ds center(w.x, w.y, w.z);
+   for (Flasher* f : parts)
+   {
+      const Vertex2D c = f->m_curve.GetCenter();
+      const Vertex3Ds p(c.x, c.y, f->m_d.m_height);
+      const float a = p.Dot(u) - 0.5f * (uMin + uMax), b = p.Dot(v) - 0.5f * (vMin + vMax), depth = p.Dot(nrm) - 0.5f * (nMin + nMax);
+      const Vertex3Ds placed = center + (uw * a + vw * b + nw * depth) * s + front * toFront;
+      m_desktopDisplay.push_back({ f, f->GetPartGroup(), c, f->m_d.m_height, f->m_d.m_rotX, f->m_d.m_rotY, f->m_d.m_rotZ, Vertex2D(placed.x, placed.y), placed.z });
+   }
+   m_desktopDisplayRotX = windowRotX;
+   PLOGI << "[DefaultCabinet] Desktop display: " << parts.size() << " flashers ('" << parts[0]->GetName() << "'...), " << width << " x " << height
+         << " VPU, turned " << d0.m_rotX << ", " << d0.m_rotY << ", " << d0.m_rotZ << " degrees" << (turnOver ? " (seen from its back)" : "")
+         << "; moves into the DMD window at " << s * 100.f << " % while nothing else draws there";
+}
+
+void DefaultCabinet::MoveDesktopDisplay(bool intoWindow)
+{
+   const float s = m_desktopDisplayScale;
+   for (const DesktopDisplayPart& part : m_desktopDisplay)
+   {
+      if (intoWindow)
+      {
+         part.flasher->PlaceOnCabinet(s, part.windowCenter, part.windowHeight, m_desktopDisplayRotX, 0.f, 0.f);
+         part.flasher->SetPartGroup(m_cabinetGroup); // The window is in the coordinates of the VR cabinet space
+      }
+      else
+      {
+         part.flasher->PlaceOnCabinet(1.f / s, part.center, part.height, part.rotX, part.rotY, part.rotZ);
+         part.flasher->SetPartGroup(part.group);
+      }
+   }
+   m_desktopDisplayState = intoWindow ? DesktopDisplayState::InWindow : DesktopDisplayState::Back;
+}
+
+void DefaultCabinet::UpdateDesktopDisplay()
+{
+   if (m_desktopDisplay.empty() || m_displayFlasher == nullptr || m_desktopDisplayState == DesktopDisplayState::Back)
+      return;
+   const bool shown = std::ranges::any_of(m_desktopDisplay, [](const DesktopDisplayPart& part) { return part.flasher->m_d.m_isVisible; });
+   // Nothing drawn in the DMD window for a while (no FlexDMD, PinMAME or backglass display), after the script's start
+   constexpr int kEmptyRenders = 60, kStartUpdates = 60;
+   const bool windowEmpty = m_displayFlasher->m_extRenderEmptyRenders >= kEmptyRenders;
+   if (m_desktopDisplayState == DesktopDisplayState::Outside && shown && windowEmpty && m_updates >= kStartUpdates)
+   {
+      MoveDesktopDisplay(true);
+      PLOGI << "[DefaultCabinet] Desktop display moved into the DMD window: nothing else draws there";
+   }
+   else if (m_desktopDisplayState == DesktopDisplayState::InWindow && m_displayFlasher->m_extRenderEmptyRenders == 0)
+   {
+      // A display renderer started drawing in the window: the desktop display goes back to its place, for the rest of the session
+      MoveDesktopDisplay(false);
+      PLOGI << "[DefaultCabinet] Desktop display back to its place: a display renderer draws in the DMD window";
+   }
+}
+
+void Flasher::PlaceOnCabinet(float scale, const Vertex2D& center, float height, float rotX, float rotY, float rotZ)
+{
+   const Vertex2D c = m_curve.GetCenter();
+   m_curve.ScalePoints(scale, scale, c);
+   m_curve.TranslatePoints(Vertex2D(center.x - c.x, center.y - c.y));
+   // The vertices set up for rendering follow (Flasher::RenderSetup), the next render uploads them turned and raised
+   for (auto& vert : m_vertices)
+   {
+      vert.x = center.x + (vert.x - c.x) * scale;
+      vert.y = center.y + (vert.y - c.y) * scale;
+   }
+   m_d.m_height = height;
+   m_d.m_rotX = rotX;
+   m_d.m_rotY = rotY;
+   m_d.m_rotZ = rotZ;
+   m_dynamicVertexBufferRegenerate = true;
+}
+
 void DefaultCabinet::Update()
 {
+   m_updates++;
+   UpdateDesktopDisplay();
    // The side walls of the desktop table stay hidden: scripts show them again with their options (Metallica's 'Side Blades')
    for (const HiddenPart& hidden : m_hiddenParts)
       switch (hidden.part->GetItemType())
@@ -1007,6 +1177,9 @@ void DefaultCabinet::Update()
 void DefaultCabinet::Remove()
 {
    PinTable* const table = m_player->m_ptable;
+   if (m_desktopDisplayState == DesktopDisplayState::InWindow)
+      MoveDesktopDisplay(false);
+   m_desktopDisplay.clear();
    // The parts that joined its groups (the displays of PinUP Player, CabinetDisplays) stay in the table: they leave them
    for (IEditable* part : table->GetParts())
       if (part->GetPartGroup() && (part->GetPartGroup() == m_cabinetGroup || part->GetPartGroup() == m_feetGroup) && !IsOwnPart(part))

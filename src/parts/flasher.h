@@ -188,6 +188,11 @@ public:
    bool m_cabinetSuppressed = false; // Not rendered: a display of PinUP Player shows in its place on the cabinet
    bool RenderCabinetDisplay(const Vertex3Ds& pos); // Renders the external renderer mode of the cabinet displays, false for the other flashers
    void SetCabinetDisplayRect(const Vertex2D& center, float width, float height);
+   // Renders in a row where its external renderer mode drew nothing (no renderer for its window): the DMD window of the default cabinet
+   int m_extRenderEmptyRenders = 0;
+   // Implemented in steamframe/DefaultCabinet.cpp: scaled around its center and moved there, with its rotation and height, rendered
+   // vertices included (a table's desktop display moved into the DMD window of the default cabinet, during play)
+   void PlaceOnCabinet(float scale, const Vertex2D& center, float height, float rotX, float rotY, float rotZ);
 #endif
 
 private:
