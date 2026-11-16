@@ -240,6 +240,22 @@
           "replace": "If Table1.ShowDT = True And RenderingMode <> 2 then ' And RenderingMode <> 2 added by the Steam Frame Edition (fix big-lebowski-vr-dmd): in VR, FlexDMD shows the DMD on the cabinet\n    UseFlexDMD = False\n"
         }
       ]
+    },
+    {
+      "id": "pulp-fiction-vr-dmd",
+      "version": 1,
+      "title": "Pulp Fiction (JP's style Original): DMD on the cabinet",
+      "symptom": "In VR the DMD floats beside the playfield, outside the cabinet, and the DMD of the cabinet stays black.",
+      "cause": "Same as Big Lebowski: the script, from JP Salas' framework, draws its DMD with flashers placed for the desktop view whenever the table is in desktop mode (Table1.ShowDT), and uses FlexDMD (shown on the cabinet's DMD) only in cabinet mode. In VR, ShowDT follows the desktop/cabinet setting, desktop by default, and the table has no VR handling.",
+      "change": "In VR (RenderingMode = 2) the script uses FlexDMD, as the VR versions of JP Salas' tables do: the flashers beside the playfield are hidden and the DMD of the cabinet shows the same text and pictures. Desktop and cabinet modes are unchanged.",
+      "doc": "pulp-fiction-vr-dmd",
+      "match": { "files": ["pulp fiction", "pulp_fiction"] },
+      "script": [
+        {
+          "find": "If Table1.ShowDT = True then\n    UseFlexDMD = False\n",
+          "replace": "If Table1.ShowDT = True And RenderingMode <> 2 then ' And RenderingMode <> 2 added by the Steam Frame Edition (fix pulp-fiction-vr-dmd): in VR, FlexDMD shows the DMD on the cabinet\n    UseFlexDMD = False\n"
+        }
+      ]
     }
   ]
 }
