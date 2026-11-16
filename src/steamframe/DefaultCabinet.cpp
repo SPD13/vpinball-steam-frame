@@ -88,7 +88,67 @@ struct PlayfieldDepth
    float topAngle = 0.f; // Degrees to the playfield, 0 for the model's
    string raisedBy;
    vector<IEditable*> desktopSides; // To hide
+   vector<IEditable*> desktopFront; // To hide too: the lockbar of the desktop table
 };
+
+// The box of what a part shows (ramps, walls, primitives), in table coordinates. False for the other parts and the hidden ones.
+bool GetShownBounds(IEditable* part, Vertex3Ds& lo, Vertex3Ds& hi)
+{
+   lo = Vertex3Ds(FLT_MAX, FLT_MAX, FLT_MAX);
+   hi = Vertex3Ds(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   const auto add = [&](float x, float y, float z)
+   {
+      lo.x = min(lo.x, x); lo.y = min(lo.y, y); lo.z = min(lo.z, z);
+      hi.x = max(hi.x, x); hi.y = max(hi.y, y); hi.z = max(hi.z, z);
+   };
+   switch (part->GetItemType())
+   {
+   case eItemPrimitive:
+   {
+      Primitive* const primitive = static_cast<Primitive*>(part);
+      if (!primitive->m_d.m_visible || primitive == g_pplayer->m_implicitPlayfieldMesh)
+         return false;
+      const Matrix3D& transform = primitive->RecalculateMatrices();
+      for (const Vertex3D_NoTex2& v : primitive->m_mesh.m_vertices)
+      {
+         const vec3 p = transform * vec3(v.x, v.y, v.z);
+         add(p.x, p.y, p.z);
+      }
+      break;
+   }
+   case eItemRamp:
+   {
+      const Ramp* const ramp = static_cast<Ramp*>(part);
+      if (!ramp->m_d.m_visible)
+         return false;
+      const float walls = max(ramp->m_d.m_leftwallheightvisible, ramp->m_d.m_rightwallheightvisible);
+      int count = 0;
+      float* heights = nullptr;
+      const Vertex2D* const edges = ramp->GetRampVertex(count, &heights, nullptr, nullptr, nullptr, HIT_SHAPE_DETAIL_LEVEL, true);
+      for (int i = 0; i < count; i++)
+      {
+         add(edges[i].x, edges[i].y, heights[i] + walls);
+         add(edges[count * 2 - 1 - i].x, edges[count * 2 - 1 - i].y, heights[i] + walls);
+      }
+      delete[] edges;
+      delete[] heights;
+      break;
+   }
+   case eItemSurface:
+   {
+      const Surface* const wall = static_cast<Surface*>(part);
+      if (!wall->m_d.m_sideVisible && !wall->m_d.m_topBottomVisible)
+         return false;
+      vector<RenderVertex> outline;
+      wall->m_curve.GetRgVertex(outline);
+      for (const RenderVertex& v : outline)
+         add(v.x, v.y, wall->m_d.m_heighttop);
+      break;
+   }
+   default: return false;
+   }
+   return lo.x <= hi.x;
+}
 
 PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float k)
 {
@@ -224,6 +284,20 @@ PlayfieldDepth GetPlayfieldDepth(PinTable* table, const Nominal& nominal, float 
       }
    }
    best.depth = min(best.depth, table->m_glassBottomHeight);
+
+   // The lockbar of a desktop table: a part across the front edge of the playfield, about as wide as the table, standing above the top of
+   // the cabinet's lockbar (Black Knight Sword of Rage's, 0.12 m over it, for the view on a screen). The cabinet has its own. The parts
+   // further in front, or much higher, belong to a VR room.
+   const float frontIn = 0.10f * k, frontOut = 0.15f * k, sideOut = 0.15f * k, tallest = 0.5f * k;
+   for (IEditable* part : table->GetParts())
+   {
+      Vertex3Ds lo, hi;
+      if (!GetShownBounds(part, lo, hi) || lo.y < table->m_bottom - frontIn || hi.y > table->m_bottom + frontOut || lo.x < table->m_left - sideOut
+         || hi.x > table->m_right + sideOut || hi.x - lo.x < 0.5f * (table->m_right - table->m_left))
+         continue;
+      if (hi.z > best.depth + margin && hi.z < best.depth + tallest)
+         best.desktopFront.push_back(part);
+   }
    return best;
 }
 
@@ -321,7 +395,9 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
          << (depth.topAngle > 0.f ? std::to_string(depth.topAngle) + " degrees to it" : "of the model"s) << (depth.raisedBy.empty() ? ""s : ", for '" + depth.raisedBy + '\'');
    geometry.glassBottom = depth.depth / k;
    geometry.topAngle = depth.topAngle;
-   for (IEditable* part : depth.desktopSides)
+   vector<IEditable*> toHide = depth.desktopSides;
+   toHide.insert(toHide.end(), depth.desktopFront.begin(), depth.desktopFront.end());
+   for (IEditable* part : toHide)
    {
       // Hidden only: they still hold the ball in
       HiddenPart hidden { part };
@@ -337,13 +413,14 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       else if (part->GetItemType() == eItemRamp)
          static_cast<Ramp*>(part)->m_d.m_visible = false;
       m_hiddenParts.push_back(hidden);
-      PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: a side of the desktop table, taller than the cabinet";
+      const bool front = std::ranges::find(depth.desktopFront, part) != depth.desktopFront.end();
+      PLOGI << "[DefaultCabinet] '" << part->GetName() << "' hidden: " << (front ? "the lockbar of the desktop table, above the cabinet's" : "a side of the desktop table, taller than the cabinet");
    }
    // The art of the walls (Metallica's side blades), cut along the top edge of the sides
    const float topAngle = depth.topAngle > 0.f ? ANGTORAD(depth.topAngle) : atan2f(nominal.zBackTop - nominal.zFrontTop, nominal.yFlat - nominal.yFront) - ANGTORAD(nominal.slope);
    const float sideTop = depth.depth - (nominal.lockbarTop - nominal.zFrontTop) * k - 0.002f * k;
    for (const HiddenPart& hidden : m_hiddenParts)
-      if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible)
+      if (hidden.part->GetItemType() == eItemSurface && hidden.sideVisible && std::ranges::find(depth.desktopFront, hidden.part) == depth.desktopFront.end())
          AddSideBlade(static_cast<Surface*>(hidden.part), sideTop, tanf(topAngle));
    const Fit fit(nominal, geometry);
 

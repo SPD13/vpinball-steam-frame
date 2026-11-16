@@ -32,6 +32,7 @@ class IEditable;
 // The playfield lies as deep under the lockbar as in a real cabinet (PinTable::m_cabinetGlassBottomHeight, for the VR spaces), not at
 // the glass height of the table, and the sides wrap around the table's own side rails. The side walls of a desktop table, taller than any
 // cabinet, are hidden (not removed: they still hold the ball in); their art stays, on side blades cut along the top edge of the cabinet.
+// So is the lockbar of a desktop table, across the front edge and above the top of the cabinet's lockbar.
 //
 // The ball launcher matches the table (CabinetFit::ChooseLauncher): a spring plunger in front of the table's manual plunger, or a launch
 // button when it only has automatic plungers. The plunger rod follows the table's plunger, the buttons move when pressed.
