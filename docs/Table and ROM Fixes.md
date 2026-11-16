@@ -500,3 +500,30 @@ errors in 60 s. Patched: no script error, the callouts list read (520 lines, pat
 set by the script before it creates them). **To check** on the Frame.
 
 History: version 1, 2026-11-15.
+
+### <a id="led-zeppelin-pup-dmd"></a>Led Zeppelin Pinball (Original): DMD from its PuP pack
+
+Applies to: tables whose file name contains `Led Zeppelin Pinball` (checked with *Led Zeppelin Pinball 2.5*, Original Pup Design by
+Pinballfan2018, with its `.directb2s` and the PuP pack `ledzeppelin`). Another version without the line is reported as "not needed".
+
+**Symptom.** The DMD of the cabinet stays black. Without the pack, the scores show on the reels of the backglass. With the pack installed,
+they show nowhere: the backglass shows the pack's video instead of the reels.
+
+**Cause.** The table, not VPX. Its script has two modes, chosen by a constant: `HasPuP = False` (scores on the four reels of the
+`.directb2s`, music from 13 MP3 files of a `Zeppelin` music folder) and `HasPuP = True` (its PuP pack: a full DMD with the scores, videos,
+messages and the music). It ships with `False`, so it never starts its DMD. The PUP plugin still loads the pack when it is installed, from
+the name the script gives the backglass (`LedZeppelin`): the pack's backglass screen 2 then takes the backglass, but its DMD stays empty, as
+the script sends it nothing (no `B2SInit`, no labels).
+
+**Fix.** `HasPuP` is set by the script itself when the table starts: `True` when the folder of the pack (`ledzeppelin`) is in PinUP
+Player's folder (`GetRoot` of the PUP plugin, the shared `pupvideos` of the table library), `False` otherwise. With the pack, the DMD of the
+cabinet shows the pack (the attract pages, then the frame, the songs' videos and the score of the game); without it, nothing changes.
+`Scripting.FileSystemObject.FolderExists` is used, as `SubFolders` returns an empty list in VPX's script engine (so the folder name must be
+the one the script uses, `ledzeppelin`, as the pack ships).
+
+**Checked** on the Mac, 2026-11-15, the table in a scratch library with the pack in its `pinupsystem/pupvideos`, the script patched as the
+recipe does, the default cabinet and its PuP displays (`VPX_CABINET_DISPLAYS=1`): without the fix, PuP loads the pack but gets no label
+(the DMD stays black); with it, `B2SInit ledzeppelin` and 46 labels, then on the DMD of the speaker panel the high score page in attract
+mode, the overlay frame and the song change hint at Start, the songs' videos during the game. **To check** on the Frame.
+
+History: version 1, 2026-11-15.
