@@ -18,6 +18,7 @@
 #include "renderer/Texture.h"
 #include "renderer/VRDevice.h"
 #include "steamframe/CabinetBackglass.h"
+#include "steamframe/CabinetDisplays.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
 #include "ui/VPXFileFeedback.h"
@@ -362,6 +363,9 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       if (m_launcher == CF::Launcher::Spring && !plungers[i].autoPlunger && choice.x && plungers[i].x == *choice.x)
          m_plunger = plungerParts[i];
    const float launcherX = CF::LauncherX(choice, fit, nominal);
+   // The speaker panel: a 16:9 full DMD screen when the PinUP Player pack draws one, the 4:1 DMD window otherwise
+   m_fullDMD = CabinetDisplays::DrawsFullDMD(table);
+   PLOGI << "[DefaultCabinet] Speaker panel: " << (m_fullDMD ? "16:9 full DMD screen (PinUP Player pack)" : "DMD window");
    PLOGI << "[DefaultCabinet] Table " << geometry.playfieldWidth << " x " << geometry.playfieldLength << " m, slope " << geometry.slope << ", lockbar "
          << geometry.lockbarTop << " m, glass " << geometry.glassBottom << " m (used: " << fit.GetTable().playfieldWidth << " x " << fit.GetTable().playfieldLength
          << ", " << fit.GetTable().slope << ", " << fit.GetTable().lockbarTop << ", " << fit.GetTable().glassBottom << "); "
@@ -388,7 +392,7 @@ bool DefaultCabinet::Load(const std::filesystem::path& folder)
       const nlohmann::json extras = Extras(data->nodes[i].extras);
       const string role = extras.value("vpx_role", ""s);
       const auto corners = extras.find("vpx_corners");
-      if (corners == extras.end() || !corners->is_array() || corners->size() != 12)
+      if (corners == extras.end() || !corners->is_array() || corners->size() != 12 || !IsDisplayChosen(extras.value("vpx_display", ""s)))
          continue;
       const std::vector<float> c = corners->get<std::vector<float>>();
       if (role == "backglass")
@@ -598,6 +602,8 @@ void DefaultCabinet::LoadNode(const cgltf_data* data, const cgltf_node& node, co
    const nlohmann::json extras = Extras(node.extras);
    const string variant = extras.value("vpx_variant", ""s);
    if (!variant.empty() && variant != (m_launcher == CF::Launcher::Spring ? "spring" : "button"))
+      return;
+   if (!IsDisplayChosen(extras.value("vpx_display", ""s)))
       return;
    const string roleName = extras.value("vpx_role", ""s);
    const Role role = roleName == "plunger_rod" ? Role::PlungerRod : roleName == "plunger_spring" ? Role::PlungerSpring : roleName == "launch_button" ? Role::LaunchButton

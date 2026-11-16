@@ -36,6 +36,9 @@ public:
 
    // Returns nullptr if the table does not use PuP, or when not in VR (unless VPX_CABINET_DISPLAYS=1, to test on a desktop)
    static std::unique_ptr<CabinetDisplays> Create(Player* player);
+   // Whether the PinUP Player pack of the table draws its 16:9 full DMD screen in the score view (not its 4:1 DMD screen): the default
+   // cabinet then shows a 16:9 screen in its speaker panel
+   static bool DrawsFullDMD(const PinTable* table);
    explicit CabinetDisplays(Player* player);
 
    // In-game menu: the placement page, and its entry in the menu of the table (see Launcher::AddHomePageTableItems)

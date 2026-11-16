@@ -151,6 +151,14 @@ void CabinetDisplays::LoadPlacements()
 ///////////////////////////////////////////////////////////////////////////////
 // Creation
 
+bool CabinetDisplays::DrawsFullDMD(const PinTable* table)
+{
+   const PupPacks::TableUse use = PupPacks::GetTableUse(table->m_script_text);
+   const std::filesystem::path packFolder
+      = PupPacks::FindPackFolder(use.names, table->m_filename.parent_path(), g_launcher ? g_launcher->GetSharedPupVideosPath() : std::filesystem::path());
+   return !packFolder.empty() && HasFullDMDScreen(packFolder, lowerCase(table->m_script_text));
+}
+
 std::unique_ptr<CabinetDisplays> CabinetDisplays::Create(Player* player)
 {
    const char* forced = getenv("VPX_CABINET_DISPLAYS");
@@ -461,7 +469,7 @@ void CabinetDisplays::CreateSurfaces(const std::filesystem::path& packFolder, bo
       m_surfaces[Topper].flasher = CreateFlasher(Topper);
    }
 
-   // On the default cabinet, the surfaces are placed on its windows, in the coordinates of the VR cabinet space: they join its part group
+   // On the default cabinet, the surfaces are placed on its windows, in the coordinates of the cabinet: they join its part group
    PartGroup* const cabinetGroup = m_player->m_defaultCabinet ? m_player->m_defaultCabinet->GetCabinetGroup() : nullptr;
    for (int i = 0; i < SurfaceCount; i++)
       if (m_surfaces[i].flasher)

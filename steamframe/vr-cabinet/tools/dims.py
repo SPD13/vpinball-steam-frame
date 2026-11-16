@@ -42,6 +42,8 @@ BB_TRANSLITE = (9.25 * IN, 27.75 * IN)   # Backglass (translite) window
 BB_INNER_W = BB_W - 2 * WALL
 TRANSLITE_W = 26.0 * IN
 DMD_W, DMD_H = 13.5 * IN, 3.75 * IN      # Display window, centered in the speaker panel
+FULL_DMD_H = 7.0 * IN                    # Full DMD variant: a 16:9 screen (14.3") between the speakers, for PinUP Player packs drawing one
+FULL_DMD_W = FULL_DMD_H * 16 / 9
 SPEAKER_R = 2.1 * IN
 SPEAKER_X = 9.4 * IN
 

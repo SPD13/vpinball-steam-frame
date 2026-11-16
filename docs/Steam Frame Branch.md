@@ -709,6 +709,11 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   start and launch buttons move when pressed.
 - **Backbox.** The table's `.directb2s` shows in the backglass window (an external render flasher, window Backglass), otherwise the generic
   backglass art; the score view (DMD, segments) shows in the window of the speaker panel. The implicit VR backglass is hidden.
+- **Full DMD screen (2026-11-15).** A PinUP Player pack made for a 16:9 "full DMD" screen (screen 5, with its videos and labels, as
+  Led Zeppelin's or TNA's) was drawn small in the 4:1 window. The speaker panel then holds a 16:9 screen between the speakers instead
+  (the model's `vpx_display` parts, `full` or `dmd`), chosen when the table loads by `CabinetDisplays::DrawsFullDMD`: the pack the script
+  names (`PupPacks`) draws its screen 5 in the score view, by the plugin's rules (`PupPackOptions::DrawsFullDMD`; a screen 5 positioned in
+  the backglass, as Aladdin's, does not count). Logged `[DefaultCabinet] Speaker panel: ...`.
 - **Backglass name.** B2S only loads `<table>.directb2s` or `<folder>.directb2s`, and downloads seldom have that name: when a `.vpx` or a
   `.directb2s` is uploaded to a table folder holding one of each, and the backglass matches neither name, the web server renames it
   `<table>.directb2s` (`Cabinet::MatchDirectB2SName`, from `WebServer::Upload`; logged `Backglass ... renamed ... after its table`).

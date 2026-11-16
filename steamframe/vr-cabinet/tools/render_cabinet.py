@@ -1,5 +1,5 @@
 # Preview renders of the cabinet built by build_cabinet.py --blend, in a plain studio with a stand-in playfield (preview only).
-#   Blender -b <work>/cabinet.blend --python render_cabinet.py -- <out dir> <samples> [variant: spring|button] [views...]
+#   Blender -b <work>/cabinet.blend --python render_cabinet.py -- <out dir> <samples> [variant: spring|button[+dmd|full]] [views...]
 # Views: player, threequarter, side, back, plunger, door, backbox, low
 import bpy, math, os, sys
 from mathutils import Vector
@@ -10,6 +10,7 @@ import dims as D
 args = sys.argv[sys.argv.index("--") + 1:]
 out, samples = os.path.abspath(args[0]), int(args[1])
 variant = args[2] if len(args) > 2 else "spring"
+variant, display = (variant.split("+") + ["dmd"])[:2]  # Launcher, speaker panel
 views = args[3:] or ["player", "threequarter", "side", "back", "plunger"]
 os.makedirs(out, exist_ok=True)
 scene = bpy.context.scene
@@ -18,6 +19,9 @@ for o in scene.objects:
     v = o.get("vpx_variant")
     if v is not None:
         o.hide_render = v != variant
+    d = o.get("vpx_display")
+    if d is not None:
+        o.hide_render = d != display
 
 # Stand-in playfield (the table's in the application): a dark quad with a few light blobs, on the nominal slope
 mat = bpy.data.materials.new("StandInPlayfield")
@@ -93,6 +97,6 @@ for v in views:
     cam.location = eye
     cam.rotation_euler = (Vector(target) - Vector(eye)).to_track_quat("-Z", "Y").to_euler()
     cam.data.lens = lens
-    scene.render.filepath = os.path.join(out, f"{v}-{variant}.png")
+    scene.render.filepath = os.path.join(out, f"{v}-{variant}{'' if display == 'dmd' else '-' + display}.png")
     bpy.ops.render.render(write_still=True)
     print("RENDER", scene.render.filepath)
