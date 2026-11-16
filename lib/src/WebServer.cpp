@@ -625,6 +625,8 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
          else
             VPX::Cabinet::MatchDirectB2SName(path); // A backglass named after its table, whichever of the two comes first
       }
+      else if (*q != '\0')
+         g_launcher->GetTableLibrary().ExtractMusicArchive(path / UTF8ToPath(file)); // A music archive goes into the music folder of the table
 #endif
 #ifdef __LIBVPINBALL__
       if (*q == '\0' && file == "VPinballX.ini") {

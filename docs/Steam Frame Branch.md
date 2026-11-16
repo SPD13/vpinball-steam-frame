@@ -723,6 +723,15 @@ floating in the room. They get a pinball cabinet instead: a Williams WPC standar
   in play (`Config::isTableInUse`) stays. The tables already at the root are not moved: scans move nothing (the owner's Frame was migrated
   once, by hand, with a build that did). Logged `TableLibrary: Moved ... into its own folder` and `TableLibrary: Backglass ... moved along
   its table`. Tests in `tests/test-table-library.cpp`.
+- **Music archives (2026-11-15).** Archives in table folders are never extracted by the scans (ROMs stay zipped), so a music zip uploaded
+  next to its table (`Music - Aliens.zip`) stayed packed and `PlayMusic` failed. `WebServer::Upload` calls
+  `TableLibrary::ExtractMusicArchive` for every file uploaded below the root: an archive whose files are all audio (`.mp3`, `.ogg`,
+  `.wav`, `.flac`, `.m4a`, `.aac`, `.opus`, `.wma`), with readme or cover files allowed (`.txt`, `.nfo`, `.pdf`, images), is listed
+  without extracting it (`ZipUtils::ListFiles`, `Config::listArchive`), extracted in a hidden `.music-<uuid>` folder and merged into the
+  `music` folder of the table (an existing one whatever its case, as `PlayMusic` finds paths without regard to case; a top `Music/`
+  folder of the archive is not doubled; files replaced, a file never replaces a folder), then deleted. ROMs (`.bin`...), AltSound packs
+  (`.csv`) and the shared PuP folder are left alone. Logged `TableLibrary: Extracted ... music file(s) from ...`. Tests in
+  `tests/test-table-library.cpp`.
 - **Depth.** The playfield lies under the lockbar as in a real cabinet, not at the table's glass height, which desktop tables set freely
   (Metallica Remastered: 0.189 m, never set; a real machine: 3", 0.076 m): `PinTable::m_cabinetGlassBottomHeight` (fork member, used by
   `VRDevice` for the spaces, `GetDefaultPlayfieldToCabMatrix` and the performance panel; the glass, a physics part, keeps

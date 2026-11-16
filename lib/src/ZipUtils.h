@@ -18,5 +18,8 @@ public:
    // archives is given in kilobytes read from the archive.
    static bool Extract(const std::filesystem::path& sourcePath, const std::filesystem::path& destPath, ProgressCallback callback = nullptr);
    static bool IsExtractable(const std::filesystem::path& path);
+   // The files of an archive Extract supports (UTF-8 names with '/' separators, as they would be extracted: no folders, no
+   // __MACOSX entries), without extracting them. False when the archive cannot be read.
+   static bool ListFiles(const std::filesystem::path& sourcePath, std::vector<std::string>& files);
    static const std::vector<std::string>& GetExtractableExtensions(); // Lower case, without dot
 };

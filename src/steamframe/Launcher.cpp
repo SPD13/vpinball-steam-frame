@@ -121,6 +121,7 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
 #ifdef VPX_TABLE_WEBSERVER
       config.zip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Zip(source, dest, callback); };
       config.unzip = [](const std::filesystem::path& source, const std::filesystem::path& dest, VPinballLib::TableLibrary::ZipProgressCallback callback) { return ZipUtils::Extract(source, dest, callback); };
+      config.listArchive = [](const std::filesystem::path& source, std::vector<string>& files) { return ZipUtils::ListFiles(source, files); };
       config.archiveExtensions.clear();
       for (const string& ext : ZipUtils::GetExtractableExtensions()) // .zip and .vpxz, and .rar and .7z when built with libarchive
          config.archiveExtensions.push_back('.' + ext);
