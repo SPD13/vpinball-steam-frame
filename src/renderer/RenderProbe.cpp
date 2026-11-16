@@ -478,6 +478,13 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
 
    m_rendering = true;
    RenderPass* const previousRT = m_renderer->m_renderDevice->GetCurrentPass();
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: every part drawn in the probe sets the view of its space (Renderer::RenderItem), and the part showing the probe
+   // goes on drawing itself after it: it must get the view of its own space back. Without this, a playfield followed in the list of parts
+   // by parts of the cabinet or room space (the default VR cabinet, added last) computed its area of interest and was drawn with the view
+   // of the cabinet space: out of place, and with a reflection clipped to a wrong area. The playfield showed the cabinet under it.
+   const PartGroupData::SpaceReference spaceReference = m_renderer->GetActiveView()->m_mvpSpaceReference;
+#endif
    const size_t firstPass = m_renderer->m_renderDevice->GetRenderFramePasses().size();
 
    m_renderer->m_renderDevice->ResetRenderState();
@@ -622,6 +629,9 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
    }
 
    // Restore initial render states and camera
+#if defined(VPX_STEAM_FRAME)
+   m_renderer->GetActiveView()->SetSpaceReference(spaceReference, false); // SetReflection below applies it again, without the reflection
+#endif
    m_renderer->SetReflection(Matrix3D::MatrixIdentity());
    m_renderer->m_render_mask = prevRenderMask;
    s_renderingReflection = nullptr;
