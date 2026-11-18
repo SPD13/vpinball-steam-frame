@@ -51,6 +51,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Cabinet positioning mode, exclusive to this fork**: stand the cabinet against a real piece of furniture. The headset shows your room, a bar joins the two controllers with the lockbar drawn on it, and the lockbar follows them as you hold them on a real edge, a desk or a shelf; a press fixes the cabinet there, for every table. The cabinet keeps its size, and it can't be fixed outside the play area set in SteamVR: the lockbar turns orange near its edge and red outside ([see below](#cabinet-position)).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **PinOne pinball controller**: by USB, or over Bluetooth in its Xbox mode, read directly with Steam Input on; **Set PinOne mapping** in its page under **Controllers** maps its flippers, magna-saves, buttons, plunger and nudge in one step. No pop-up offers a layout when a controller connects, so a mapping made by hand stays as it is ([PinOne pinball controller](#pinone-pinball-controller)).
+- **Vibrations on the controller that started the game**: when several controllers are connected (the VR controllers and a pinball controller), only the one you pressed Start on vibrates (**Controllers** > *Send vibrations to the controller used to start the game*, on by default).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
 
@@ -392,6 +393,8 @@ The PinOne pinball controller (Cleveland Software Design) works in the game by U
 2. Select **Set PinOne mapping**. It replaces every mapping of that controller with the layout below.
 
 **Set default mapping**, on the same page, applies the game's generic gamepad layout instead (flippers on the triggers, magna-saves on the shoulder buttons), which does not suit the PinOne. The game no longer offers a layout in a pop-up when a controller connects, so a mapping you made by hand stays as it is. Mappings are the same for every table.
+
+With the PinOne and the VR controllers both connected, only the controller you press Start on vibrates (in Xbox mode, the PinOne turns the vibrations into its solenoid outputs 1 and 2). To make every controller vibrate, turn off **Send vibrations to the controller used to start the game** in **Controllers**.
 
 ### The PinOne mapping
 

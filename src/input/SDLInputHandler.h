@@ -14,6 +14,7 @@
 #endif
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/ControllerLayouts.h"
+#include "steamframe/Vibrations.h"
 #endif
 
 
@@ -63,6 +64,11 @@ public:
       {
          Uint16 lowFreq = (Uint16)(GamepadMotorLevel(lowFrequencySpeed, kickLow) * 65535.0f);
          Uint16 highFreq = (Uint16)(GamepadMotorLevel(highFrequencySpeed, kickHigh) * 65535.0f);
+#if defined(VPX_STEAM_FRAME)
+         if (lowFreq != 0 || highFreq != 0) // Stopping is always sent
+            if (const auto it = m_joystickIds.find(SDL_GetJoystickID(joy)); it != m_joystickIds.end() && !VPX::Vibrations::ShouldVibrate(it->second))
+               continue; // Only the controller that started the game vibrates
+#endif
          SDL_RumbleJoystick(joy, lowFreq, highFreq, ms_duration);
       }
 

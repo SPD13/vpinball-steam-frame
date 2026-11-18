@@ -5,6 +5,9 @@
 #if defined(VPX_STEAM_FRAME_HEADSET)
 #include "steamframe/SteamInputGamepads.h"
 #endif
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/Vibrations.h"
+#endif
 
 #include <sstream>
 
@@ -273,7 +276,11 @@ void InputAction::SuppressCompletedBindings(uint32_t deviceAndButtonId, const st
          binding.suppressed = true;
 }
 
+#if defined(VPX_STEAM_FRAME)
+void InputAction::OnInputChanged(ButtonMapping* mapping)
+#else
 void InputAction::OnInputChanged(ButtonMapping*)
+#endif
 {
    const bool wasPressed = m_isPressed;
    m_isPressed = false;
@@ -301,6 +308,10 @@ void InputAction::OnInputChanged(ButtonMapping*)
 
    if (m_isPressed != wasPressed)
    {
+#if defined(VPX_STEAM_FRAME)
+      if (m_isPressed && mapping) // The controller that pressed Start gets the vibrations
+         VPX::Vibrations::OnActionPressed(m_settingId, mapping->GetDeviceId(), m_eventManager->GetDeviceSettingId(mapping->GetDeviceId()));
+#endif
       m_lastOnChangeUs = usec();
       if (m_eventManager->OnInputActionStateChanged(this))
          m_onStateChange(*this, wasPressed, m_isPressed);

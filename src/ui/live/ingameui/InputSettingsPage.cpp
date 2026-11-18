@@ -44,6 +44,12 @@ void InputSettingsPage::BuildPage()
       Settings::m_propPlayer_RumbleMode, //
       [this]() { return m_player->m_pininput.IsRumbleFeedbackEnabled() ? 3 : 0; }, //
       [this](int, int v) { m_player->m_pininput.EnableRumbleFeedback(v == 3); }));
+#if defined(VPX_STEAM_FRAME) // See src/steamframe/Vibrations.h
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_RumbleStartController, //
+      []() { return g_settingsService.GetAppSettings().GetPlayer_RumbleStartController(); }, //
+      [](bool v) { g_settingsService.GetAppSettings().SetPlayer_RumbleStartController(v, false); }));
+#endif
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayer_RumbleFlipperContact, 1.f, "%3.2f"s, //
       [this]() { return m_player->m_pininput.GetFlipperContactRumbleStrength(); }, //

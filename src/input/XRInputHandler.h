@@ -16,6 +16,7 @@
 
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/XRInputLabels.h"
+#include "steamframe/Vibrations.h"
 #endif
 
 
@@ -273,6 +274,10 @@ public:
          }
          return;
       }
+#if defined(VPX_STEAM_FRAME)
+      if (!VPX::Vibrations::ShouldVibrate(m_joyId))
+         return; // Only the controller that started the game vibrates (stopping is always sent, above)
+#endif
       XrHapticVibration vibration { XR_TYPE_HAPTIC_VIBRATION };
       vibration.amplitude = amplitude;
       vibration.duration = static_cast<XrDuration>(ms_duration) * 1000000LL;

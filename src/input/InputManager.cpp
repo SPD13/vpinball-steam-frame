@@ -15,6 +15,7 @@
 #ifdef VPX_STEAM_FRAME
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
+#include "steamframe/Vibrations.h"
 #include "steamframe/vrui/UpdateCheck.h"
 #endif
 
@@ -38,6 +39,9 @@ InputManager::InputManager(Player* player, Settings& appSettings)
    , m_keyboardDeviceId(RegisterDevice("Key"s, InputManager::DeviceType::Keyboard, "Keyboards"s)) // Base device: merge inputs from all connected keyboards
    , m_mouseDeviceId(RegisterDevice("Mouse"s, InputManager::DeviceType::Mouse, "Mouse"s)) // Base device: merge inputs from all connected mice
 {
+#if defined(VPX_STEAM_FRAME)
+   VPX::Vibrations::Reset(); // A new table: no controller started its game yet
+#endif
    const Settings& settings = m_appSettings;
 
    m_inputDevices[m_keyboardDeviceId].m_connected = true;

@@ -33,6 +33,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
 - **Controller layouts in the controller's page** (Controllers > the controller): *Set default mapping* and, for Xbox pads and the PinOne's USB controller, *Set PinOne mapping* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
+- **Vibrations on the controller that started the game** (Controllers > *Send vibrations to the controller used to start the game*, on by default): only the controller whose button pressed Start vibrates, instead of every connected one (the VR controllers and a pinball controller together). Until Start is pressed on the table, all controllers vibrate (section 35).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution (section 12, `docs/Image Quality on the Steam Frame.md`).
 - **Scores and leaderboards**: the score of every game played on a library table is recorded automatically, for the player chosen in the lobby ("Player: <name>"), with a result screen (rank, personal best, table record) when the lobby comes back, a Scores tab with the leaderboard of each table, the 10 best scores in each table's page, and a Scores page in the browser to filter, reassign, delete or clear scores (with confirmation) and manage the players (section 14, `docs/Table Scores and Leaderboards.md`).
@@ -837,6 +838,23 @@ The USB axis order assumes SDL numbers the axes X, Y, Z, Rx, Ry whatever the rep
 Files: `src/steamframe/ControllerLayouts.h/.cpp` (new), `src/input/SDLInputHandler.h`, `src/input/InputManager.cpp`,
 `src/ui/live/ingameui/InputDevicePage.cpp`, `steamframe/steamframe.cmake`.
 
+## 35. Vibrations on the controller that started the game (2026-11-17)
+
+Upstream sends every vibration (flipper hits, bumpers, slingshots, plunger, nudge, ball collisions) to all the controllers: the gamepads
+through SDL (`SDLInputHandler::PlayRumble`) and the VR controllers through OpenXR (`XRInputHandler::PlayRumble`). With a PinOne and the VR
+controllers connected, both vibrated, which confused the player (the PinOne also turns the vibrations of its Xbox mode into its solenoid
+outputs).
+
+`Player.RumbleStartController` (Controllers > *Send vibrations to the controller used to start the game*, on by default, fork builds)
+records the device whose binding pressed the Start action (`InputAction::OnInputChanged`, which receives the binding that changed), and the
+two handlers then start vibrations on that device only: one SDL controller, or the VR controllers (both hands: one device for VPX).
+Stopping a vibration is always sent to all. Until Start is pressed on the table (attract mode, a table started otherwise), all controllers
+vibrate as before; Start pressed on the keyboard leaves none vibrating. The record is cleared when a table starts (`InputManager` is made
+again for each table). Logged: `Vibrations: the game was started from '<device>'`.
+
+Files: `src/steamframe/Vibrations.h/.cpp` (new), `src/input/InputAction.cpp`, `src/input/InputManager.cpp`, `src/input/SDLInputHandler.h`,
+`src/input/XRInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`, `src/core/Settings_properties.inl`, `steamframe/steamframe.cmake`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -936,6 +954,8 @@ src/steamframe/SteamInputGamepads.h
 src/steamframe/SteamInputGamepads.cpp   the controllers Steam Input takes over read directly on the Frame (section 33)
 src/steamframe/ControllerLayouts.h
 src/steamframe/ControllerLayouts.cpp    controller layouts in the controller's page, PinOne layout (section 34)
+src/steamframe/Vibrations.h
+src/steamframe/Vibrations.cpp           vibrations on the controller that started the game (section 35)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md
