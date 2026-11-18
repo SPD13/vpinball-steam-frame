@@ -612,6 +612,7 @@ private:
       }
 #if defined(VPX_STEAM_FRAME)
       VPX::ControllerLayouts::OnJoystickAdded(m_pininput, deviceId, joystick); // The PinOne layout offered in the controller's page
+      VPX::Vibrations::OnJoystickAdded(deviceId, joystick); // A PinOne driven by DOF gets no physics vibrations by default
 #endif
    }
 

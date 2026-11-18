@@ -1053,6 +1053,81 @@ TEST_CASE("TableLibrary: imported PinUP Player packs are left as uploaded when a
 }
 
 
+TEST_CASE("TableLibrary: the DOF Config Tool's files go where libdof reads them")
+{
+   Fixture f;
+   TableLibrary::Config config = f.Config();
+   config.listArchive = [](const fs::path& source, std::vector<string>& files) {
+      files.clear();
+      FILE* const pipe = popen(("unzip -Z1 '" + source.string() + "'").c_str(), "r");
+      if (!pipe)
+         return false;
+      char line[1024];
+      while (fgets(line, sizeof(line), pipe)) {
+         string name(line);
+         while (!name.empty() && (name.back() == '\n' || name.back() == '\r'))
+            name.pop_back();
+         if (!name.empty() && name.back() != '/' && name.rfind("__MACOSX", 0) != 0)
+            files.push_back(name);
+      }
+      return pclose(pipe) == 0;
+   };
+   {
+      // Without the folder, nothing is taken
+      TableLibrary library(config);
+      Fixture::Touch(f.tables / "directoutputconfig11.ini");
+      CHECK(!library.ImportDofConfig(f.tables / "directoutputconfig11.ini"));
+      CHECK(fs::exists(f.tables / "directoutputconfig11.ini"));
+      fs::remove(f.tables / "directoutputconfig11.ini");
+   }
+   const fs::path dof = f.root / "pref" / "directoutputconfig";
+   config.dofConfigPath = dof;
+   TableLibrary library(config);
+
+   // A file uploaded at the root of the tables folder, replacing the one there
+   Fixture::Touch(dof / "directoutputconfig11.ini", "old");
+   Fixture::Touch(f.tables / "directoutputconfig11.ini", "new");
+   CHECK(library.ImportDofConfig(f.tables / "directoutputconfig11.ini"));
+   CHECK(!fs::exists(f.tables / "directoutputconfig11.ini"));
+   CHECK(Fixture::Read(dof / "directoutputconfig11.ini") == "new");
+
+   // The Config Tool's zip, uploaded into a table folder: extracted, its folders flattened, and deleted
+   Fixture::Touch(f.tables / "Led" / "Led.vpx");
+   Fixture::Touch(f.root / "src1" / "config" / "directoutputconfig30.ini", "30");
+   Fixture::Touch(f.root / "src1" / "config" / "ledcontrol.ini", "led");
+   Fixture::Touch(f.root / "src1" / "config" / "directoutputshapes.png");
+   Fixture::Touch(f.root / "src1" / "readme.txt");
+   Fixture::MakeZip(f.root / "src1", f.tables / "Led" / "directoutputconfig.zip");
+   CHECK(library.ImportDofConfig(f.tables / "Led" / "directoutputconfig.zip"));
+   CHECK(!fs::exists(f.tables / "Led" / "directoutputconfig.zip"));
+   CHECK(Fixture::Read(dof / "directoutputconfig30.ini") == "30");
+   CHECK(Fixture::Read(dof / "ledcontrol.ini") == "led");
+   CHECK(fs::exists(dof / "directoutputshapes.png"));
+   CHECK(!fs::exists(dof / "config"));
+
+   // Other files and archives are left alone: tables, ROMs, an ini of another kind, an archive with a table in it
+   Fixture::Touch(f.tables / "Led" / "settings.ini");
+   Fixture::Touch(f.root / "src2" / "u18.bin");
+   Fixture::MakeZip(f.root / "src2", f.tables / "Led" / "afm_113b.zip");
+   Fixture::Touch(f.root / "src3" / "directoutputconfig11.ini");
+   Fixture::Touch(f.root / "src3" / "Led.vpx");
+   Fixture::MakeZip(f.root / "src3", f.tables / "bundle.zip");
+   Fixture::Touch(f.root / "src4" / "readme.txt");
+   Fixture::MakeZip(f.root / "src4", f.tables / "readme.zip");
+   CHECK(!library.ImportDofConfig(f.tables / "Led" / "settings.ini"));
+   CHECK(!library.ImportDofConfig(f.tables / "Led" / "afm_113b.zip"));
+   CHECK(!library.ImportDofConfig(f.tables / "bundle.zip"));
+   CHECK(!library.ImportDofConfig(f.tables / "readme.zip"));
+   CHECK(fs::exists(f.tables / "Led" / "settings.ini"));
+   CHECK(fs::exists(f.tables / "Led" / "afm_113b.zip"));
+   CHECK(fs::exists(f.tables / "bundle.zip"));
+   CHECK(fs::exists(f.tables / "readme.zip"));
+
+   // No scratch folder left
+   for (const auto& entry : fs::directory_iterator(f.tables / "Led"))
+      CHECK(entry.path().filename().string()[0] != '.');
+}
+
 TEST_CASE("TableLibrary: the ROMs and packs of uploaded bundles go where PinMAME and PinUP Player look for them")
 {
    Fixture f;

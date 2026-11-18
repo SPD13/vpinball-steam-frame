@@ -456,7 +456,7 @@ fi
 # build libdof
 #
 
-LIBDOF_EXPECTED_SHA="${LIBDOF_SHA}"
+LIBDOF_EXPECTED_SHA="${LIBDOF_SHA}-pinonexbox1" # Steam Frame Edition: -pinonexbox1 for the patches of steamframe/patches/libdof
 LIBDOF_FOUND_SHA="$([ -f libdof/cache.txt ] && cat libdof/cache.txt || echo "")"
 
 if [ "${LIBDOF_EXPECTED_SHA}" != "${LIBDOF_FOUND_SHA}" ]; then
@@ -470,6 +470,7 @@ if [ "${LIBDOF_EXPECTED_SHA}" != "${LIBDOF_FOUND_SHA}" ]; then
    tar xzf libdof-${LIBDOF_SHA}.tar.gz
    mv libdof-${LIBDOF_SHA} libdof
    cd libdof
+   for p in ../../../../../steamframe/patches/libdof/*.patch; do patch -p1 --forward < "$p"; done # Steam Frame Edition: PinOne in its Bluetooth Xbox mode (DOF vendor report)
    ./platforms/linux/aarch64/external.sh
    cmake \
       -DPLATFORM=linux \

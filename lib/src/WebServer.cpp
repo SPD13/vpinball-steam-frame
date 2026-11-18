@@ -618,6 +618,10 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
       }
       std::filesystem::remove(stagingPath, ec); // Only succeeds when no other transfer is pending
 #ifdef VPX_STEAM_FRAME
+      if (g_launcher->GetTableLibrary().ImportDofConfig(path / UTF8ToPath(file))) { // The DOF Config Tool's files go where libdof reads them
+         SetLastUpdate();
+         return;
+      }
       g_launcher->GetTableLibrary().OnFileAdded(file); // It may be a missing ROM
       if (extension_from_path(file) == "vpx" || extension_from_path(file) == "directb2s") {
          if (*q == '\0')

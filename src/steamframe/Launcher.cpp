@@ -101,6 +101,7 @@ VPinballLib::TableLibrary& Launcher::GetTableLibrary()
       // The PinUP Player packs of the tables, for the 'PuP' tag of the table picker: the shared folder, or the one the user defined
       const string pupFolder = g_settingsService.GetAppSettings().GetString(GetPupFolderPropId());
       config.sharedPupVideosPath = (pupFolder.empty() ? config.tablesPath / "pinupsystem" : std::filesystem::path(pupFolder)) / "pupvideos";
+      config.dofConfigPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "directoutputconfig"); // Where libdof looks (DOF plugin, empty DOFPath)
       config.readPupUse = [](const std::filesystem::path& tablePath)
       {
          const PupPacks::TableUse use = PupPacks::GetTableUse(PupPacks::ReadTableScript(tablePath));
@@ -373,7 +374,8 @@ static bool HasVRWord(const string& lowerName)
 
 static bool IsVRPartGroup(const string& name, PartGroupData::SpaceReference space, unsigned int mask)
 {
-   if (space == PartGroupData::SpaceReference::SR_ROOM || space == PartGroupData::SpaceReference::SR_CABINET || space == PartGroupData::SpaceReference::SR_CABINET_FEET
+   // The room, or the room of a table saved before upstream renumbered the spaces (3, cca3bd8c8; its 2, the cabinet feet, is the room now)
+   if (space == PartGroupData::SpaceReference::Room || static_cast<int>(space) == 3
       || ((mask & PartGroupData::PMVM_VIRTUAL_REALITY) && !(mask & PartGroupData::PMVM_DESKTOP)))
       return true;
    const string lowerName = lowerCase(name);
@@ -506,7 +508,7 @@ bool Launcher::ReadMadeForVR(const std::filesystem::path& tablePath)
 
    struct Group
    {
-      PartGroupData::SpaceReference space = PartGroupData::SpaceReference::SR_PLAYFIELD;
+      PartGroupData::SpaceReference space = PartGroupData::SpaceReference::Inherit;
       unsigned int mask = PartGroupData::PMVM_ALL;
       string parent;
    };
@@ -966,7 +968,16 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
             table->RemovePart(part);
       }
    }
-   else if (!isLobbyRoom)
+   else if (isLobbyRoom)
+   {
+      // The lobby rooms are written by vpxtool (steamframe/lobby-room) with the numbers of the spaces from before upstream renumbered them
+      // (cca3bd8c8, 2026-11-15): their room space, 3 then, is out of range now and PartGroup::Load resets it to Inherit, the playfield space.
+      // All their part groups are in the room space.
+      for (IEditable* part : table->GetParts())
+         if (part->GetItemType() == ItemTypeEnum::eItemPartGroup)
+            static_cast<PartGroup*>(part)->m_d.m_spaceReference = PartGroupData::SpaceReference::Room;
+   }
+   else
    {
       // Parts hold a reference on their group, so groups go last
       for (const bool removeGroups : { false, true })
@@ -1015,7 +1026,7 @@ static void BuildLobby(PinTable* table, const Launcher::LobbyRoom* room, bool is
    // The floor lies in the room space, which in VR is the real world: z = 0 is the ground, without the playfield inclination
    PartGroup* floorGroup = static_cast<PartGroup*>(EditableRegistry::CreateAndInit(ItemTypeEnum::eItemPartGroup, table, 0, 0));
    floorGroup->SetName("LobbyRoom"s);
-   floorGroup->m_d.m_spaceReference = PartGroupData::SpaceReference::SR_ROOM;
+   floorGroup->m_d.m_spaceReference = PartGroupData::SpaceReference::Room;
    table->AddPart(floorGroup);
 
    // Two shades, as a uniform floor gives no sense of distance

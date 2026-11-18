@@ -52,6 +52,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
 - **PinOne pinball controller**: by USB, or over Bluetooth in its Xbox mode, read directly with Steam Input on; **Set PinOne mapping** in its page under **Controllers** maps its flippers, magna-saves, buttons, plunger and nudge in one step. No pop-up offers a layout when a controller connects, so a mapping made by hand stays as it is ([PinOne pinball controller](#pinone-pinball-controller)).
 - **Vibrations on the controller that started the game**: when several controllers are connected (the VR controllers and a pinball controller), only the one you pressed Start on vibrates (**Controllers** > *Send vibrations to the controller used to start the game*, on by default).
+- **DOF feedback on the PinOne**: the table drives the PinOne's outputs (solenoids, shaker, knocker, lights) through DOF, by USB, or over Bluetooth while the PinOne stays an Xbox controller; upload your DOF Config Tool files from a browser ([PinOne pinball controller](#dof-feedback)).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
 
@@ -415,6 +416,16 @@ With the PinOne and the VR controllers both connected, only the controller you p
 | Accelerometer | Left stick | X and Y axes | Nudge |
 
 The table follows the PinOne's default settings. If you changed which button sends what in the PinOne's configuration tool (its **Controller** screen for the Xbox mode), map the changed buttons by hand in the controller's page.
+
+### DOF feedback
+
+The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, button lights) through DOF (DirectOutput), as on a cabinet: by USB, or over Bluetooth while the PinOne stays an Xbox controller.
+
+1. **Make your DOF configuration** on the [DOF Config Tool](https://configtool.vpuniverse.com): under **My Account**, add the device **PinOne**, assign your toys to its outputs, then generate the configuration and download its zip.
+2. **Upload the zip** from a browser, like a table (turn **Wi-Fi upload** on in the table picker and open the address it shows), into any folder. The game recognizes it and moves its files to the `directoutputconfig` folder of its settings, where DOF reads them; a later upload replaces them. Backups include them, with the settings.
+3. **Over Bluetooth**, the PinOne needs a firmware with its Bluetooth DOF channel (not in a published PinOne release yet). After updating the firmware, remove the PinOne from the Frame's Bluetooth devices and pair it again, as the Frame keeps the old description of its controls.
+
+DOF is on by default (**Plugins** > **DOF**). While DOF drives the PinOne, the game's vibrations are not sent to it, so its rumble outputs only fire with the table; to get both, turn on **Send vibrations to a controller driven by DOF** in **Controllers**.
 
 ## How to patch a broken table?
 

@@ -94,6 +94,8 @@ public:
       // the tables (they are also looked for in a 'pupvideos' folder along each table)
       std::function<PupUse(const std::filesystem::path& tablePath)> readPupUse;
       std::filesystem::path sharedPupVideosPath;
+      // Optional: the folder libdof reads the DOF Config Tool files from ('directoutputconfig' in the preference folder), for ImportDofConfig
+      std::filesystem::path dofConfigPath;
       // Optional: whether a table has a VR room or cabinet, read from its file when its script is read (see Launcher::ReadMadeForVR)
       std::function<bool(const std::filesystem::path& tablePath)> readMadeForVR;
       // Imported packs get their VR layout when they have one, as a PinUP Player user would run its option (see PupPackOptions::ApplyRecommended)
@@ -141,6 +143,11 @@ public:
    // is not doubled) and the archive is deleted. Other archives are left alone: ROMs must stay zipped, AltSound packs have a csv. Called
    // by the web server for the archives uploaded below the root of the tables folder. Returns true when the archive was extracted.
    bool ExtractMusicArchive(const std::filesystem::path& archive);
+   // The DOF Config Tool's files ('directoutputconfig11.ini', or its zip), uploaded anywhere in the tables folder: libdof reads them from
+   // Config::dofConfigPath, so they are moved there (an archive is extracted, its folders flattened, and deleted), replacing the files of
+   // the same name. An archive is taken when it holds only .ini, .xml, .png and readme files, one of them a directoutputconfig or
+   // ledcontrol ini. Called by the web server for every upload. Returns true when the file was taken.
+   bool ImportDofConfig(const std::filesystem::path& file);
 
    // Same, on a worker thread, for callers that must not block like a UI: poll IsScanning/GetRevision for the outcome.
    // A request made while a scan is running triggers another scan afterward, so that no change is missed.

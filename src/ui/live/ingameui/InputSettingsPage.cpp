@@ -49,6 +49,10 @@ void InputSettingsPage::BuildPage()
       Settings::m_propPlayer_RumbleStartController, //
       []() { return g_settingsService.GetAppSettings().GetPlayer_RumbleStartController(); }, //
       [](bool v) { g_settingsService.GetAppSettings().SetPlayer_RumbleStartController(v, false); }));
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_RumbleDofController, //
+      []() { return g_settingsService.GetAppSettings().GetPlayer_RumbleDofController(); }, //
+      [](bool v) { g_settingsService.GetAppSettings().SetPlayer_RumbleDofController(v, false); }));
 #endif
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayer_RumbleFlipperContact, 1.f, "%3.2f"s, //

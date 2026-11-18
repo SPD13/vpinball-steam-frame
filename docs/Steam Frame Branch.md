@@ -34,6 +34,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
 - **Controller layouts in the controller's page** (Controllers > the controller): *Set default mapping* and, for Xbox pads and the PinOne's USB controller, *Set PinOne mapping* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
 - **Vibrations on the controller that started the game** (Controllers > *Send vibrations to the controller used to start the game*, on by default): only the controller whose button pressed Start vibrates, instead of every connected one (the VR controllers and a pinball controller together). Until Start is pressed on the table, all controllers vibrate (section 35).
+- **DOF feedback on the PinOne** (2026-11-18, not yet tested on hardware): the table drives the PinOne's outputs through DOF over USB, or over Bluetooth in its Xbox mode with a PinOne firmware that has the DOF channel; the DOF plugin is on by default; the DOF Config Tool's files are uploaded from a browser (section 36).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution (section 12, `docs/Image Quality on the Steam Frame.md`).
 - **Scores and leaderboards**: the score of every game played on a library table is recorded automatically, for the player chosen in the lobby ("Player: <name>"), with a result screen (rank, personal best, table record) when the lobby comes back, a Scores tab with the leaderboard of each table, the 10 best scores in each table's page, and a Scores page in the browser to filter, reassign, delete or clear scores (with confirmation) and manage the players (section 14, `docs/Table Scores and Leaderboards.md`).
@@ -854,6 +855,46 @@ again for each table). Logged: `Vibrations: the game was started from '<device>'
 
 Files: `src/steamframe/Vibrations.h/.cpp` (new), `src/input/InputAction.cpp`, `src/input/InputManager.cpp`, `src/input/SDLInputHandler.h`,
 `src/input/XRInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`, `src/core/Settings_properties.inl`, `steamframe/steamframe.cmake`.
+
+## 36. DOF feedback on the PinOne (2026-11-18, not yet tested on hardware)
+
+VPX already had DOF: table scripts' `DOF` calls (B2S plugin) and PinMAME's solenoids, GI and lamps
+(`plugins/plugins/B2SPluginEventStream.cpp`) reach `plugins/dof/DOFPlugin.cpp`, which feeds libdof. libdof maps them to outputs with
+the DOF Config Tool's files and, since its pin `3d0ad20a` (upstream bump fb51459f, PR vpinball/libdof#80 by the PinOne's author),
+drives the PinOne Ultra over USB: hidapi, `39F5:9208`, vendor collection usage page `0xFF00` usage 1, report 6, 9-byte bank frames
+`[0, 200+bank, v0..v6]` (63 outputs). Over Bluetooth in its Xbox mode the PinOne only took the Xbox rumble report, and libdof had no
+Bluetooth path.
+
+- **PinOne firmware** (branch `feature/ble-xbox-dof` of `vp_vr/PinOne`, on top of PR philipellisis/PinOne#9, not yet published): the
+  Xbox report map gets a second top-level collection after the stock one, with the USB channel's usage page, usage and report ID (6),
+  as a 9-byte output report written without response, taking the USB frames. A real Xbox pad has no such collection. Bluetooth frames
+  (this report, and the combined profile's feature report 3, converted) are queued from the NimBLE host task and applied by
+  `Communication` on the output task like USB frames (light show suppressed, values DOF already set skipped; before, the combined
+  profile kept a single 8-byte buffer that the next write overwrote). Also the Xbox rumble's strong motor read from data[3], as hosts
+  send it. Hosts must re-pair once (they cache the report map).
+- **libdof**: `steamframe/patches/libdof/01-pinone-ble-xbox-mode.patch`, applied by `platforms/linux-*/external.sh` (cache suffix
+  `-pinonexbox1`): `PinOneHidCommunication::FindDevices` also enumerates `045E:0B13` with that collection, `PinOneHidDevice` writes
+  10-byte reports (ID + frame) to it, and `PinOne::ConnectToController` takes the reopened device's ids from `hid_get_device_info`.
+  The same `PinOne` controller, outputs and LedWiz 11 numbering, so DOF configs made for the USB PinOne work unchanged. Upstream
+  candidate (libdof keeps 1:1 with C# DirectOutput: the C# side is the PinOne author's DirectOutput fork).
+- **VPX**: the DOF plugin is on by default in the fork (`Plugin.DOF.Enable`, `Settings_properties.inl`); the DOF Config Tool's files
+  (`directoutputconfig*.ini`, `ledcontrol*.ini`, or a zip of them with `.png`/`.xml`/readme files) uploaded anywhere in the tables
+  folder are moved to `<preferences>/directoutputconfig/`, where libdof looks without `GlobalConfig_B2SServer.xml`
+  (`TableLibrary::ImportDofConfig`, called by `WebServer` for every upload; test in `tests/test-table-library.cpp`); backups hold
+  that folder with the settings (`Backup.cpp`). A controller libdof drives (a wired PinOne, or an Xbox pad whose HID device has the
+  vendor collection, matched by serial) gets no physics vibrations unless `Player.RumbleDofController` is on (Controllers, *Send
+  vibrations to a controller driven by DOF*), so the rumble outputs don't fire with both the table and the physics
+  (`Vibrations::OnJoystickAdded`).
+
+To check on the hardware: libdof finds the Bluetooth PinOne (`vpinball.log`), a table's DOF fires the mapped outputs with an acceptable
+delay, the Xbox pad still works with Steam on the Frame and on Windows (the extra collection), the strong/weak motors, whether SDL's
+hidapi reports the vendor collection and the serial on the Frame (vibration filter), and whether the USB PinOne's vendor hidraw node
+needs a udev rule.
+
+Files: `src/steamframe/TableLibrary.h/.cpp`, `src/steamframe/Launcher.cpp`, `lib/src/WebServer.cpp`, `src/steamframe/Backup.cpp`,
+`src/steamframe/Vibrations.h/.cpp`, `src/input/SDLInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`,
+`src/core/Settings_properties.inl`, `platforms/linux-aarch64/external.sh`, `platforms/linux-x64/external.sh`,
+`steamframe/patches/libdof/` (new), `tests/test-table-library.cpp`.
 
 ## Effects on existing builds
 

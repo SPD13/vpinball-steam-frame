@@ -1041,6 +1041,75 @@ bool TableLibrary::ExtractMusicArchive(const fs::path& archive)
    return true;
 }
 
+namespace {
+
+// 'directoutputconfig11.ini', 'ledcontrol.ini' (the DOF Config Tool's files, as libdof looks for them)
+bool IsDofIniName(const string& name)
+{
+   const string lower = ToLower(name);
+   return lower.ends_with(".ini") && (lower.starts_with("directoutputconfig") || lower.starts_with("ledcontrol"));
+}
+
+}
+
+bool TableLibrary::ImportDofConfig(const fs::path& file)
+{
+   if (m_config.dofConfigPath.empty() || IsHidden(file) || !IsInsideTables(file)) // Anywhere in the tables folder, its root included
+      return false;
+   std::error_code ec;
+   if (IsDofIniName(file.filename().string())) {
+      fs::create_directories(m_config.dofConfigPath, ec);
+      fs::rename(file, m_config.dofConfigPath / file.filename(), ec);
+      if (ec) {
+         fs::copy_file(file, m_config.dofConfigPath / file.filename(), fs::copy_options::overwrite_existing, ec);
+         if (!ec)
+            fs::remove(file, ec);
+      }
+      Log(ec ? LogLevel::Error : LogLevel::Info, (ec ? "Failed to move the DOF config file " : "Moved the DOF config file ") + file.filename().string() + " to " + m_config.dofConfigPath.string());
+      return !ec;
+   }
+   if (!m_config.listArchive || !m_config.unzip || !IsArchive(file))
+      return false;
+   static const std::set<string> allowedExtensions { ".ini", ".xml", ".png", ".txt", ".md", ".pdf" };
+   std::vector<string> entries;
+   if (!m_config.listArchive(file, entries))
+      return false;
+   bool hasDofIni = false;
+   for (const string& entry : entries) {
+      const size_t slash = entry.rfind('/');
+      const string name = slash == string::npos ? entry : entry.substr(slash + 1);
+      if (name.empty() || name[0] == '.')
+         continue;
+      if (!allowedExtensions.contains(EntryExtension(entry)))
+         return false;
+      hasDofIni |= IsDofIniName(name);
+   }
+   if (!hasDofIni)
+      return false;
+
+   const fs::path tempFolder = file.parent_path() / (".dof-" + GenerateUUID({}));
+   fs::create_directories(tempFolder, ec);
+   if (ec || !m_config.unzip(file, tempFolder, nullptr)) {
+      Log(LogLevel::Error, "Failed to extract the DOF config archive " + file.string());
+      fs::remove_all(tempFolder, ec);
+      return false;
+   }
+   fs::create_directories(m_config.dofConfigPath, ec);
+   int moved = 0;
+   for (auto it = fs::recursive_directory_iterator(tempFolder, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+      std::error_code fileEc;
+      if (IsHidden(it->path()) || !it->is_regular_file(fileEc))
+         continue;
+      fs::copy_file(it->path(), m_config.dofConfigPath / it->path().filename(), fs::copy_options::overwrite_existing, fileEc);
+      if (!fileEc)
+         moved++;
+   }
+   fs::remove_all(tempFolder, ec);
+   fs::remove(file, ec);
+   Log(LogLevel::Info, "Extracted " + std::to_string(moved) + " DOF config file(s) from " + file.filename().string() + " into " + m_config.dofConfigPath.string());
+   return true;
+}
+
 void TableLibrary::OrganizeRootFile(std::vector<Table>& tables, const fs::path& file)
 {
    std::error_code ec;

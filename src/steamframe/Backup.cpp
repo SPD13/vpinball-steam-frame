@@ -49,6 +49,9 @@ constexpr std::pair<const char*, Item> PREF_FILES[] = {
    { "profiles.json", Item::Scores },
 };
 
+// The DOF Config Tool's files, in the settings folder where libdof reads them (see TableLibrary::ImportDofConfig), with the settings
+constexpr const char* DOF_CONFIG_FOLDER = "directoutputconfig";
+
 // Merged into what the device has (see WebServerBackup.cpp)
 constexpr const char* MERGED_ENTRIES[] = {
    MANIFEST_NAME,
@@ -367,6 +370,9 @@ public:
          }
          Add(file, item, "pref", name, {}, true);
       }
+      Walk(m_roots.pref / DOF_CONFIG_FOLDER, "pref", nullptr, [this](const fs::path& file, const string& relative) {
+         Add(file, Item::Settings, "pref", string(DOF_CONFIG_FOLDER) + '/' + relative, {}, true);
+      });
    }
 
 private:
@@ -950,7 +956,8 @@ std::optional<fs::path> GetRestorePath(const Roots& roots, const string& zipPath
    if (!parsedItem || root == nullptr)
       return std::nullopt;
    // Only the files of the settings folder that backups hold
-   if (parts[1] == "pref" && (parts.size() != 3 || std::none_of(std::begin(PREF_FILES), std::end(PREF_FILES), [&parts](const auto& file) { return parts[2] == file.first; })))
+   const bool dofConfig = parts[1] == "pref" && parts.size() >= 4 && parts[2] == DOF_CONFIG_FOLDER;
+   if (parts[1] == "pref" && !dofConfig && (parts.size() != 3 || std::none_of(std::begin(PREF_FILES), std::end(PREF_FILES), [&parts](const auto& file) { return parts[2] == file.first; })))
       return std::nullopt;
    string relative;
    for (size_t i = 2; i < parts.size(); i++)
