@@ -51,13 +51,22 @@ Before `SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD)` (the only place
 variable. SDL then opens the physical controllers, as it does when Steam Input is disabled for VPX. The log says so once:
 `Steam Input: reading directly the N controller types Steam asked to ignore ...`.
 
-- Steam's virtual pads are still opened, and SDL gives each the name and the ids of the controller it stands for. Seen on the Frame
-  (2026-11-17): the PinOne as `Xbox Series X Controller #1` (`045e:0b13`, VPX UID `SDLJoy_050018dc5e040000130b...`) and Steam's pad for it
-  as `Xbox Series X Controller #2`, also `045e:0b13`, its SDL GUID alone carrying Valve's `28de:11ff` (`SDLJoy_0300b836de280000ff11...`).
-  The fork's virtual pad check (`SDLInputHandler::OnJoystickAdded`, `m_isVRVirtualGamepad`: Valve vendor, or a name with "Steam" or
-  "X-Box 360 pad") therefore does not flag it. It shows in the Controllers menu next to the real one and does nothing; no layout was
-  proposed for it in the test. The Frame controllers' own virtual pad (`Steam Frame Controllers #1`, `28de:11e0`) is still flagged.
-  A possible improvement: flag pads whose SDL GUID has Valve's vendor (`SDL_GetJoystickGUIDInfo`), so that the duplicate is hidden.
+- Steam's virtual pads are left out. SDL gives each the name and the ids of the controller it stands for. Seen on the Frame
+  (2026-11-17): the PinOne as `Xbox Series X Controller #1` (`045e:0b13`, VPX UID `SDLJoy_050018dc5e040000130b...`), Steam's pad for it
+  as `Xbox Series X Controller #2`, also `045e:0b13`, and the pad of the Frame's own controllers as `Steam Frame Controllers #1`
+  (`28de:11e0`). Only their SDL GUID carries the ids of Steam's virtual gamepad, Valve's `28de:11ff` (`SDLJoy_0300....de280000ff11...`),
+  so the fork's earlier check (`m_isVRVirtualGamepad`: Valve vendor, or a name with "Steam" or "X-Box 360 pad") missed the first one.
+  `SteamInputGamepads::IsSteamVirtualGamepad` tests the GUID, and `SDLInputHandler::OnJoystickAdded` does not open those pads: the
+  Controllers menu lists the real controllers only (`Steam Input: virtual pad '...' left out` in the log). Real Valve hardware has other
+  product ids (Steam Controller, the Frame's controllers) and is kept.
+- Steam's pads saved by earlier builds are dropped when the settings are read. The menu also lists the devices saved in `Input.Devices`
+  (disconnected ones included), and a mapping naming an unknown device brings it back as "Unknown Device" (`InputManager::GetDeviceId`).
+  Older builds saw only Steam's pads, so accepting a layout for a gamepad saved one, mappings included (seen on the owner's Frame:
+  `SDLJoy_0300b836de280000ff11000001000000_1`, "Xbox Series X Controller #2"). `InputManager::LoadDevicesFromSettings` skips them in
+  `Input.Devices`, `InputAction::SetMapping` drops every binding that names one (the whole binding, so that a combination never loses
+  a member), and `PhysicsSensor::SetMapping` leaves a plunger or nudge axis saved for one unmapped; `Input.Devices` is written back without them when VPX closes. VPX saves a mapping only when it changes, so the
+  mappings naming them stay in the file, ignored at every read, until the action is mapped again (on the owner's Frame, after the
+  cleanup: `Devices` clean, 21 such entries left in `Mapping.*`). Their `Device.<id>.*` keys stay in the file too, unused.
 - Steam keeps the physical controller open as well; both read the same reports (hidraw and evdev readers each get every report).
 - Steam settings are left alone: nothing to set per user, and other games keep Steam Input.
 
@@ -72,10 +81,9 @@ Other ways considered:
 ## 5. If gamepads stop working on the Frame
 
 1. VPX log: the `Steam Input: reading directly ...` line, then the joysticks `OnJoystickAdded` logs (name, vendor, product). The physical
-   controller should be listed (VPX UID from its own ids), besides Steam's pad for it, with the same name and a `#2`, whose VPX UID
-   holds `de280000ff11`.
-2. A controller listed twice that acts twice: Steam has started feeding its virtual pads in VR (section 3 no longer holds). Remove the
-   workaround, or skip the virtual pads, after checking the focus (gamescope properties, controller log).
+   controller should be listed with its own ids, and each of Steam's pads logged as left out.
+2. The virtual pads are left out, so a Steam update that starts feeding them in VR changes nothing for VPX. If Steam fixes the focus
+   (section 3 no longer holds) and the workaround is to go, remove both parts: the emptied ignore list and the virtual pads left out.
 3. A controller missing: is it on Steam's list (`tr '\0' '\n' < /proc/<vpx pid>/environ | grep IGNORE_DEVICES`)? Does the kernel see it
    (`/proc/bus/input/devices`), and does it send events (evdev reader)? Which input devices does VPX hold (`ls -l /proc/<pid>/fd | grep
    input`)?

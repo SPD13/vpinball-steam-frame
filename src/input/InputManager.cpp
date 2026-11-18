@@ -288,6 +288,10 @@ void InputManager::LoadDevicesFromSettings()
    std::string deviceSettingId;
    while (std::getline(deviceStream, deviceSettingId, ';'))
    {
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      if (VPX::SteamInputGamepads::IsSteamVirtualGamepadSettingsId(deviceSettingId))
+         continue; // Steam's virtual pads are left out on the Frame, and dropped from the saved devices
+#endif
       // Always prefer live device informations above persisted ones
       if (const auto it = std::ranges::find_if(m_inputDevices, [&deviceSettingId](auto& deviceDef) { return deviceDef.m_settingsId == deviceSettingId; }); it != m_inputDevices.end())
          continue;

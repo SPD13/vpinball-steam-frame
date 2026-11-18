@@ -241,6 +241,10 @@ private:
       if (existing != m_joysticks.end())
          return; // Already present (This may happen between initial enumeration and event processing)
 
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      if (VPX::SteamInputGamepads::IsSteamVirtualGamepad(id))
+         return; // Silent in the headset, VPX reads the controller itself
+#endif
       SDL_Joystick* joystick = SDL_OpenJoystick(id);
       if (!joystick)
          return;

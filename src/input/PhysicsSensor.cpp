@@ -2,6 +2,9 @@
 
 #include "core/stdafx.h"
 #include "PhysicsSensor.h"
+#if defined(VPX_STEAM_FRAME_HEADSET)
+#include "steamframe/SteamInputGamepads.h"
+#endif
 
 #include <sstream>
 
@@ -44,6 +47,10 @@ void PhysicsSensor::SetMapping(const string& mappingString)
 
    bool invalid = false;
 
+#if defined(VPX_STEAM_FRAME_HEADSET)
+   if (!fields.empty() && VPX::SteamInputGamepads::IsSteamVirtualGamepadSettingsId(fields[0]))
+      return; // Steam's virtual pads are left out on the Frame: the sensor saved for one is left unmapped
+#endif
    uint16_t deviceId;
    if (!fields.empty())
       deviceId = m_eventManager->GetDeviceId(trim_string(fields[0]));

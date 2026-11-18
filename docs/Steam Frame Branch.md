@@ -792,13 +792,18 @@ in the Steam library fixed it. Steam decodes the controller, but in the headset 
 focused app stays empty, Steam activates the controllers for its own interface only), so the virtual pads it gives VPX instead of the
 physical controllers stay silent. The Frame build now empties `SDL_GAMECONTROLLER_IGNORE_DEVICES`, the list of controllers Steam tells SDL
 to skip, before SDL starts its gamepads (`SDL_HINT_OVERRIDE` on the hint), so VPX reads the physical controllers, Steam Input left on.
-Steam's virtual pads are still listed: SDL gives each the name and ids of the controller it stands for (the PinOne's shows as
-`Xbox Series X Controller #2`, `045e:0b13`, its SDL GUID alone carrying Valve's ids), so the virtual pad check of section 7 does not flag it;
-it is listed next to the real controller and does nothing. Tested on the Frame on 2026-11-17: PinOne flippers mapped and played. Logged:
+Tested on the Frame on 2026-11-17: PinOne flippers mapped and played. Steam's virtual pads, which then did nothing, are left out of the
+Controllers menu: SDL gives each the name and ids of the controller it stands for (the PinOne's showed as a second
+`Xbox Series X Controller`, `045e:0b13`), and only their SDL GUID carries the ids of Steam's virtual gamepad, `28de:11ff`, which VPX tests
+before opening a joystick (`Steam Input: virtual pad '...' left out`). This also leaves out the pad of the Frame's own controllers, which
+section 7 only kept from proposing a layout. Steam's pads saved by earlier builds (in `Input.Devices` and in the mappings, when a layout was
+accepted for one) are ignored when the settings are read, so they do not stay listed as disconnected controllers (tested on the
+Frame: a pad saved by an intermediate build disappeared from the menu). Logged:
 `Steam Input: reading directly the N controller types Steam asked to ignore`. The investigation, the evidence, the tools and what to check
 if gamepads break again: `docs/steam-frame/Gamepads and Steam Input.md`.
 
-Files: `src/steamframe/SteamInputGamepads.h/.cpp` (new), `src/input/SDLInputHandler.h`, `steamframe/steamframe.cmake`.
+Files: `src/steamframe/SteamInputGamepads.h/.cpp` (new), `src/input/SDLInputHandler.h`, `src/input/InputManager.cpp`,
+`src/input/InputAction.cpp`, `src/input/PhysicsSensor.cpp`, `steamframe/steamframe.cmake`.
 
 ## Effects on existing builds
 

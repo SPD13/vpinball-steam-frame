@@ -22,4 +22,27 @@ void ReadControllersClaimedBySteam()
    SDL_SetHintWithPriority(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, "", SDL_HINT_OVERRIDE);
 }
 
+static bool IsSteamVirtualGamepadGUID(SDL_GUID guid)
+{
+   Uint16 vendor = 0, product = 0;
+   SDL_GetJoystickGUIDInfo(guid, &vendor, &product, nullptr, nullptr);
+   return vendor == 0x28de && product == 0x11ff;
+}
+
+bool IsSteamVirtualGamepad(SDL_JoystickID id)
+{
+   if (!IsSteamVirtualGamepadGUID(SDL_GetJoystickGUIDForID(id)))
+      return false;
+   const char* const name = SDL_GetJoystickNameForID(id);
+   PLOGI << "Steam Input: virtual pad '" << (name ? name : "") << "' left out, VPX reads the controllers directly";
+   return true;
+}
+
+bool IsSteamVirtualGamepadSettingsId(const std::string& settingsId)
+{
+   if (settingsId.size() < 7 + 32 || !settingsId.starts_with("SDLJoy_"))
+      return false;
+   return IsSteamVirtualGamepadGUID(SDL_StringToGUID(settingsId.substr(7, 32).c_str()));
+}
+
 }

@@ -2,6 +2,9 @@
 
 #include "core/stdafx.h"
 #include "InputAction.h"
+#if defined(VPX_STEAM_FRAME_HEADSET)
+#include "steamframe/SteamInputGamepads.h"
+#endif
 
 #include <sstream>
 
@@ -35,12 +38,22 @@ void InputAction::SetMapping(const string& mappingString)
       std::istringstream innerStream(outerToken);
       vector<ButtonMapping> innerVector;
       string innerToken;
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      bool steamVirtualPad = false;
+#endif
       while (std::getline(innerStream, innerToken, '&'))
       {
          // Format is deviceId;axisOrButtonId[optional ;reversed;threshold]
          if (size_t pos = innerToken.find(';'); pos != std::string::npos)
          {
             string deviceIdString = trim_string(innerToken.substr(0, pos));
+#if defined(VPX_STEAM_FRAME_HEADSET)
+            if (VPX::SteamInputGamepads::IsSteamVirtualGamepadSettingsId(deviceIdString))
+            { // Steam's virtual pads are left out on the Frame: the bindings saved for them are dropped
+               steamVirtualPad = true;
+               continue;
+            }
+#endif
             string axisOrButtonIdString;
             string thresholdString;
             if (size_t pos2 = innerToken.substr(pos + 1).find(';'); pos2 != std::string::npos)
@@ -73,6 +86,10 @@ void InputAction::SetMapping(const string& mappingString)
             PLOGE << "Invalid input mapping: '" << innerToken << '\'';
          }
       }
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      if (steamVirtualPad)
+         continue;
+#endif
       AddMapping(innerVector);
    }
 }

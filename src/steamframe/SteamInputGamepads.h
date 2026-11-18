@@ -12,18 +12,31 @@
 // and its controller log activates the controllers for its own UI (app 769) only. The virtual pads stay silent: the controller shows in the
 // Controllers menu but no button reaches VPX. Disabling Steam Input for VPX in Steam fixed it, so does this, without a Steam setting.
 //
-// VPX empties the list before SDL starts its gamepads, and SDL opens the physical controllers. Steam's virtual pads are still listed, and
+// VPX empties the list before SDL starts its gamepads, and SDL opens the physical controllers. Steam's virtual pads are still there, and
 // SDL gives each the name and ids of the controller it stands for: the PinOne's shows as "Xbox Series X Controller #2", 045e:0b13, next to
-// the real one (#1); only its SDL GUID carries Valve's 28de:11ff (VPX UID SDLJoy_0300....de280000ff11...). The fork's virtual pad check
-// (SDLInputHandler::OnJoystickAdded, m_isVRVirtualGamepad: Valve vendor or a Steam name) does not catch it: it is listed and does nothing.
-// If a Steam update starts feeding it in VR, both act, and only the mapped one counts.
+// the real one (#1), and the pad of the Frame's own controllers as "Steam Frame Controllers #1", 28de:11e0. Only their SDL GUID carries the
+// ids of Steam's virtual gamepad, Valve's 28de:11ff (VPX UID SDLJoy_0300....de280000ff11...). They are not opened (IsSteamVirtualGamepad,
+// called by SDLInputHandler::OnJoystickAdded), so the Controllers menu lists the real controllers only. If a Steam update starts feeding
+// the virtual pads in VR, nothing changes for VPX: it reads the controllers themselves. Steam's pads saved by earlier builds (in Input.Devices,
+// and in the mappings, when a layout was accepted for one) are dropped when the settings are read (IsSteamVirtualGamepadSettingsId, called by
+// InputManager::LoadDevicesFromSettings, InputAction::SetMapping and PhysicsSensor::SetMapping, for the plunger and nudge axes), so that they do not show as disconnected controllers.
 //
 // Investigation and tools: docs/steam-frame/Gamepads and Steam Input.md.
+
+#include <SDL3/SDL_joystick.h>
+
+#include <string>
 
 namespace VPX::SteamInputGamepads
 {
 
 // Call before SDL_InitSubSystem(SDL_INIT_GAMEPAD).
 void ReadControllersClaimedBySteam();
+
+// True for a virtual pad of Steam Input (Valve's 28de:11ff in its SDL GUID, whatever name and ids SDL reports), which VPX leaves out.
+bool IsSteamVirtualGamepad(SDL_JoystickID id);
+
+// The same for a device's settings id ("SDLJoy_" + SDL GUID + "_" + index, SDLInputHandler::OnJoystickAdded).
+bool IsSteamVirtualGamepadSettingsId(const std::string& settingsId);
 
 }
