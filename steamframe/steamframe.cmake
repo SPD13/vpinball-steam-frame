@@ -90,6 +90,9 @@ target_sources(vpinball PRIVATE
    # Which cores the threads run on, on the Steam Frame
    src/steamframe/ThreadPlacement.h
    src/steamframe/ThreadPlacement.cpp
+   # Gamepads taken over by Steam Input read directly, as Steam does not feed its virtual pads in the headset
+   src/steamframe/SteamInputGamepads.h
+   src/steamframe/SteamInputGamepads.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp

@@ -31,6 +31,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Fixes for tables and ROMs that do not work as they are**: recipes shipped with the application, each with its record of what it changes and why, fix the tables added to the library by themselves, and the tables already there with **Patch table** in their menu (in VR and in the browser). A script fix is saved as a `.vbs` next to the table, never in the table itself. The first two: *VR ROOM Back to the Future*, which closed as soon as it started, and the Gottlieb System 3 games (Street Fighter II, Stargate, Super Mario Bros), which accepted coins without giving credits until their factory settings were loaded from their service menu, now done by the game itself during its first start, with a notice. The Files page lists the fixes and the tables they apply to, under Advanced (section 17, `docs/Table and ROM Fixes.md`).
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu, or in the middle of the view, sized like the menu text, while it is closed (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
+- **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution (section 12, `docs/Image Quality on the Steam Frame.md`).
 - **Scores and leaderboards**: the score of every game played on a library table is recorded automatically, for the player chosen in the lobby ("Player: <name>"), with a result screen (rank, personal best, table record) when the lobby comes back, a Scores tab with the leaderboard of each table, the 10 best scores in each table's page, and a Scores page in the browser to filter, reassign, delete or clear scores (with confirmation) and manage the players (section 14, `docs/Table Scores and Leaderboards.md`).
@@ -784,6 +785,21 @@ Files: `src/steamframe/DefaultCabinet.h/.cpp`, `src/steamframe/CabinetFit.h/.cpp
 `src/assets/vr-cabinet/` (new), `steamframe/vr-cabinet/` (new, the Blender scripts), `tests/test-cabinet-fit.cpp` (new, built alone as
 written at its top).
 
+## 33. Gamepads taken over by Steam Input (2026-11-17)
+
+A PinOne paired over Bluetooth in its Xbox mode showed in the Controllers menu, but no button reached VPX; disabling Steam Input for VPX
+in the Steam library fixed it. Steam decodes the controller, but in the headset it never treats VPX as the focused game (gamescope's
+focused app stays empty, Steam activates the controllers for its own interface only), so the virtual pads it gives VPX instead of the
+physical controllers stay silent. The Frame build now empties `SDL_GAMECONTROLLER_IGNORE_DEVICES`, the list of controllers Steam tells SDL
+to skip, before SDL starts its gamepads (`SDL_HINT_OVERRIDE` on the hint), so VPX reads the physical controllers, Steam Input left on.
+Steam's virtual pads are still listed: SDL gives each the name and ids of the controller it stands for (the PinOne's shows as
+`Xbox Series X Controller #2`, `045e:0b13`, its SDL GUID alone carrying Valve's ids), so the virtual pad check of section 7 does not flag it;
+it is listed next to the real controller and does nothing. Tested on the Frame on 2026-11-17: PinOne flippers mapped and played. Logged:
+`Steam Input: reading directly the N controller types Steam asked to ignore`. The investigation, the evidence, the tools and what to check
+if gamepads break again: `docs/steam-frame/Gamepads and Steam Input.md`.
+
+Files: `src/steamframe/SteamInputGamepads.h/.cpp` (new), `src/input/SDLInputHandler.h`, `steamframe/steamframe.cmake`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -879,6 +895,8 @@ src/steamframe/Reflections.h
 src/steamframe/Reflections.cpp          what the reflections leave out, switched live (section 22)
 src/steamframe/ThreadPlacement.h
 src/steamframe/ThreadPlacement.cpp      the threads on chosen cores on the Frame (section 23)
+src/steamframe/SteamInputGamepads.h
+src/steamframe/SteamInputGamepads.cpp   the controllers Steam Input takes over read directly on the Frame (section 33)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md

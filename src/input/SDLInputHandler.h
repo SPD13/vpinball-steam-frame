@@ -9,6 +9,9 @@
 #include "physics/cabinet/CabinetNudgeSensor.h"
 #include "physics/cabinet/GamepadNudge.h"
 #include "ui/live/IconsLucide.h"
+#if defined(VPX_STEAM_FRAME_HEADSET)
+#include "steamframe/SteamInputGamepads.h"
+#endif
 
 
 class SDLInputHandler final : public InputManager::InputHandler
@@ -18,6 +21,9 @@ public:
       : m_pininput(pininput)
    {
       PLOGI << "SDL input handler registered";
+#if defined(VPX_STEAM_FRAME_HEADSET)
+      VPX::SteamInputGamepads::ReadControllersClaimedBySteam(); // Steam's virtual pads stay silent in the headset
+#endif
       if (!SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD))
       {
          PLOGE << "Failed to initialize joystick input with error: " << SDL_GetError();
