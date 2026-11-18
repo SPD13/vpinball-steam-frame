@@ -93,6 +93,9 @@ target_sources(vpinball PRIVATE
    # Gamepads taken over by Steam Input read directly, as Steam does not feed its virtual pads in the headset
    src/steamframe/SteamInputGamepads.h
    src/steamframe/SteamInputGamepads.cpp
+   # Controller layouts offered in the controller's page instead of a pop-up, PinOne layout
+   src/steamframe/ControllerLayouts.h
+   src/steamframe/ControllerLayouts.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp

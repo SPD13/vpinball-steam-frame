@@ -525,8 +525,13 @@ void InputManager::ProcessInput()
             ApplyDefaultDeviceMapping(device.m_id);
             device.m_hasPendingLayoutApply = false;
          }
+#if defined(VPX_STEAM_FRAME)
+         else // No pop-up: the layouts are offered in the controller's page (src/steamframe/ControllerLayouts.h)
+            device.m_hasPendingLayoutApply = false;
+#else
          else
             m_hasPendingLayoutApply = true;
+#endif
       }
    }
    if (m_hasPendingLayoutApply && m_player->m_liveUI && !m_player->m_liveUI->IsOpened())

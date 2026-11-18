@@ -32,6 +32,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu, or in the middle of the view, sized like the menu text, while it is closed (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
+- **Controller layouts in the controller's page** (Controllers > the controller): *Set default mapping* and, for Xbox pads and the PinOne's USB controller, *Set PinOne mapping* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution (section 12, `docs/Image Quality on the Steam Frame.md`).
 - **Scores and leaderboards**: the score of every game played on a library table is recorded automatically, for the player chosen in the lobby ("Player: <name>"), with a result screen (rank, personal best, table record) when the lobby comes back, a Scores tab with the leaderboard of each table, the 10 best scores in each table's page, and a Scores page in the browser to filter, reassign, delete or clear scores (with confirmation) and manage the players (section 14, `docs/Table Scores and Leaderboards.md`).
@@ -805,6 +806,37 @@ if gamepads break again: `docs/steam-frame/Gamepads and Steam Input.md`.
 Files: `src/steamframe/SteamInputGamepads.h/.cpp` (new), `src/input/SDLInputHandler.h`, `src/input/InputManager.cpp`,
 `src/input/InputAction.cpp`, `src/input/PhysicsSensor.cpp`, `steamframe/steamframe.cmake`.
 
+## 34. Controller layouts in the controller's page (2026-11-17)
+
+Upstream offers a controller's default layout in a pop-up when it connects with a mapping that differs from that layout, at every
+session (until *Disable Automatic Layout* is set for it), and applying it first erases the controller's mappings
+(`InputManager::ApplyDefaultDeviceMapping`). On the Frame, a PinOne in its Bluetooth Xbox mode, mapped by hand in the lobby, got the
+pop-up at the next table, and "yes" made its flipper buttons (sent as the shoulder buttons) magna-saves: upstream's gamepad layout puts the
+flippers on the triggers and the magna-saves on the shoulder buttons. Mappings are application settings (`Mapping.*` in `[Input]`), not
+per table, so it changed them everywhere.
+
+In every fork build (`VPX_STEAM_FRAME`), `InputManager::ProcessInput` no longer offers layouts (the VR controllers still get theirs at
+once), and the controller's page (`InputDevicePage`, Controllers > the controller) has, besides *Erase this device*:
+
+- **Set default mapping**: upstream's default layout of the device, when it has one.
+- **Set PinOne mapping**: on Xbox pads (SDL gamepad type Xbox 360 or Xbox One, so the PinOne in its Bluetooth Xbox mode, `045e:0b13`) and
+  on the PinOne's USB controller (`39f5:9208`, wired: in its own Bluetooth mode it has the same ids, wireless). Made from the owner's
+  mapping of the Bluetooth PinOne on the Frame (2026-11-17, without the leftovers of the default layout), on the firmware's default Xbox
+  assignment: flippers LB/RB (inputs 3 and 1, also the staged flippers), magna-saves on the triggers (inputs 4 and 2), A launch ball and
+  start, B start, Start (the fire button, input 9) start, Y coin, View the menu, D-pad the PinMAME service buttons and menu navigation,
+  right stick Y the plunger (position), left stick the nudge (the accelerometer, read as a stick position, as upstream's gamepad layout).
+  On USB the same PinOne inputs, as raw buttons (input n is button n - 1), Z the plunger, X/Y the nudge; its inputs are named. The table
+  is in the README (PinOne pinball controller) and in `src/steamframe/ControllerLayouts.h`.
+
+Both replace every mapping of the controller (actions, plunger, nudge), as upstream's does. The PinOne layout's inputs are found from
+SDL's gamepad bindings (Xbox) or fixed (USB), recorded by settings id when the controller connects
+(`VPX::ControllerLayouts::OnJoystickAdded`, at the end of `SDLInputHandler::OnJoystickAdded`), so they hold from one table to the next.
+The USB axis order assumes SDL numbers the axes X, Y, Z, Rx, Ry whatever the report's order (X, Y, Rx, Ry, Z), as the kernel's axis codes are in that order on Linux
+(to check with the plunger on USB); the PinOne's assignments can be changed in its configuration tool, which this layout does not read.
+
+Files: `src/steamframe/ControllerLayouts.h/.cpp` (new), `src/input/SDLInputHandler.h`, `src/input/InputManager.cpp`,
+`src/ui/live/ingameui/InputDevicePage.cpp`, `steamframe/steamframe.cmake`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -902,6 +934,8 @@ src/steamframe/ThreadPlacement.h
 src/steamframe/ThreadPlacement.cpp      the threads on chosen cores on the Frame (section 23)
 src/steamframe/SteamInputGamepads.h
 src/steamframe/SteamInputGamepads.cpp   the controllers Steam Input takes over read directly on the Frame (section 33)
+src/steamframe/ControllerLayouts.h
+src/steamframe/ControllerLayouts.cpp    controller layouts in the controller's page, PinOne layout (section 34)
 third-party/include/meshoptimizer/      meshoptimizer 1.2 (MIT): simplifier.cpp, allocator.cpp, meshoptimizer.h, from bgfx's 3rdparty
 docs/Steam Frame Branch.md
 docs/Table and ROM Fixes.md

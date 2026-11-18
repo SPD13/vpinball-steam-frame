@@ -50,6 +50,7 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Passthrough, exclusive to this fork**: play in your own room. The headset shows your real room around the cabinet instead of the virtual room of the table and of the lobby: the walls, floors and scenery of every table are left out, its cabinet and backglass stay. **Y** switches it on and off at any time, in a table or in the lobby, and the game starts again as you left it; also in **VR & Room > Passthrough**. The loading message between two tables floats in your room too. Tables without a cabinet model get the default cabinet, without its room ([see below](#passthrough)).
 - **Cabinet positioning mode, exclusive to this fork**: stand the cabinet against a real piece of furniture. The headset shows your room, a bar joins the two controllers with the lockbar drawn on it, and the lockbar follows them as you hold them on a real edge, a desk or a shelf; a press fixes the cabinet there, for every table. The cabinet keeps its size, and it can't be fixed outside the play area set in SteamVR: the lockbar turns orange near its edge and red outside ([see below](#cabinet-position)).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
+- **PinOne pinball controller**: by USB, or over Bluetooth in its Xbox mode, read directly with Steam Input on; **Set PinOne mapping** in its page under **Controllers** maps its flippers, magna-saves, buttons, plunger and nudge in one step. No pop-up offers a layout when a controller connects, so a mapping made by hand stays as it is ([PinOne pinball controller](#pinone-pinball-controller)).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
 
@@ -378,6 +379,39 @@ The file has one alias per line, `name,game`: `name` is what the table asks for,
 5. **Add the ROM** of the game (`game.zip`) if it is missing: upload it in the file manager's **ROMs** tab, or copy it to the ROM folder over ssh.
 
 Over ssh, the file can also be edited directly, for example `ssh steamos@frame.local 'echo "simpprtyh,simpprty" >> Documents/VPinballX/Tables/pinmame/alias.txt'` (the file must end with a new line before you add one). More details: [PinMAME ROM aliases](/docs/PinMAME%20ROM%20Aliases.md).
+
+## PinOne pinball controller
+
+The PinOne pinball controller (Cleveland Software Design) works in the game by USB, and over Bluetooth in its **Xbox mode**, where it presents itself as an Xbox controller. The game reads it directly, with Steam Input left on.
+
+> Bluetooth pairing with the Steam Frame needs a fix in the PinOne's firmware that is not in a published PinOne release yet (November 2026). Until then, connect it by USB.
+
+### Setting its mapping
+
+1. Open the menu, then **Controllers**, and select the PinOne: **Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB.
+2. Select **Set PinOne mapping**. It replaces every mapping of that controller with the layout below.
+
+**Set default mapping**, on the same page, applies the game's generic gamepad layout instead (flippers on the triggers, magna-saves on the shoulder buttons), which does not suit the PinOne. The game no longer offers a layout in a pop-up when a controller connects, so a mapping you made by hand stays as it is. Mappings are the same for every table.
+
+### The PinOne mapping
+
+| PinOne input | Over Bluetooth (Xbox control) | By USB (button) | In the game |
+| --- | --- | --- | --- |
+| 3, left flipper | LB | 3 | Left flipper (and upper left flipper) |
+| 1, right flipper | RB | 1 | Right flipper (and upper right flipper) |
+| 4, left magna-save | Left trigger | 4 | Left magna-save |
+| 2, right magna-save | Right trigger | 2 | Right magna-save |
+| 6, front button | A | 6 | Launch ball, Start |
+| 8, front button | B | 8 | Start |
+| 9, fire button | Start (Menu) | 9 | Start |
+| 5, front button | Y | 5 | Insert coin |
+| 7, front button | X | 7 | (free) |
+| 29 | View | 29 | Menu |
+| 25 to 28, front buttons with the shift button | D-pad left, right, up, down | 25 to 28 | Operator menu buttons (left: Cancel, down: Down, up: Up, right: Enter) and menu navigation |
+| Plunger | Right stick, up and down | Z axis | Plunger |
+| Accelerometer | Left stick | X and Y axes | Nudge |
+
+The table follows the PinOne's default settings. If you changed which button sends what in the PinOne's configuration tool (its **Controller** screen for the Xbox mode), map the changed buttons by hand in the controller's page.
 
 ## How to patch a broken table?
 

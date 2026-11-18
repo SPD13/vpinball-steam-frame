@@ -12,6 +12,9 @@
 #if defined(VPX_STEAM_FRAME_HEADSET)
 #include "steamframe/SteamInputGamepads.h"
 #endif
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/ControllerLayouts.h"
+#endif
 
 
 class SDLInputHandler final : public InputManager::InputHandler
@@ -601,6 +604,9 @@ private:
          }
          break;
       }
+#if defined(VPX_STEAM_FRAME)
+      VPX::ControllerLayouts::OnJoystickAdded(m_pininput, deviceId, joystick); // The PinOne layout offered in the controller's page
+#endif
    }
 
    void OnJoystickRemoved(SDL_JoystickID id)
