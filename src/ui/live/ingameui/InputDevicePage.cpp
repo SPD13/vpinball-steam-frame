@@ -7,6 +7,7 @@
 #include "ui/live/LiveUI.h"
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/ControllerLayouts.h"
+#include "steamframe/DofSetup.h"
 #endif
 
 
@@ -34,14 +35,32 @@ void InputDevicePage::BuildPage()
             RequestRebuild();
          }));
    if (VPX::ControllerLayouts::HasPinOneLayout(m_player->m_pininput, m_deviceId))
-      AddItem(std::make_unique<InGameUIItem>("Set PinOne mapping"s,
-         "Replace the mappings of this controller with the PinOne layout: flippers, magna-saves, fire button (launch ball), plunger and nudge."s,
+   {
+      // DOF for the PinOne (src/steamframe/DofSetup.h)
+      AddItem(std::make_unique<InGameUIItem>("Set PinOne Mini mapping and DOF Config"s,
+         "Replace the mappings of this controller with the PinOne layout (flippers, magna-saves, fire button, plunger and nudge), turn DOF on and install the game's DOF configuration for the PinOne Mini, replacing an uploaded one."s,
          [this]()
          {
-            VPX::ControllerLayouts::ApplyPinOneLayout(m_player->m_pininput, m_deviceId);
+            VPX::DofSetup::ApplyPinOneMiniSetup(m_player, m_deviceId);
             m_player->m_liveUI->m_inGameUI.NavigateBack();
             RequestRebuild();
          }));
+      if (const auto dofEnableId = Settings::GetRegistry().GetPropertyId("Plugin.DOF"s, "Enable"s); dofEnableId.has_value())
+      {
+         AddItem(std::make_unique<InGameUIItem>( //
+                    dofEnableId.value(), //
+                    [this]() { return VPX::DofSetup::IsDofEnabled(m_player); }, //
+                    [this](bool v)
+                    {
+                       VPX::DofSetup::SetDofEnabled(m_player, v);
+                       RequestRebuild();
+                    }))
+            .m_excludeFromDefault
+            = true;
+         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+            "While DOF is on, this controller's vibrations are off: the table drives its outputs. Tables missing from the DOF configuration still get the vibrations."s));
+      }
+   }
 #else
    if (m_player->m_pininput.HasDeviceDefaultMapping(m_deviceId))
    {

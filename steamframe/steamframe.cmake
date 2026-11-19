@@ -99,6 +99,9 @@ target_sources(vpinball PRIVATE
    # Vibrations to the controller that started the game only
    src/steamframe/Vibrations.h
    src/steamframe/Vibrations.cpp
+   # DOF switch and PinOne Mini DOF configuration in the PinOne's controller page
+   src/steamframe/DofSetup.h
+   src/steamframe/DofSetup.cpp
    third-party/include/meshoptimizer/meshoptimizer.h
    third-party/include/meshoptimizer/allocator.cpp
    third-party/include/meshoptimizer/simplifier.cpp

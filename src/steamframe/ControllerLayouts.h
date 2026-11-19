@@ -9,7 +9,8 @@
 // PinOne in its Bluetooth Xbox mode, that replaced its flippers (sent as the shoulder buttons) by magna-saves. The fork shows no pop-up
 // (InputManager::ProcessInput, all fork builds; the VR controllers still get their layout at once), and the controller's page offers:
 // - Set default mapping: upstream's default layout of the device (InputManager::ApplyDefaultDeviceMapping).
-// - Set PinOne mapping: the layout of the PinOne pinball controller (Cleveland Software Design), on Xbox pads (the PinOne in its
+// - Set PinOne Mini mapping and DOF Config (src/steamframe/DofSetup.h, which also turns DOF on and installs the PinOne Mini DOF
+//   configuration): the layout of the PinOne pinball controller (Cleveland Software Design), on Xbox pads (the PinOne in its
 //   Bluetooth Xbox mode presents itself as one, 045e:0b13) and on the PinOne's USB controller (39f5:9208, raw button n = PinOne input
 //   n + 1). Made from the owner's mapping of a Bluetooth PinOne on the Frame (2026-11-17), with the firmware's default Xbox assignment:
 //     PinOne input              Xbox control      USB button   VPX action

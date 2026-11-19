@@ -50,9 +50,9 @@ In the standalone builds (the Steam Frame app, and the standalone desktop builds
 - **Passthrough, exclusive to this fork**: play in your own room. The headset shows your real room around the cabinet instead of the virtual room of the table and of the lobby: the walls, floors and scenery of every table are left out, its cabinet and backglass stay. **Y** switches it on and off at any time, in a table or in the lobby, and the game starts again as you left it; also in **VR & Room > Passthrough**. The loading message between two tables floats in your room too. Tables without a cabinet model get the default cabinet, without its room ([see below](#passthrough)).
 - **Cabinet positioning mode, exclusive to this fork**: stand the cabinet against a real piece of furniture. The headset shows your room, a bar joins the two controllers with the lockbar drawn on it, and the lockbar follows them as you hold them on a real edge, a desk or a shelf; a press fixes the cabinet there, for every table. The cabinet keeps its size, and it can't be fixed outside the play area set in SteamVR: the lockbar turns orange near its edge and red outside ([see below](#cabinet-position)).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR.
-- **PinOne pinball controller**: by USB, or over Bluetooth in its Xbox mode, read directly with Steam Input on; **Set PinOne mapping** in its page under **Controllers** maps its flippers, magna-saves, buttons, plunger and nudge in one step. No pop-up offers a layout when a controller connects, so a mapping made by hand stays as it is ([PinOne pinball controller](#pinone-pinball-controller)).
-- **Vibrations on the controller that started the game**: when several controllers are connected (the VR controllers and a pinball controller), only the one you pressed Start on vibrates (**Controllers** > *Send vibrations to the controller used to start the game*, on by default).
-- **DOF feedback on the PinOne**: the table drives the PinOne's outputs (solenoids, shaker, knocker, lights) through DOF, by USB, or over Bluetooth while the PinOne stays an Xbox controller; upload your DOF Config Tool files from a browser ([PinOne pinball controller](#dof-feedback)).
+- **PinOne pinball controller**: by USB, or over Bluetooth in its Xbox mode, read directly with Steam Input on; **Set PinOne Mini mapping and DOF Config** in its page under **Controls** maps its flippers, magna-saves, buttons, plunger and nudge in one step. No pop-up offers a layout when a controller connects, so a mapping made by hand stays as it is ([PinOne pinball controller](#pinone-pinball-controller)).
+- **Vibrations on the controller that started the game**: when several controllers are connected (the VR controllers and a pinball controller), only the one you pressed Start on vibrates (**Controls** > *Send vibrations to the controller used to start the game*, on by default).
+- **DOF feedback on the PinOne**: the table drives the PinOne's outputs (solenoids, shaker, knocker, lights) through DOF, by USB, or over Bluetooth while the PinOne stays an Xbox controller; a DOF configuration for the PinOne Mini ships with the game (one button in the controller's page sets it up), or upload your own from the DOF Config Tool, and choose between the table's DOF and the game's vibrations ([DOF feedback](#dof-feedback), [DOF and Vibrations](#dof-and-vibrations)).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution ([details](/docs/Image%20Quality%20on%20the%20Steam%20Frame.md)).
 - **Updates from the headset**: when a newer version is published, a yellow badge above the menu says "New version available, Click here to install". Selecting it downloads the new version, checks it and installs it in place of the game, while the menu is replaced by the progress (the buttons do nothing meanwhile, so no table can be started); then the game exits, to be started again from the Steam library. Tables, settings, scores and play statistics are kept. The first install, and the versions before this feature, still go through the installer app.
 
@@ -390,12 +390,12 @@ The PinOne pinball controller (Cleveland Software Design) works in the game by U
 
 ### Setting its mapping
 
-1. Open the menu, then **Controllers**, and select the PinOne: **Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB.
-2. Select **Set PinOne mapping**. It replaces every mapping of that controller with the layout below.
+1. Open the menu, then **Controls**, and select the PinOne: **Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB.
+2. Select **Set PinOne Mini mapping and DOF Config**. It replaces every mapping of that controller with the layout below, turns DOF on and installs the game's DOF configuration for the PinOne Mini (see [DOF feedback](#dof-feedback)).
 
 **Set default mapping**, on the same page, applies the game's generic gamepad layout instead (flippers on the triggers, magna-saves on the shoulder buttons), which does not suit the PinOne. The game no longer offers a layout in a pop-up when a controller connects, so a mapping you made by hand stays as it is. Mappings are the same for every table.
 
-With the PinOne and the VR controllers both connected, only the controller you press Start on vibrates (in Xbox mode, the PinOne turns the vibrations into its solenoid outputs 1 and 2). To make every controller vibrate, turn off **Send vibrations to the controller used to start the game** in **Controllers**.
+With the PinOne and the VR controllers both connected, only the controller you press Start on vibrates (in Xbox mode, the PinOne turns the vibrations into its solenoid outputs 1 and 2). To make every controller vibrate, turn off **Send vibrations to the controller used to start the game** in **Controls**.
 
 ### The PinOne mapping
 
@@ -419,13 +419,53 @@ The table follows the PinOne's default settings. If you changed which button sen
 
 ### DOF feedback
 
-The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, button lights) through DOF (DirectOutput), as on a cabinet: by USB, or over Bluetooth while the PinOne stays an Xbox controller.
+The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, button lights) through DOF (DirectOutput), as on a cabinet: by USB, or over Bluetooth while the PinOne stays an Xbox controller. Over Bluetooth, the PinOne needs a firmware with its Bluetooth DOF channel (not in a published PinOne release yet); after updating the firmware, remove the PinOne from the Frame's Bluetooth devices and pair it again, as the Frame keeps the old description of its controls.
 
-1. **Make your DOF configuration** on the [DOF Config Tool](https://configtool.vpuniverse.com): under **My Account**, add the device **PinOne**, assign your toys to its outputs, then generate the configuration and download its zip.
-2. **Upload the zip** from a browser, like a table (turn **Wi-Fi upload** on in the table picker and open the address it shows), into any folder. The game recognizes it and moves its files to the `directoutputconfig` folder of its settings, where DOF reads them; a later upload replaces them. Backups include them, with the settings.
-3. **Over Bluetooth**, the PinOne needs a firmware with its Bluetooth DOF channel (not in a published PinOne release yet). After updating the firmware, remove the PinOne from the Frame's Bluetooth devices and pair it again, as the Frame keeps the old description of its controls.
+**DOF in the controller's page.** Open the menu, then **Controls**, and select the PinOne (**Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB):
 
-DOF is on by default (**Plugins** > **DOF**). While DOF drives the PinOne, the game's vibrations are not sent to it, so its rumble outputs only fire with the table; to get both, turn on **Send vibrations to a controller driven by DOF** in **Controllers**.
+- **Set PinOne Mini mapping and DOF Config** sets the PinOne mapping, turns DOF on, and installs the DOF configuration the game ships for the PinOne Mini. Select it again to go back to that configuration after uploading your own.
+- **DOF Enable** turns DOF on or off, the same switch as **Plugins** > **DOF** > **DOF Enable**. While DOF is on, the controller's vibrations are off: the table drives its outputs (except on the tables missing from the DOF configuration, see [DOF and Vibrations](#dof-and-vibrations)).
+
+**The PinOne Mini configuration shipped with the game** drives its two motors: port 1, the toy *Left Solenoid*, fires with the coils on the left of the table (left flipper and slingshot, ...), port 2, *Right Solenoid*, with the ones on the right (right flipper and slingshot, ball launch, ...). It covers every table of the DOF Config Tool's database, as of November 2026. To drive other toys or outputs (a shaker, a knocker, button lights, a PinOne with more outputs), or to get the tables added to the database since, make your own.
+
+**Making your own DOF configuration**
+
+1. Sign in on the [DOF Config Tool](https://configtool.vpuniverse.com) (create a free account if needed).
+2. Under **My Account**, add the device **PinOne** (DOF numbers it LedWiz 11 for the first one).
+3. In **Port Assignments**, select the PinOne and give each output you use the toy wired to it (for the PinOne Mini's two motors: *Left Solenoid* on port 1, *Right Solenoid* on port 2). Save. Without port assignments, the configuration lists the tables but fires nothing.
+4. Select **Generate Config** and download the zip it makes (`directoutputconfig.zip`).
+5. **Upload the zip** from a browser, like a table: in the game's table picker, turn **Wi-Fi upload** on and open the address it shows from a phone or computer on the same network, then upload the zip into any folder. The game recognizes it and moves its files to the `directoutputconfig` folder of its settings, where DOF reads them, replacing the previous ones (the shipped configuration included). The next table you start uses it. Backups include it, with the settings.
+
+Generate and upload it again when you change your toys. **Set PinOne Mini mapping and DOF Config** replaces your configuration with the shipped one.
+
+One configuration covers every table: there is no table to add. The DOF Config Tool writes the effects of all the tables in its community database (about 1,750) for the toys you assigned, and DOF finds a table by its ROM name (a revision of the ROM finds the same entry), or, for an original table without ROM, by the game name its script declares. There is no default for the others: a table missing from the database has no DOF effects, and the PinOne gets the game's vibrations on it instead (see below; ask for the table on the DOF Config Tool's forum).
+
+If nothing fires, check that the PinOne's outputs have power before anything else: its motors and solenoids need their own supply plugged in, which the USB cable does not give.
+
+### DOF and Vibrations
+
+The PinOne's motors can follow two sources: the table's DOF, and the game's vibrations, which the PinOne turns into its outputs 1 (strong motor) and 2 (weak motor) in Xbox mode.
+
+**DOF follows the machine.** It fires when the table's ROM or script fires a coil: flippers, slingshots, pop bumpers, kickers and saucers, the ball launch, the knocker on a replay, the shaker or a motor on some game events (the castle of Medieval Madness). The effects come from the DOF community's configuration: a coil on the left goes to the toy on the left (port 1 above), one on the right to port 2. Timing and length follow the ROM, at full strength. DOF knows the game (a free game knocks) but not the ball: a ball hitting a flipper hard gives nothing if no coil fires. It needs the table in the DOF database, and is only as good as that table's entry.
+
+**Vibrations follow the ball.** The game's physics play them: a ball hitting a flipper (stronger the faster it goes), bumpers and slingshots firing, two balls colliding, the plunger striking the ball, a nudge, and a light pulse at each flipper press. They work on every table without configuration, and each has its own strength setting. They don't know the game's rules: no knocker, no shaker. By default the PinOne turns any vibration into its output fully on, so their strength is lost; its **PWM rumble** option (PinOne configuration tool) keeps it.
+
+| | DOF | Vibrations |
+|---|---|---|
+| Feels like | The cabinet: coil kicks in the game's rhythm, on their side | The ball: impacts by their strength |
+| Game events (knocker, shaker) | Yes | No |
+| Ball impacts | Only when a coil fires | Yes |
+| Tables | Those in the DOF database | All |
+| Setup | DOF Config Tool configuration | None |
+
+**Choosing.** On a table, the PinOne follows one or the other, never both, set by the **DOF Enable** switch of its page in **Controls** (the same as **Plugins** > **DOF** > **DOF Enable**):
+
+| DOF Enable | The PinOne's motors follow |
+|---|---|
+| On (default) | The table's DOF on the tables of the DOF database (the game's vibrations are then not sent to the PinOne), the game's vibrations on the others |
+| Off | The game's vibrations, on every table |
+
+The setting takes effect right away, without restarting the game. It only concerns a PinOne: other controllers (the VR controllers) get the vibrations either way, following **Controls** > **Send vibrations to the controller used to start the game**. To feel the ball on every table, turn DOF off.
 
 ## How to patch a broken table?
 

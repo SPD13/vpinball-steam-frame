@@ -233,7 +233,6 @@ PropFloat(Player, RumbleFlipperButton, "Flipper Button Rumble"s, "Strength of th
 PropFloat(Player, RumbleNudge, "Nudge Rumble"s, "Strength of the rumble played when the cabinet is nudged, scaled by the cabinet acceleration (0 disables it)"s, 0.f, 3.f, 1.f);
 #ifdef VPX_STEAM_FRAME // Vibrations to the controller that started the game only, see src/steamframe/Vibrations.h
 PropBool(Player, RumbleStartController, "Send vibrations to the controller used to start the game"s, "Only the controller whose button started the game (Start) vibrates. Until Start is pressed on the table, all controllers vibrate"s, true);
-PropBool(Player, RumbleDofController, "Send vibrations to a controller driven by DOF"s, "A PinOne the table drives through DOF also gets the vibrations. Its rumble outputs then fire with the physics vibrations as well as with the table's DOF"s, false);
 #endif
 PropFloat(Player, RumbleBallBall, "Ball Collision Rumble"s, "Strength of the rumble played when two balls collide, scaled by the impact speed (0 disables it)"s, 0.f, 3.f, 1.f);
 PropInt(Player, MinPhysLoopTime, "MinPhysLoopTime"s, ""s, 0, 1000, 0); // Legacy lag reduction hack (e.g. if script execution or physics takes very long, comes at the price of "slower" gameplay). Not supported by BGFX variant (due to its multithreaded loop)
@@ -1454,7 +1453,7 @@ PropBoolDyn(PluginAltSound, Enable, "Enable"s, "Enable AltSound plugin"s, true);
 PropBoolDyn(PluginB2S, Enable, "Enable"s, "Enable B2S plugin"s, true);
 PropBoolDyn(PluginDMDUtil, Enable, "Enable"s, "Enable DMDUtil plugin"s, false);
 #ifdef VPX_STEAM_FRAME // DOF on by default in the fork: the table drives the PinOne's outputs (USB, or Bluetooth in its Xbox mode), see docs/Steam Frame Branch.md
-PropBoolDyn(PluginDOF, Enable, "Enable"s, "Enable DOF plugin"s, true);
+PropBoolDyn(PluginDOF, Enable, "DOF Enable"s, "Enable DOF plugin"s, true);
 #endif
 PropBoolDyn(PluginFlexDMD, Enable, "Enable"s, "Enable FlexDMD plugin"s, true);
 PropBoolDyn(PluginPinMAME, Enable, "Enable"s, "Enable PinMAME plugin"s, true);

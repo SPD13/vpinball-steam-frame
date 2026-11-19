@@ -25,6 +25,7 @@
 #include "steamframe/ScoreTracker.h"
 #include "steamframe/ThreadPlacement.h"
 #include "steamframe/TableLibrary.h"
+#include "steamframe/Vibrations.h"
 #endif
 #include "core/VPXPluginAPIImpl.h"
 #include "parts/ball.h"
@@ -1140,6 +1141,7 @@ void Player::InitTableSession(const bool isInitial)
    m_pluginAPI.OnGameStart();
 
 #ifdef VPX_STEAM_FRAME
+   VPX::Vibrations::OnGameStarted(this); // Whether DOF has an entry for the table (src/steamframe/Vibrations.h)
    // Scores are recorded for the tables of the library (leaderboards), not for the lobby. The result of a previous table that was not
    // shown (tables played one after the other without going back to the lobby) is dropped.
    if (!m_isLobby)
@@ -1266,6 +1268,7 @@ void Player::ShutdownTableSession()
    // Last look at the scores while PinMAME and the script still run
    if (m_scoreTracker)
       m_scoreTracker->Finish();
+   VPX::Vibrations::OnGameEnding();
 #endif
 
    // Signal plugins that the game session is ended

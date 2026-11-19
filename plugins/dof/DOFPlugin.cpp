@@ -64,6 +64,13 @@ static unsigned int onGameStartId = 0;
 static unsigned int onGameEndId = 0;
 static bool gameEnded = false;
 static std::string prefPath;
+
+// Whether the DOF configuration has an entry for the game being played, for hosts that give the tables DOF has nothing for a
+// feedback of their own (controller rumble). "DOF"/"GetTableConfig": the message data is a bool* set to it.
+// "DOF"/"OnTableConfigChanged" (no data) is broadcast when it changes.
+static bool tableHasConfig = false;
+static unsigned int getTableConfigId = 0;
+static unsigned int onTableConfigChangedId = 0;
 static std::string basePath;
 
 MSGPI_FOLDER_VAL_SETTING(dofPathProp, "DOFPath", "DOF Path", "Folder that contains the directoutputconfig folder (empty = VPX preference folder)", true, "", 1024);
@@ -173,6 +180,29 @@ static const std::unordered_set<std::string>& LoadRomList(const std::filesystem:
 // which is not the game this name was built for.
 static bool RomListContains(const std::unordered_set<std::string>& romList, const std::string_view& romName) { return romList.contains(ToUpper(romName)); }
 
+// libDOF's own lookup (LedControlConfigList::GetTableConfigDictionary): an entry for the rom name, then one for its start
+// (afm for afm_113b)
+static bool RomListHasConfig(const std::unordered_set<std::string>& romList, const std::string_view& romName)
+{
+   const std::string rom = ToUpper(romName);
+   if (romList.contains(rom))
+      return true;
+   for (const std::string& name : romList)
+      if (!name.empty() && rom.starts_with(name))
+         return true;
+   return false;
+}
+
+static void SetTableHasConfig(const bool hasConfig)
+{
+   if (hasConfig == tableHasConfig)
+      return;
+   tableHasConfig = hasConfig;
+   msgApi->BroadcastMsg(endpointId, onTableConfigChangedId, nullptr);
+}
+
+static void OnGetTableConfig(const unsigned int, void*, void* msgData) { *static_cast<bool*>(msgData) = tableHasConfig; }
+
 static std::string ResolveRomName(const std::string_view& gameNs, const std::string_view& gameKey, const std::unordered_set<std::string>& romList)
 {
    if (!gameNs.empty())
@@ -276,16 +306,24 @@ static void SetupDOF()
    UpdateBasePath();
    const ControllerDef controller = controllers->With([](const std::vector<ControllerDef>& items) { return items.empty() ? ControllerDef { } : items.front(); });
    if (controller.gameId == nullptr || controller.endpointId == 0)
+   {
+      SetTableHasConfig(false);
       return;
+   }
    const std::string_view gameNs = PinballPlugin::Controller::CtrlGetGameNamespace(controller.gameId);
    const std::string_view gameKey = PinballPlugin::Controller::CtrlGetGameKey(controller.gameId);
    if (gameKey.empty())
+   {
+      SetTableHasConfig(false);
       return;
+   }
 
    VPXTableInfo tableInfo {};
    vpxApi->GetTableInfo(&tableInfo);
    const string path = tableInfo.path ? tableInfo.path : ""; // Native narrow path, as libDOF expects
-   const string romName = ResolveRomName(gameNs, gameKey, LoadRomList(PluginStrings::PathFromNative(tableInfo.path)));
+   const std::unordered_set<std::string>& romList = LoadRomList(PluginStrings::PathFromNative(tableInfo.path));
+   const string romName = ResolveRomName(gameNs, gameKey, romList);
+   SetTableHasConfig(RomListHasConfig(romList, romName));
 
    LOGI("New game started: gameId="s + controller.gameId + ", romName=" + romName);
    dofThread = std::make_unique<DOFEventConsumer>(path, romName, controller);
@@ -306,6 +344,7 @@ static void OnGameEnd(const unsigned int, void*, void*)
 {
    gameEnded = true;
    dofThread = nullptr;
+   SetTableHasConfig(false);
 }
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
@@ -371,11 +410,18 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
          if (selected != nullptr)
             items.push_back(*selected);
       },
-      []() { dofThread = nullptr; }, []() { SetupDOF(); });
+      []()
+      {
+         dofThread = nullptr;
+         SetTableHasConfig(false);
+      },
+      []() { SetupDOF(); });
    controllers->Subscribe();
 
    msgApi->SubscribeMsg(endpointId, onGameStartId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START), OnGameStart, nullptr);
    msgApi->SubscribeMsg(endpointId, onGameEndId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END), OnGameEnd, nullptr);
+   msgApi->SubscribeMsg(endpointId, getTableConfigId = msgApi->GetMsgID("DOF", "GetTableConfig"), OnGetTableConfig, nullptr);
+   onTableConfigChangedId = msgApi->GetMsgID("DOF", "OnTableConfigChanged");
 }
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
@@ -384,6 +430,10 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
    msgApi->UnsubscribeMsg(onGameEndId, OnGameEnd, nullptr);
    msgApi->ReleaseMsgID(onGameStartId);
    msgApi->ReleaseMsgID(onGameEndId);
+   msgApi->UnsubscribeMsg(getTableConfigId, OnGetTableConfig, nullptr);
+   msgApi->ReleaseMsgID(getTableConfigId);
+   msgApi->ReleaseMsgID(onTableConfigChangedId);
+   tableHasConfig = false;
    gameEnded = false;
    controllers->Unsubscribe();
    controllers = nullptr;

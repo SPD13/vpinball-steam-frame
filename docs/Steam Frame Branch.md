@@ -32,8 +32,8 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu, or in the middle of the view, sized like the menu text, while it is closed (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
-- **Controller layouts in the controller's page** (Controllers > the controller): *Set default mapping* and, for Xbox pads and the PinOne's USB controller, *Set PinOne mapping* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
-- **Vibrations on the controller that started the game** (Controllers > *Send vibrations to the controller used to start the game*, on by default): only the controller whose button pressed Start vibrates, instead of every connected one (the VR controllers and a pinball controller together). Until Start is pressed on the table, all controllers vibrate (section 35).
+- **Controller layouts in the controller's page** (Controls > the controller): *Set default mapping* and, for Xbox pads and the PinOne's USB controller, *Set PinOne Mini mapping and DOF Config* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
+- **Vibrations on the controller that started the game** (Controls > *Send vibrations to the controller used to start the game*, on by default): only the controller whose button pressed Start vibrates, instead of every connected one (the VR controllers and a pinball controller together). Until Start is pressed on the table, all controllers vibrate (section 35).
 - **DOF feedback on the PinOne** (2026-11-18, not yet tested on hardware): the table drives the PinOne's outputs through DOF over USB, or over Bluetooth in its Xbox mode with a PinOne firmware that has the DOF channel; the DOF plugin is on by default; the DOF Config Tool's files are uploaded from a browser (section 36).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
 - **Steadier chrome, smoother edges**: specular anti-aliasing in the material shader stops the shiny parts from sparkling when the image is resampled every frame, on every platform; the headset builds also default to Standard FXAA, the only anti-aliasing within the Frame's budget at native resolution (section 12, `docs/Image Quality on the Steam Frame.md`).
@@ -790,13 +790,13 @@ written at its top).
 
 ## 33. Gamepads taken over by Steam Input (2026-11-17)
 
-A PinOne paired over Bluetooth in its Xbox mode showed in the Controllers menu, but no button reached VPX; disabling Steam Input for VPX
+A PinOne paired over Bluetooth in its Xbox mode showed in the Controls menu, but no button reached VPX; disabling Steam Input for VPX
 in the Steam library fixed it. Steam decodes the controller, but in the headset it never treats VPX as the focused game (gamescope's
 focused app stays empty, Steam activates the controllers for its own interface only), so the virtual pads it gives VPX instead of the
 physical controllers stay silent. The Frame build now empties `SDL_GAMECONTROLLER_IGNORE_DEVICES`, the list of controllers Steam tells SDL
 to skip, before SDL starts its gamepads (`SDL_HINT_OVERRIDE` on the hint), so VPX reads the physical controllers, Steam Input left on.
 Tested on the Frame on 2026-11-17: PinOne flippers mapped and played. Steam's virtual pads, which then did nothing, are left out of the
-Controllers menu: SDL gives each the name and ids of the controller it stands for (the PinOne's showed as a second
+Controls menu: SDL gives each the name and ids of the controller it stands for (the PinOne's showed as a second
 `Xbox Series X Controller`, `045e:0b13`), and only their SDL GUID carries the ids of Steam's virtual gamepad, `28de:11ff`, which VPX tests
 before opening a joystick (`Steam Input: virtual pad '...' left out`). This also leaves out the pad of the Frame's own controllers, which
 section 7 only kept from proposing a layout. Steam's pads saved by earlier builds (in `Input.Devices` and in the mappings, when a layout was
@@ -818,10 +818,10 @@ flippers on the triggers and the magna-saves on the shoulder buttons. Mappings a
 per table, so it changed them everywhere.
 
 In every fork build (`VPX_STEAM_FRAME`), `InputManager::ProcessInput` no longer offers layouts (the VR controllers still get theirs at
-once), and the controller's page (`InputDevicePage`, Controllers > the controller) has, besides *Erase this device*:
+once), and the controller's page (`InputDevicePage`, Controls > the controller) has, besides *Erase this device*:
 
 - **Set default mapping**: upstream's default layout of the device, when it has one.
-- **Set PinOne mapping**: on Xbox pads (SDL gamepad type Xbox 360 or Xbox One, so the PinOne in its Bluetooth Xbox mode, `045e:0b13`) and
+- **Set PinOne Mini mapping and DOF Config** (named *Set PinOne mapping* until 2026-11-18): on Xbox pads (SDL gamepad type Xbox 360 or Xbox One, so the PinOne in its Bluetooth Xbox mode, `045e:0b13`) and
   on the PinOne's USB controller (`39f5:9208`, wired: in its own Bluetooth mode it has the same ids, wireless). Made from the owner's
   mapping of the Bluetooth PinOne on the Frame (2026-11-17, without the leftovers of the default layout), on the firmware's default Xbox
   assignment: flippers LB/RB (inputs 3 and 1, also the staged flippers), magna-saves on the triggers (inputs 4 and 2), A launch ball and
@@ -846,7 +846,7 @@ through SDL (`SDLInputHandler::PlayRumble`) and the VR controllers through OpenX
 controllers connected, both vibrated, which confused the player (the PinOne also turns the vibrations of its Xbox mode into its solenoid
 outputs).
 
-`Player.RumbleStartController` (Controllers > *Send vibrations to the controller used to start the game*, on by default, fork builds)
+`Player.RumbleStartController` (Controls > *Send vibrations to the controller used to start the game*, on by default, fork builds)
 records the device whose binding pressed the Start action (`InputAction::OnInputChanged`, which receives the binding that changed), and the
 two handlers then start vibrations on that device only: one SDL controller, or the VR controllers (both hands: one device for VPX).
 Stopping a vibration is always sent to all. Until Start is pressed on the table (attract mode, a table started otherwise), all controllers
@@ -882,14 +882,24 @@ Bluetooth path.
   folder are moved to `<preferences>/directoutputconfig/`, where libdof looks without `GlobalConfig_B2SServer.xml`
   (`TableLibrary::ImportDofConfig`, called by `WebServer` for every upload; test in `tests/test-table-library.cpp`); backups hold
   that folder with the settings (`Backup.cpp`). A controller libdof drives (a wired PinOne, or an Xbox pad whose HID device has the
-  vendor collection, matched by serial) gets no physics vibrations unless `Player.RumbleDofController` is on (Controllers, *Send
-  vibrations to a controller driven by DOF*), so the rumble outputs don't fire with both the table and the physics
-  (`Vibrations::OnJoystickAdded`).
+  vendor collection, matched by serial) gets no physics vibrations while DOF is on and its configuration has an entry for the
+  table, so its rumble outputs follow either the table or the physics, never both (owner 2026-11-18: an option to get both was
+  dropped), and the tables missing from the DOF database get the vibrations (`Vibrations::OnJoystickAdded`, `ShouldVibrate`). The DOF
+  plugin says whether the table has an entry, with libDOF's lookup (the rom name, then an entry its name starts with): message
+  `DOF`/`GetTableConfig` (data: `bool*`) and `DOF`/`OnTableConfigChanged` when it changes (`plugins/dof/DOFPlugin.cpp`, generic,
+  upstream candidate); VPX follows them from the game start to its end (`Vibrations::OnGameStarted`/`OnGameEnding`, hooks in
+  `player.cpp`), asking at the start as the plugin may set the table up before it. The DOF switch (Plugins > DOF > DOF Enable) is read at
+  each vibration, so turning DOF off gives the PinOne the physics vibrations again without reconnecting it.
+- **Controller page** (`src/steamframe/DofSetup.h`): the page of an Xbox pad or of the PinOne's USB controller has a **DOF Enable** switch
+  (the plugin loaded or unloaded and `Plugin.DOF.Enable` saved, as Plugins > DOF > DOF Enable), with a note that the vibrations are off
+  while DOF is on, and *Set PinOne Mini mapping and DOF Config*: the PinOne layout, DOF on, and the configuration shipped in
+  `assets/dof/pinone-mini` (the owner's DOF Config Tool output, 2026-11-18: PinOne = LedWiz 11, port 1 *Left Solenoid*, port 2 *Right
+  Solenoid*) copied to `<preferences>/directoutputconfig`, replacing an uploaded one; a running DOF is restarted on it.
 
-To check on the hardware: libdof finds the Bluetooth PinOne (`vpinball.log`), a table's DOF fires the mapped outputs with an acceptable
-delay, the Xbox pad still works with Steam on the Frame and on Windows (the extra collection), the strong/weak motors, whether SDL's
-hidapi reports the vendor collection and the serial on the Frame (vibration filter), and whether the USB PinOne's vendor hidraw node
-needs a udev rule.
+Checked on the Frame (2026-11-18): libdof finds the Bluetooth PinOne and loads the table's entry (Medieval Madness, `mm` for
+`mm_109b`), SDL's hidapi reports the vendor collection and the serial (the vibration filter finds the PinOne), raw report 6 writes fire
+the outputs, and the owner felt the table's DOF on the PinOne. Still to check: the delay, the Xbox pad on Windows (the extra collection), the strong/weak motors, and
+whether the USB PinOne's vendor hidraw node needs a udev rule.
 
 Files: `src/steamframe/TableLibrary.h/.cpp`, `src/steamframe/Launcher.cpp`, `lib/src/WebServer.cpp`, `src/steamframe/Backup.cpp`,
 `src/steamframe/Vibrations.h/.cpp`, `src/input/SDLInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`,
