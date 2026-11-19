@@ -384,7 +384,7 @@ Over ssh, the file can also be edited directly, for example `ssh steamos@frame.l
 
 ## PinOne pinball controller
 
-The PinOne pinball controller (Cleveland Software Design) works in the game by USB, and over Bluetooth in its **Xbox mode**, where it presents itself as an Xbox controller. The game reads it directly, with Steam Input left on.
+The PinOne pinball controller (Cleveland Software Design) works in the game by USB, and over Bluetooth in its **Xbox mode**, where it presents itself as an Xbox controller. The game reads it directly, with Steam Input left on. Technical details: [PinOne Integration](/docs/steam-frame/PinOne%20Integration.md).
 
 > Bluetooth pairing with the Steam Frame needs a fix in the PinOne's firmware, proposed in [philipellisis/PinOne#9](https://github.com/philipellisis/PinOne/pull/9) and not in a published PinOne release yet (November 2026). Until then, connect it by USB.
 

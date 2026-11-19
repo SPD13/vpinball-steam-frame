@@ -857,7 +857,10 @@ again for each table). Logged: `Vibrations: the game was started from '<device>'
 Files: `src/steamframe/Vibrations.h/.cpp` (new), `src/input/InputAction.cpp`, `src/input/InputManager.cpp`, `src/input/SDLInputHandler.h`,
 `src/input/XRInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`, `src/core/Settings_properties.inl`, `steamframe/steamframe.cmake`.
 
-## 36. DOF feedback on the PinOne (2026-11-18, not yet tested on hardware)
+## 36. DOF feedback on the PinOne (2026-11-18, tested on the Frame; identity report 2026-11-19, not tested)
+
+The whole PinOne integration (pairing, Steam Input, mapping, vibrations, DOF, identity), with its details and test state:
+`docs/steam-frame/PinOne Integration.md`.
 
 VPX already had DOF: table scripts' `DOF` calls (B2S plugin) and PinMAME's solenoids, GI and lamps
 (`plugins/plugins/B2SPluginEventStream.cpp`) reach `plugins/dof/DOFPlugin.cpp`, which feeds libdof. libdof maps them to outputs with
