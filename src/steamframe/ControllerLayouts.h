@@ -10,8 +10,9 @@
 // (InputManager::ProcessInput, all fork builds; the VR controllers still get their layout at once), and the controller's page offers:
 // - Set default mapping: upstream's default layout of the device (InputManager::ApplyDefaultDeviceMapping).
 // - Set PinOne Mini mapping and DOF Config (src/steamframe/DofSetup.h, which also turns DOF on and installs the PinOne Mini DOF
-//   configuration): the layout of the PinOne pinball controller (Cleveland Software Design), on Xbox pads (the PinOne in its
-//   Bluetooth Xbox mode presents itself as one, 045e:0b13) and on the PinOne's USB controller (39f5:9208, raw button n = PinOne input
+//   configuration): the layout of the PinOne pinball controller (Cleveland Software Design), on the PinOne in its Bluetooth
+//   Xbox mode (it presents itself as an Xbox pad, 045e:0b13: offered only when it answers the identity report of its firmware, listed
+//   as "PinOne (XBox)", src/steamframe/PinOneDevices.h; not on a real Xbox pad) and on the PinOne's USB controller (39f5:9208, raw button n = PinOne input
 //   n + 1). Made from the owner's mapping of a Bluetooth PinOne on the Frame (2026-11-17), with the firmware's default Xbox assignment:
 //     PinOne input              Xbox control      USB button   VPX action
 //     3 left flipper            LB                2            Left flipper and left staged flipper
@@ -39,8 +40,8 @@ class InputManager;
 namespace VPX::ControllerLayouts
 {
 
-// Called at the end of SDLInputHandler::OnJoystickAdded: records the inputs of the PinOne layout of an Xbox pad or of the PinOne's
-// USB controller (by settings id, valid from one table to the next), and names the inputs of the latter.
+// Called at the end of SDLInputHandler::OnJoystickAdded, after PinOneDevices::OnJoystickAdded: records the inputs of the PinOne
+// layout of an identified PinOne in Xbox mode or of the PinOne's USB controller (by settings id, valid from one table to the next), and names the inputs of the latter.
 void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joystick);
 
 bool HasPinOneLayout(InputManager& input, uint16_t deviceId);

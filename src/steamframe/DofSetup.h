@@ -4,8 +4,9 @@
 
 // Steam Frame Edition: DOF for the PinOne from its controller page (Controls > the controller).
 //
-// The page of an Xbox pad (the PinOne in its Bluetooth Xbox mode) or of the PinOne's USB controller has:
-// - on a PinOne with a DOF channel only (the USB PinOne, or a pad with the PinOne's DOF collection, not a real Xbox pad), a DOF
+// The page of a PinOne (its USB controller, or "PinOne (XBox)": the PinOne in its Bluetooth Xbox mode, told from a real Xbox pad by
+// its firmware's identity report, src/steamframe/PinOneDevices.h) has:
+// - on a PinOne with a DOF channel (src/steamframe/PinOneDevices.h), a DOF
 //   Enable switch, the same as Plugins > DOF > DOF Enable (the plugin loaded or unloaded at once, its setting saved), with a note that the
 //   controller's vibrations are off while DOF drives it (src/steamframe/Vibrations.h: except on the tables DOF has no entry for);
 // - Set PinOne Mini mapping and DOF Config: the PinOne layout (src/steamframe/ControllerLayouts.h), DOF turned on, and the game's DOF
@@ -23,7 +24,7 @@ namespace VPX::DofSetup
 // Whether the DOF plugin runs
 bool IsDofEnabled(Player* player);
 
-// Whether the device is a PinOne with a DOF channel (src/steamframe/Vibrations.h), the pages that show the DOF Enable switch
+// Whether the device is a PinOne with a DOF channel (src/steamframe/PinOneDevices.h), the pages that show the DOF Enable switch
 bool HasDofChannel(uint16_t deviceId);
 
 // Loads or unloads the DOF plugin and saves Plugin.DOF.Enable, as Plugins > DOF > DOF Enable does

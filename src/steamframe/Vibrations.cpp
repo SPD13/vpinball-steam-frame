@@ -5,13 +5,10 @@
 
 #include "core/VPApp.h"
 #include "core/player.h"
-#include "input/HIDEnumeration.h"
-
-#include <SDL3/SDL.h>
+#include "steamframe/PinOneDevices.h"
 
 #include <algorithm>
 #include <atomic>
-#include <cctype>
 #include <optional>
 #include <unordered_set>
 
@@ -34,41 +31,6 @@ void Reset()
    s_dofDevices.clear();
 }
 
-// A Bluetooth address as SDL and hidapi give it, without separators or case ("3c:dc:75:ed:b5:21" == "3CDC75EDB521")
-static std::string NormalizedSerial(const std::string& serial)
-{
-   std::string out;
-   for (char c : serial)
-      if (std::isalnum(static_cast<unsigned char>(c)))
-         out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-   return out;
-}
-
-// The PinOne in its Bluetooth Xbox mode: the HID device of this joystick has the 0xFF00 vendor collection (DOF). Matched by serial;
-// without serials, when there is a single such device.
-static bool HasPinOneDofCollection(SDL_Joystick* joystick)
-{
-   const char* const joySerial = SDL_GetJoystickSerial(joystick);
-   const std::string serial = NormalizedSerial(joySerial ? joySerial : "");
-   int count = 0;
-   bool matched = false;
-   if (SDL_hid_device_info* const devices = EnumerateAllHIDDevices(0x045E, 0x0B13); devices)
-   {
-      for (const SDL_hid_device_info* dev = devices; dev; dev = dev->next)
-      {
-         if (dev->usage_page != 0xFF00 || dev->usage != 0x01)
-            continue;
-         count++;
-         std::string devSerial;
-         for (const wchar_t* c = dev->serial_number; c && *c; c++)
-            devSerial += static_cast<char>(*c);
-         matched |= !serial.empty() && NormalizedSerial(devSerial) == serial;
-      }
-      SDL_hid_free_enumeration(devices);
-   }
-   return matched || (serial.empty() && count == 1);
-}
-
 // Whether the DOF plugin is on (Plugins > DOF > DOF Enable), read at each vibration so turning it off gives the PinOne its vibrations back at once
 static bool DofEnabled()
 {
@@ -76,17 +38,16 @@ static bool DofEnabled()
    return dofEnable.has_value() && g_settingsService.GetAppSettings().GetBool(dofEnable.value());
 }
 
-void OnJoystickAdded(uint16_t deviceId, SDL_Joystick* joystick)
+void OnJoystickAdded(uint16_t deviceId, const std::string& name)
 {
-   const uint16_t vendor = SDL_GetJoystickVendor(joystick);
-   const uint16_t product = SDL_GetJoystickProduct(joystick);
-   const bool wiredPinOne = vendor == 0x39F5 && product == 0x9208 && SDL_GetJoystickConnectionState(joystick) == SDL_JOYSTICK_CONNECTION_WIRED;
-   const bool xboxPinOne = vendor == 0x045E && product == 0x0B13 && HasPinOneDofCollection(joystick);
-   if (!wiredPinOne && !xboxPinOne)
+   const VPX::PinOneDevices::Identity& pinOne = VPX::PinOneDevices::Get(deviceId);
+   if (!pinOne.dofChannel)
+   {
+      s_dofDevices.erase(deviceId); // A device id comes back with its settings id, maybe as another controller
       return;
+   }
    s_dofDevices.insert(deviceId);
-   const char* const name = SDL_GetJoystickName(joystick);
-   PLOGI << "Vibrations: '" << (name ? name : "") << "' is a PinOne with a DOF channel" << (wiredPinOne ? " (USB)" : " (Bluetooth Xbox mode)")
+   PLOGI << "Vibrations: '" << name << "' is a PinOne with a DOF channel" << (pinOne.usb ? " (USB)" : " (Bluetooth Xbox mode)")
          << (DofEnabled() ? ", it gets the vibrations only on the tables DOF has no entry for" : ", DOF is off: it gets the vibrations");
 }
 
@@ -98,8 +59,6 @@ void OnActionPressed(const std::string& actionSettingId, uint16_t deviceId, cons
    PLOGI << "Vibrations: the game was started from '" << deviceSettingId << '\''
          << (g_settingsService.GetAppSettings().GetPlayer_RumbleStartController() ? ", only this controller vibrates" : " (all controllers vibrate, option off)");
 }
-
-bool IsDofController(uint16_t deviceId) { return s_dofDevices.contains(deviceId); }
 
 bool ShouldVibrate(uint16_t deviceId)
 {

@@ -19,12 +19,10 @@
 // the Xbox rumble into outputs of its own, which would otherwise fire with the table's DOF and with the physics vibrations. A table
 // missing from the DOF configuration (DOF Config Tool database) gets the vibrations instead: the DOF plugin tells whether it has an
 // entry ("DOF"/"GetTableConfig", "DOF"/"OnTableConfigChanged", followed from OnGameStarted to OnGameEnding). Such a controller is a PinOne with a DOF channel libdof
-// uses: wired (39f5:9208, its USB vendor report), or in its Bluetooth Xbox mode (045e:0b13 with a 0xFF00 vendor collection, which a
-// real Xbox pad has not; matched to the joystick by serial, the Bluetooth address). Found when the joystick connects
-// (OnJoystickAdded); the DOF plugin's switch (Plugins > DOF > DOF Enable) is read at each vibration, so with DOF off the PinOne gets the
+// uses (src/steamframe/PinOneDevices.h): wired (39f5:9208, its USB vendor report), or in its Bluetooth Xbox mode (045e:0b13 with the
+// 0xFF00 vendor collection, which a real Xbox pad has not; matched to the joystick by serial only, the Bluetooth address). Found when
+// the joystick connects (OnJoystickAdded); the DOF plugin's switch (Plugins > DOF > DOF Enable) is read at each vibration, so with DOF off the PinOne gets the
 // vibrations again right away.
-
-#include <SDL3/SDL_joystick.h>
 
 #include <cstdint>
 #include <string>
@@ -38,14 +36,12 @@ void Reset();
 // Called by InputAction::OnInputChanged when an action becomes pressed by a binding of the given device
 void OnActionPressed(const std::string& actionSettingId, uint16_t deviceId, const std::string& deviceSettingId);
 
-// Called at the end of SDLInputHandler::OnJoystickAdded: records the controllers the table drives through DOF
-void OnJoystickAdded(uint16_t deviceId, SDL_Joystick* joystick);
+// Called at the end of SDLInputHandler::OnJoystickAdded, after PinOneDevices::OnJoystickAdded: records the controllers the table
+// drives through DOF
+void OnJoystickAdded(uint16_t deviceId, const std::string& name);
 
 // Whether a vibration is sent to the given device
 bool ShouldVibrate(uint16_t deviceId);
-
-// Whether the device is a PinOne with a DOF channel (found by OnJoystickAdded)
-bool IsDofController(uint16_t deviceId);
 
 // Called by Player after the plugins are told the game started, and before they are told it ended: follows whether the DOF
 // configuration has an entry for the table

@@ -14,6 +14,7 @@
 #endif
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/ControllerLayouts.h"
+#include "steamframe/PinOneDevices.h"
 #include "steamframe/Vibrations.h"
 #endif
 
@@ -323,6 +324,11 @@ private:
       PLOGI << "Joystick connected: " << joyName.c_str() << " (SDL ID: " << id << ", Axes: " << SDL_GetNumJoystickAxes(joystick)
             << ", Buttons: " << SDL_GetNumJoystickButtons(joystick) << ", Hats: " << SDL_GetNumJoystickHats(joystick) << ", VPX UID: " << settingId.c_str() << ')';
 
+#if defined(VPX_STEAM_FRAME)
+      // A PinOne in its Bluetooth Xbox mode is listed as one, not as the Xbox controller it presents itself as
+      const VPX::PinOneDevices::Identity pinOne = VPX::PinOneDevices::Identify(joystick);
+      joyName = VPX::PinOneDevices::DisplayName(pinOne, joyName);
+#endif
       uint16_t deviceId = m_pininput.RegisterDevice(settingId, InputManager::DeviceType::Joystick, joyName);
       m_joystickIds[id] = deviceId;
 
@@ -611,8 +617,9 @@ private:
          break;
       }
 #if defined(VPX_STEAM_FRAME)
+      VPX::PinOneDevices::OnJoystickAdded(deviceId, pinOne);
       VPX::ControllerLayouts::OnJoystickAdded(m_pininput, deviceId, joystick); // The PinOne layout offered in the controller's page
-      VPX::Vibrations::OnJoystickAdded(deviceId, joystick); // A PinOne driven by DOF gets no physics vibrations
+      VPX::Vibrations::OnJoystickAdded(deviceId, joyName); // A PinOne driven by DOF gets no physics vibrations
 #endif
    }
 

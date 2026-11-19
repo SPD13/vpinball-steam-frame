@@ -390,7 +390,7 @@ The PinOne pinball controller (Cleveland Software Design) works in the game by U
 
 ### Setting its mapping
 
-1. Open the menu, then **Controls**, and select the PinOne: **Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB.
+1. Open the menu, then **Controls**, and select the PinOne: **PinOne (XBox)** over Bluetooth, **PinOne Ultra** by USB. Over Bluetooth, the game tells the PinOne from a real Xbox controller with a firmware that identifies itself (not in a published PinOne release yet); with an older firmware it is listed as **Xbox Series X Controller** and its page has no PinOne items.
 2. Select **Set PinOne Mini mapping and DOF Config**. It replaces every mapping of that controller with the layout below, turns DOF on and installs the game's DOF configuration for the PinOne Mini (see [DOF feedback](#dof-feedback)).
 
 **Set default mapping**, on the same page, applies the game's generic gamepad layout instead (flippers on the triggers, magna-saves on the shoulder buttons), which does not suit the PinOne. The game no longer offers a layout in a pop-up when a controller connects, so a mapping you made by hand stays as it is. Mappings are the same for every table.
@@ -419,12 +419,12 @@ The table follows the PinOne's default settings. If you changed which button sen
 
 ### DOF feedback
 
-The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, button lights) through DOF (DirectOutput), as on a cabinet: by USB, or over Bluetooth while the PinOne stays an Xbox controller. Over Bluetooth, the PinOne needs a firmware with its Bluetooth DOF channel (not in a published PinOne release yet); after updating the firmware, remove the PinOne from the Frame's Bluetooth devices and pair it again, as the Frame keeps the old description of its controls.
+The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, button lights) through DOF (DirectOutput), as on a cabinet: by USB, or over Bluetooth while the PinOne stays an Xbox controller. Over Bluetooth, the PinOne needs a firmware with its Bluetooth DOF channel and its identity (not in a published PinOne release yet); after updating the firmware, remove the PinOne from the Frame's Bluetooth devices and pair it again, as the Frame keeps the old description of its controls.
 
-**DOF in the controller's page.** Open the menu, then **Controls**, and select the PinOne (**Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB):
+**DOF in the controller's page.** Open the menu, then **Controls**, and select the PinOne (**PinOne (XBox)** over Bluetooth, **PinOne Ultra** by USB). These items show only on a PinOne, never on a real Xbox controller:
 
 - **Set PinOne Mini mapping and DOF Config** sets the PinOne mapping, turns DOF on, and installs the DOF configuration the game ships for the PinOne Mini. Select it again to go back to that configuration after uploading your own.
-- **DOF Enable**, on a PinOne with a DOF channel (by USB, or over Bluetooth with the DOF firmware; not on a real Xbox controller), turns DOF on or off, the same switch as **Plugins** > **DOF** > **DOF Enable**. While DOF is on, the controller's vibrations are off: the table drives its outputs (except on the tables missing from the DOF configuration, see [DOF and Vibrations](#dof-and-vibrations)).
+- **DOF Enable**, on a PinOne with a DOF channel (by USB, or over Bluetooth with the DOF firmware), turns DOF on or off, the same switch as **Plugins** > **DOF** > **DOF Enable**. While DOF is on, the controller's vibrations are off: the table drives its outputs (except on the tables missing from the DOF configuration, see [DOF and Vibrations](#dof-and-vibrations)).
 
 **The PinOne Mini configuration shipped with the game** drives its two motors: port 1, the toy *Left Solenoid*, fires with the coils on the left of the table (left flipper and slingshot, ...), port 2, *Right Solenoid*, with the ones on the right (right flipper and slingshot, ball launch, ...). It covers every table of the DOF Config Tool's database, as of November 2026. To drive other toys or outputs (a shaker, a knocker, button lights, a PinOne with more outputs), or to get the tables added to the database since, make your own.
 

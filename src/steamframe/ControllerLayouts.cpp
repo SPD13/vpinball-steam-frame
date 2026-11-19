@@ -7,6 +7,7 @@
 #include "input/InputManager.h"
 #include "input/PlungerHandler.h"
 #include "physics/cabinet/GamepadNudge.h"
+#include "steamframe/PinOneDevices.h"
 
 #include <SDL3/SDL.h>
 
@@ -69,8 +70,13 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
    const string& settingsId = input.GetDeviceSettingId(deviceId);
    const SDL_JoystickID id = SDL_GetJoystickID(joystick);
    const SDL_GamepadType type = SDL_IsGamepad(id) ? SDL_GetGamepadTypeForID(id) : SDL_GAMEPAD_TYPE_UNKNOWN;
+   // Only a PinOne gets the layout: an Xbox pad that answered the PinOne's identity report (src/steamframe/PinOneDevices.h), not a real
+   // Xbox pad, which may share its settings id (same ids, name and version)
+   s_pinOneInputs.erase(settingsId);
    if (type == SDL_GAMEPAD_TYPE_XBOX360 || type == SDL_GAMEPAD_TYPE_XBOXONE)
    {
+      if (!VPX::PinOneDevices::Get(deviceId).xbox)
+         return;
       SDL_Gamepad* const gamepad = SDL_OpenGamepad(id);
       if (gamepad == nullptr)
          return;
@@ -117,7 +123,7 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
 
 bool HasPinOneLayout(InputManager& input, uint16_t deviceId)
 {
-   return s_pinOneInputs.contains(input.GetDeviceSettingId(deviceId));
+   return VPX::PinOneDevices::Get(deviceId).IsPinOne() && s_pinOneInputs.contains(input.GetDeviceSettingId(deviceId));
 }
 
 void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)

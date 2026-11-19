@@ -6,7 +6,7 @@
 #include "core/VPApp.h"
 #include "core/player.h"
 #include "steamframe/ControllerLayouts.h"
-#include "steamframe/Vibrations.h"
+#include "steamframe/PinOneDevices.h"
 #include "ui/live/LiveUI.h"
 
 #include <filesystem>
@@ -27,7 +27,7 @@ bool IsDofEnabled(Player* player)
    return plugin && plugin->IsLoaded();
 }
 
-bool HasDofChannel(uint16_t deviceId) { return VPX::Vibrations::IsDofController(deviceId); }
+bool HasDofChannel(uint16_t deviceId) { return VPX::PinOneDevices::Get(deviceId).dofChannel; }
 
 void SetDofEnabled(Player* player, bool enabled)
 {

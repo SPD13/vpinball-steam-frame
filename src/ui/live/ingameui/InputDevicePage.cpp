@@ -8,6 +8,7 @@
 #if defined(VPX_STEAM_FRAME)
 #include "steamframe/ControllerLayouts.h"
 #include "steamframe/DofSetup.h"
+#include "steamframe/PinOneDevices.h"
 #endif
 
 
@@ -34,8 +35,11 @@ void InputDevicePage::BuildPage()
             m_player->m_liveUI->m_inGameUI.NavigateBack();
             RequestRebuild();
          }));
+   // Only on a PinOne: its USB controller, or "PinOne (XBox)", told from a real Xbox pad by its identity report (src/steamframe/PinOneDevices.h)
    if (VPX::ControllerLayouts::HasPinOneLayout(m_player->m_pininput, m_deviceId))
    {
+      if (const std::string& firmware = VPX::PinOneDevices::Get(m_deviceId).firmware; !firmware.empty())
+         AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "PinOne in Bluetooth Xbox mode, firmware "s + firmware));
       // DOF for the PinOne (src/steamframe/DofSetup.h)
       AddItem(std::make_unique<InGameUIItem>("Set PinOne Mini mapping and DOF Config"s,
          "Replace the mappings of this controller with the PinOne layout (flippers, magna-saves, fire button, plunger and nudge), turn DOF on and install the game's DOF configuration for the PinOne Mini, replacing an uploaded one."s,
