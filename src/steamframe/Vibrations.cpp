@@ -99,6 +99,8 @@ void OnActionPressed(const std::string& actionSettingId, uint16_t deviceId, cons
          << (g_settingsService.GetAppSettings().GetPlayer_RumbleStartController() ? ", only this controller vibrates" : " (all controllers vibrate, option off)");
 }
 
+bool IsDofController(uint16_t deviceId) { return s_dofDevices.contains(deviceId); }
+
 bool ShouldVibrate(uint16_t deviceId)
 {
    if (s_dofDevices.contains(deviceId) && DofEnabled() && s_dofTableHasConfig)

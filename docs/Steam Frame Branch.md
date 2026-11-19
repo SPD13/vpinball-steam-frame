@@ -890,7 +890,7 @@ Bluetooth path.
   upstream candidate); VPX follows them from the game start to its end (`Vibrations::OnGameStarted`/`OnGameEnding`, hooks in
   `player.cpp`), asking at the start as the plugin may set the table up before it. The DOF switch (Plugins > DOF > DOF Enable) is read at
   each vibration, so turning DOF off gives the PinOne the physics vibrations again without reconnecting it.
-- **Controller page** (`src/steamframe/DofSetup.h`): the page of an Xbox pad or of the PinOne's USB controller has a **DOF Enable** switch
+- **Controller page** (`src/steamframe/DofSetup.h`): the page of an Xbox pad or of the PinOne's USB controller has, when it is a PinOne with a DOF channel (`Vibrations::IsDofController`: the USB PinOne, or a pad with the DOF collection; never a real Xbox pad), a **DOF Enable** switch
   (the plugin loaded or unloaded and `Plugin.DOF.Enable` saved, as Plugins > DOF > DOF Enable), with a note that the vibrations are off
   while DOF is on, and *Set PinOne Mini mapping and DOF Config*: the PinOne layout, DOF on, and the configuration shipped in
   `assets/dof/pinone-mini` (the owner's DOF Config Tool output, 2026-11-18: PinOne = LedWiz 11, port 1 *Left Solenoid*, port 2 *Right

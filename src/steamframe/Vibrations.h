@@ -44,6 +44,9 @@ void OnJoystickAdded(uint16_t deviceId, SDL_Joystick* joystick);
 // Whether a vibration is sent to the given device
 bool ShouldVibrate(uint16_t deviceId);
 
+// Whether the device is a PinOne with a DOF channel (found by OnJoystickAdded)
+bool IsDofController(uint16_t deviceId);
+
 // Called by Player after the plugins are told the game started, and before they are told it ended: follows whether the DOF
 // configuration has an entry for the table
 void OnGameStarted(class Player* player);

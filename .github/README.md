@@ -424,7 +424,7 @@ The table can drive the PinOne's outputs (solenoids, shaker, knocker, flashers, 
 **DOF in the controller's page.** Open the menu, then **Controls**, and select the PinOne (**Xbox Series X Controller** over Bluetooth, **PinOne Ultra** by USB):
 
 - **Set PinOne Mini mapping and DOF Config** sets the PinOne mapping, turns DOF on, and installs the DOF configuration the game ships for the PinOne Mini. Select it again to go back to that configuration after uploading your own.
-- **DOF Enable** turns DOF on or off, the same switch as **Plugins** > **DOF** > **DOF Enable**. While DOF is on, the controller's vibrations are off: the table drives its outputs (except on the tables missing from the DOF configuration, see [DOF and Vibrations](#dof-and-vibrations)).
+- **DOF Enable**, on a PinOne with a DOF channel (by USB, or over Bluetooth with the DOF firmware; not on a real Xbox controller), turns DOF on or off, the same switch as **Plugins** > **DOF** > **DOF Enable**. While DOF is on, the controller's vibrations are off: the table drives its outputs (except on the tables missing from the DOF configuration, see [DOF and Vibrations](#dof-and-vibrations)).
 
 **The PinOne Mini configuration shipped with the game** drives its two motors: port 1, the toy *Left Solenoid*, fires with the coils on the left of the table (left flipper and slingshot, ...), port 2, *Right Solenoid*, with the ones on the right (right flipper and slingshot, ball launch, ...). It covers every table of the DOF Config Tool's database, as of November 2026. To drive other toys or outputs (a shaker, a knocker, button lights, a PinOne with more outputs), or to get the tables added to the database since, make your own.
 

@@ -45,7 +45,7 @@ void InputDevicePage::BuildPage()
             m_player->m_liveUI->m_inGameUI.NavigateBack();
             RequestRebuild();
          }));
-      if (const auto dofEnableId = Settings::GetRegistry().GetPropertyId("Plugin.DOF"s, "Enable"s); dofEnableId.has_value())
+      if (const auto dofEnableId = Settings::GetRegistry().GetPropertyId("Plugin.DOF"s, "Enable"s); dofEnableId.has_value() && VPX::DofSetup::HasDofChannel(m_deviceId))
       {
          AddItem(std::make_unique<InGameUIItem>( //
                     dofEnableId.value(), //
