@@ -28,6 +28,11 @@ void LiveUI::UpdateVRPointer()
       float x, y, scroll;
       bool pressed;
       const bool pointing = m_player->m_vrDevice->GetUIPointer(x, y, pressed, scroll);
+      // ImGui's trickling input queue applies a wheel event and a position event in different frames: as the pointer moves a little every
+      // frame (a held controller is never still), the position and wheel events queued each frame while the stick scrolls were applied one
+      // per frame, and the queue grew as long as the scroll lasted (3 s of scrolling left the menu and its highlights moving about 1 s after
+      // the stick was released). The pointer is sampled once per frame, so it has no fast down/up sequences that trickling would preserve.
+      io.ConfigInputTrickleEventQueue = !pointing;
       if (pointing)
       {
          if (pressed && !m_vrPointerPressed && m_inGameUI.IsFlipperNav())
@@ -67,6 +72,7 @@ void LiveUI::UpdateVRPointer()
    }
    else
    {
+      io.ConfigInputTrickleEventQueue = true;
       m_vrPointerVisible = false;
       m_vrPointerClickSwallowed = false;
    }
