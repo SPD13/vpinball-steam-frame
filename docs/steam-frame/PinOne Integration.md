@@ -120,7 +120,7 @@ PinOne by USB (its vendor report 6). In Xbox mode the PinOne had no DOF channel:
 fills with its physics vibrations, not with the table's events. The owner wanted the table's DOF while the PinOne stays an Xbox
 controller (decisions, 2026-11-18: a vendor report in the Xbox map; libdof changed as a fork patch and proposed upstream).
 
-### 6.2 Firmware (branch `feature/ble-xbox-dof`, commit `2ff060d`, on top of PR #9)
+### 6.2 Firmware (branch `feature/ble-xbox-dof`, commit `2ff060d`, on top of PR #9; proposed in [#11](https://github.com/philipellisis/PinOne/pull/11))
 
 - `XboxDescriptor.h`: a second top-level collection after the stock Xbox one: usage page `0xFF00`, usage `0x01`, output report 6,
   9 bytes. Same usage page, usage and report id as the USB vendor channel, so libdof finds it the same way. Hosts that don't know it
@@ -234,7 +234,8 @@ works. The USB PinOne (`39f5:9208`, wired) always has its channel.
 
 ### 8.2 The identity report (built, not tested)
 
-**Firmware** (branch `feature/ble-xbox-identity`, commit `6d2ce85` on top of `feature/ble-xbox-dof`, local only): a read-only
+**Firmware** (branch `feature/ble-xbox-identity`, commit `6d2ce85` on top of `feature/ble-xbox-dof`; proposed with the DOF report in
+[#11](https://github.com/philipellisis/PinOne/pull/11)): a read-only
 feature report 7 in the same vendor collection, 32 bytes:
 
 | Bytes | Content |
@@ -402,6 +403,7 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 | `fix/ble-client-features` | `4b602e9` | Pairing fix (section 3) | Yes, PR #9 |
 | `feature/ble-xbox-dof` | `2ff060d` | DOF report 6, queue, motor order (section 6.2) | Yes, to `SPD13/PinOne` |
 | `feature/ble-xbox-identity` | `c2b667c` | Identity report 7 (section 8.2, `6d2ce85`), plunger fixes cherry-picked | No |
+| `feature/ble-xbox-dof-identity` | `bedd33d` | DOF report 6 and identity report 7 rebuilt on `main` without #9 (`8be3348`, `bedd33d`) | Yes, PR #11 |
 | `fix/ble-plunger-rest` | `b4bda93` | Plunger value as USB, first report on subscribe (section 10.2), from `main` | Yes, PR #10 |
 
 ## 12. Upstream
@@ -409,7 +411,7 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 | Change | Upstream | State |
 |---|---|---|
 | Pairing fix | philipellisis/PinOne | [#9](https://github.com/philipellisis/PinOne/pull/9) open |
-| Bluetooth DOF channel, identity report | philipellisis/PinOne | Not proposed (stacked on #9) |
+| Bluetooth DOF channel, identity report | philipellisis/PinOne | [#11](https://github.com/philipellisis/PinOne/pull/11) open (2026-11-19, branch `feature/ble-xbox-dof-identity` from `main`, independent of #9) |
 | Bluetooth plunger as USB, first report on subscribe | philipellisis/PinOne | [#10](https://github.com/philipellisis/PinOne/pull/10) open (2026-11-19, independent of #9) |
 | libdof: PinOne in Xbox mode | vpinball/libdof (and the C# DirectOutput side) | Fork patch only, PR not drafted |
 | DOF plugin's `GetTableConfig`/`OnTableConfigChanged` messages | vpinball/vpinball | Candidate, generic |
