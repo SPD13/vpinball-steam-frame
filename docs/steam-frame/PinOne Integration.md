@@ -23,7 +23,7 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 | DOF or vibrations | A PinOne follows the table's DOF, or the vibrations on tables DOF doesn't know | `Vibrations.*`, `plugins/dof/DOFPlugin.cpp` | Fork master, tested |
 | Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Fork master; checked on the Frame (2026-11-19); firmware in [#11](https://github.com/philipellisis/PinOne/pull/11) |
 | Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, [philipellisis/PinOne#10](https://github.com/philipellisis/PinOne/pull/10) open |
-| Nudge strength | The PinOne layout sets its nudge at 200 %; options to go further | `src/steamframe/ControllerLayouts.cpp`, section 10.5 | Fork master, not tested in a game |
+| Nudge strength | The PinOne layout sets its nudge at 200 %; options to go further | `src/steamframe/ControllerLayouts.cpp`, section 10.5 | Fork master, played on the Frame (Addams Family, 2026-11-19) |
 | Nudge speed | Not sent in Xbox mode; a vendor report like DOF is the path if needed | Section 10.3, 10.4 | Owner's decision, not implemented |
 
 ## 2. The PinOne's connections
@@ -117,7 +117,8 @@ and the right flipper to *UI: Next Item* (the fork has no left and right menu ac
 button to *UI: Confirm*, the magna-saves to *UI: Cancel* (the triggers in Xbox mode past -0.3, like the magna-saves). The X button is
 read from SDL's bindings (`SDL_GAMEPAD_BUTTON_WEST`) in Xbox mode, raw button 6 by USB (`PinOneInputs::x`). The game's actions on these
 buttons stay: the menu actions only act while a menu is open (`InGameUI`, `m_useFlipperNav`), as on the keyboard, where the flipper and
-magna-save keys are also the menu keys. In the fork, the menu button (View) only opens the menu; *UI: Cancel* goes back.
+magna-save keys are also the menu keys. In the fork, the menu button (View) only opens the menu; *UI: Cancel* goes back. Checked by
+the owner on the Frame over Bluetooth (fork master `566fa110f`, 2026-11-19).
 
 The D-pad keeps upstream's menu actions, whose meaning the fork changed: up is *UI: Next Item* (`UIUp`) and down *UI: Previous Item*
 (`UIDown`), left and right *Cancel* and *Confirm*. Y and A give the PinOne an up and down that move as their names say.
@@ -130,6 +131,7 @@ its volume buttons (and Enter opens its test menu). The PinOne layout in Xbox mo
 D-pad to the menu navigation only; applying it clears the controller's previous mappings, so the service buttons go away from it. They
 stay on the keyboard (7, 8, 9, 0) and can be mapped by hand. The USB layout keeps them (the owner asked for the Xbox controller); its
 tilt buttons press the same inputs, so the advice there is to turn them off (VPX simulates the tilt from the nudges, `PlumbHandler`).
+Checked by the owner on Addams Family over Bluetooth (fork master `566fa110f`, 2026-11-19): hard nudges no longer change the volume.
 
 The owner's PinOne settings, read over USB with the configuration tool's request (admin `SEND_CONFIG`, answered with a `C,...` line,
 then `OFF`): tilt buttons on (`tiltButton` 23), up, down, left and right on raw buttons 25, 24, 26 and 27 (D-pad right, left, up and
@@ -433,7 +435,8 @@ alike, and too small to notice in VR.
 **Decision (owner, 2026-11-19): 200 % for the moment.** `ApplyPinOneLayout` (*Set PinOne Mini mapping and DOF Config*) creates the
 PinOne's `GamepadNudge` with `SetStrengthScale(2.f)`, the setting's maximum, saved with the sensor (`NudgeHandler::AddSensor`). A
 mapping set before keeps its strength until the button is pressed again. 200 % doubles the impulses (0.28 to 0.36 g for the same
-shakes); it was not tested in a game yet.
+shakes). The owner played Addams Family with it on the Frame (2026-11-19): the PinOne's nudges act on the table; whether they are
+strong enough or the PinOne's *Max* should come down is still open.
 
 **Options for later**, from the simplest:
 
