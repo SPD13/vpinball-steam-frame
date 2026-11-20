@@ -21,9 +21,9 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 | DOF over Bluetooth | A DOF channel in the Xbox mode, libdof finds it | Firmware `feature/ble-xbox-dof`, `steamframe/patches/libdof` | Fork master, tested on the Frame |
 | DOF configuration | Upload of the DOF Config Tool's zip, backups, a shipped PinOne Mini configuration | `TableLibrary::ImportDofConfig`, `Backup.cpp`, `src/steamframe/DofSetup.*`, `assets/dof/pinone-mini` | Fork master, tested |
 | DOF or vibrations | A PinOne follows the table's DOF, or the vibrations on tables DOF doesn't know | `Vibrations.*`, `plugins/dof/DOFPlugin.cpp` | Fork master, tested |
-| Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Built, **not tested** (no hardware), not pushed |
+| Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Fork master; checked on the Frame (2026-11-19); firmware in [#11](https://github.com/philipellisis/PinOne/pull/11) |
 | Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, [philipellisis/PinOne#10](https://github.com/philipellisis/PinOne/pull/10) open |
-| Nudge strength | The PinOne layout sets its nudge at 200 %; options to go further | `src/steamframe/ControllerLayouts.cpp`, section 10.5 | Branch `dof-pinone-ble`, not tested in a game |
+| Nudge strength | The PinOne layout sets its nudge at 200 %; options to go further | `src/steamframe/ControllerLayouts.cpp`, section 10.5 | Fork master, not tested in a game |
 | Nudge speed | Not sent in Xbox mode; a vendor report like DOF is the path if needed | Section 10.3, 10.4 | Owner's decision, not implemented |
 
 ## 2. The PinOne's connections
@@ -233,7 +233,7 @@ counts: a rule that took the only such device for a pad without a serial was rem
 pad for a PinOne. On the Frame the kernel gives the address (`HID_UNIQ=3c:dc:75:ed:b5:21` for the owner's PinOne), so the match
 works. The USB PinOne (`39f5:9208`, wired) always has its channel.
 
-### 8.2 The identity report (built, not tested)
+### 8.2 The identity report
 
 **Firmware** (branch `feature/ble-xbox-identity`, commit `6d2ce85` on top of `feature/ble-xbox-dof`; proposed with the DOF report in
 [#11](https://github.com/philipellisis/PinOne/pull/11)): a read-only
@@ -251,7 +251,7 @@ size and 0-255 range. The value is set at start (`setIdentityValue`); a host's w
 callback. Hosts that don't know the report never read it: Windows and SDL keep seeing an Xbox controller. It needs a re-pair, like any
 report map change. `FIRMWARE_VERSION` was not bumped.
 
-**VPX** (`src/steamframe/PinOneDevices.h/.cpp`, local commit `ae44a71fd` on branch `dof-pinone-ble`, not pushed):
+**VPX** (`src/steamframe/PinOneDevices.h/.cpp`, fork master):
 
 - `SDLInputHandler::OnJoystickAdded` calls `PinOneDevices::Identify(joystick)` **before** `RegisterDevice`, because the name the
   device is listed under depends on it. For an Xbox pad with the vendor collection (matched by serial, section 8.1), it opens the
@@ -268,9 +268,14 @@ report map change. `FIRMWARE_VERSION` was not bumped.
 - A PinOne on the DOF firmware without the identity report keeps its DOF channel (and the vibration rule), but is listed as an Xbox
   controller and gets no PinOne items. That firmware was never released.
 
-Risk to check on the Frame: the read happens on the main thread when the pad connects. BlueZ's HID-over-GATT answers `GET_REPORT`
-with a GATT read (one Bluetooth round trip) or an error at once when the report doesn't exist; if it didn't answer, the kernel's
-`uhid` waits up to 5 seconds. The log shows the read's outcome.
+The read happens on the main thread when the pad connects. BlueZ's HID-over-GATT answers `GET_REPORT` with a GATT read (one
+Bluetooth round trip) or an error at once when the report doesn't exist; if it didn't answer, the kernel's `uhid` would wait up to 5
+seconds. The log shows the read's outcome.
+
+**Checked on the Frame (2026-11-19)**, firmware `c2b667c` flashed and the PinOne paired again: the report map (314 bytes) declares
+report 7; read from a shell (`HIDIOCGFEATURE` on the hidraw node) it answers in 13 ms with `PinOne`, format 1, capabilities `0x01`,
+firmware `3.3.0`; and VPX logged `PinOne: the Xbox controller 3c:dc:75:ed:b5:21 is a PinOne, firmware 3.3.0, with a DOF channel`,
+listed it as *PinOne (XBox)* and played Addams Family with it. Not checked: a real Xbox pad beside it, Windows.
 
 ## 9. Controller page
 
@@ -335,8 +340,8 @@ single ADC sample: the firmware averages only while the plunger moves, since USB
   this.
 
 Cherry-picked on `feature/ble-xbox-identity` (`da9c6e9`, `c2b667c`). Flashed on the owner's PinOne on 2026-11-19 on top of the DOF
-firmware (`3d51cd4`, a local build, no re-pair needed). **Checked on the Frame**: at rest, 30 s without a plunger event, the axis at
-32768 (the stick's center), and 400 raw reports in 10 s, all at 32768. Still to check: the return to 0 after a release (it needs the
+firmware (`3d51cd4`, a local build, no re-pair needed), then with the identity report (`c2b667c`). **Checked on the Frame**: at
+rest, 30 s without a plunger event, the axis at 32768 (the stick's center), and 400 raw reports in 10 s, all at 32768. Still to check: the return to 0 after a release (it needs the
 plunger to stop inside the rest window, so the calibrated `plungerMid` matters), a table, the quick release over Bluetooth.
 
 Still open: the noise while the plunger moves (the firmware averages 11 ADC reads taken back to back, which removes no 30-50 Hz noise;
