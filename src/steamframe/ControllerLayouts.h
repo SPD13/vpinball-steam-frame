@@ -24,10 +24,11 @@
 //     9 fire                    Start (Menu)      8            Start
 //     5 front                   Y                 4            Insert coin
 //     29                        View              28           In-game menu
-//     25, 28, 27, 26 shifted    D-pad L, D, U, R  24, 27, 26, 25  PinMAME service buttons 1 to 4 (Cancel, Down, Up, Enter), menu navigation
+//     25, 28, 27, 26 shifted    D-pad L, D, U, R  24, 27, 26, 25  Menu navigation; by USB also PinMAME service buttons 1 to 4 (Cancel,
+//                                                                 Down, Up, Enter), not in Xbox mode (tilt buttons on the D-pad inputs)
 //     7 front                   X                 6            (none)
 //     plunger                   right stick Y     axis Z       Plunger position
-//     accelerometer             left stick X/Y    axes X/Y     Nudge, read as a stick position (as upstream's gamepad layout)
+//     accelerometer             left stick X/Y    axes X/Y     Nudge, read as a stick position (as upstream's gamepad layout), 200 %
 //   The PinOne's assignments can be changed in its configuration tool; this layout follows its defaults.
 // Both replace every mapping of that controller (actions, plunger, nudge), like upstream's. Mappings are global (application settings).
 

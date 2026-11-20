@@ -100,7 +100,7 @@ offers the layouts instead:
 | 5 | Y | 5 | Insert coin |
 | 7 | X | 7 | (free) |
 | 29 | View | 29 | Menu |
-| 25 to 28 | D-pad left, right, up, down | 25 to 28 | PinMAME service buttons 1 to 4, menu navigation |
+| 25 to 28 | D-pad left, right, up, down | 25 to 28 | Menu navigation; by USB also PinMAME service buttons 1 to 4 (not in Xbox mode, below) |
 | Plunger | Right stick Y | Z axis | Plunger (position) |
 | Accelerometer | Left stick | X, Y axes | Nudge (`GamepadNudge`, read as a position, as upstream's gamepad layout), strength 200 % (section 10.5) |
 
@@ -109,6 +109,21 @@ through SDL's gamepad mapping (`SDL_GetGamepadBindings`), so the layout uses the
 keeps them by settings id. On USB, raw button *n* is PinOne input *n* + 1, and the inputs get names (*Left Flipper*, *Plunger*...). The
 USB axis order (SDL numbers X, Y, Z, Rx, Ry) has not been checked with the plunger yet. Mappings are global (application settings),
 not per table. Fork master `ecd04ed5f`.
+
+**No service buttons on the D-pad in Xbox mode** (owner's decision, 2026-11-19). Upstream's generic gamepad layout
+(`SDLInputHandler.h`) maps the D-pad left, down, up and right to the PinMAME service buttons 1 to 4 (Cancel, Down, Up, Enter) and to
+the menu navigation, and the PinOne layout did the same. On Addams Family, hard nudges changed the table's volume: the PinOne's tilt
+buttons were on and set to its D-pad inputs, so a hard nudge pressed a D-pad direction, and a WPC game takes Up and Down during play as
+its volume buttons (and Enter opens its test menu). The PinOne layout in Xbox mode (`PinOneInputs::dpadServiceButtons` false) now maps the
+D-pad to the menu navigation only; applying it clears the controller's previous mappings, so the service buttons go away from it. They
+stay on the keyboard (7, 8, 9, 0) and can be mapped by hand. The USB layout keeps them (the owner asked for the Xbox controller); its
+tilt buttons press the same inputs, so the advice there is to turn them off (VPX simulates the tilt from the nudges, `PlumbHandler`).
+
+The owner's PinOne settings, read over USB with the configuration tool's request (admin `SEND_CONFIG`, answered with a `C,...` line,
+then `OFF`): tilt buttons on (`tiltButton` 23), up, down, left and right on raw buttons 25, 24, 26 and 27 (D-pad right, left, up and
+down in the Bluetooth map), thresholds 1200 (X) and 2200 (Y); accelerometer *Max* 5000 (X and Y), dead zone 975, sensitivity 0,
+velocity off, sensor found at `0x6A`; plunger min 40, mid 326, max 1905 mV, resting dead zone 161 mV, quick release 150 ms. A tilt left
+pressed D-pad up (service button 3, *Up*), a tilt right D-pad down (*Down*), the firmware's tilt "up" D-pad right (*Enter*).
 
 ## 6. DOF over Bluetooth in Xbox mode
 
@@ -400,7 +415,7 @@ sways at about 4.5 Hz.
 **Measured on the Frame** (firm shakes, the kernel's input device): each nudge jumped from 0 to about 0.20 of the stick, peaked at
 0.20 to 0.26, and fell back to 0 after 20 to 100 ms. No value between 0 and 0.195 ever came: the firmware's dead zone sets readings
 below it to 0 without rescaling the rest, so the first value let through is already the dead zone's size (dead zone / *Max*: about
-0.2 with the owner's settings, 30 / 280 = 0.11 with the defaults). At 100 % the PinOne's nudges were impulses of 0.14 to 0.18 g: all
+975 / 5000 = 0.195 with the owner's settings, read over USB in section 5; 30 / 280 = 0.11 with the defaults). At 100 % the PinOne's nudges were impulses of 0.14 to 0.18 g: all
 alike, and too small to notice in VR.
 
 **Decision (owner, 2026-11-19): 200 % for the moment.** `ApplyPinOneLayout` (*Set PinOne Mini mapping and DOF Config*) creates the
@@ -426,7 +441,8 @@ shakes); it was not tested in a game yet.
   outside that window after a launch turns the nudge off until it settles: one more reason to calibrate *Mid* (section 10.2).
 - **Tilt buttons.** On the two hardest left shakes, the firmware's tilt detection (`processTiltButton`, raw reading against
   `accelerometerTilt`) pressed its tilt button for about 50 ms, which the owner's Bluetooth map sends as D-pad up: an operator menu
-  button (PinMAME service button 3) in the PinOne layout. The tilt buttons should be off or on a free button.
+  button (PinMAME service button 3) in the PinOne layout, the volume up of a WPC game. Since then the Xbox-mode layout leaves the
+  service buttons off the D-pad (section 5); the tilt buttons should still be off or on a free button.
 - **Front nudges.** `NudgeIntentHandler` keeps only negative front values (`nudge.y = min(y, 0)`: a player pushes the cabinet). The
   PinOne's Y peaks of the test were positive; if they were forward shakes, front nudges are dropped and the Y axis needs reversing
   (the sensor's *Reversed axis*, or the PinOne's orientation). Not checked yet.
@@ -488,6 +504,7 @@ channel.
 | The table's plunger jitters over Bluetooth | Firmware without `fix/ble-plunger-rest` (raw reading sent); with it, the plunger's rest outside `plungerMid` ± the resting dead zone: calibrate in the configuration tool (section 10.2) |
 | Over Bluetooth, sticks read fully deflected until something moves | Firmware with the plunger fix but without `b4bda93` (no first report, section 10.2) |
 | Shaking the PinOne barely nudges | The PinOne layout applied again since 200 % (sensor page: *Nudge Strength*); the PinOne's *Max* and dead zone; the plunger at rest (the firmware holds the nudge at 0 while the plunger moves); the VR left thumbstick unused for 10 s (section 10.5) |
+| A hard nudge changes the volume or opens the test menu (WPC) | The PinOne's tilt buttons on its D-pad inputs; a layout applied before the D-pad change (apply it again) or the USB layout, which keeps the service buttons (section 5) |
 | A real Xbox pad loses its vibrations or gets PinOne items | Should not happen: it has no vendor collection. Look for a `PinOne:` or `Vibrations: ... is a PinOne` log line naming it |
 
 ## 14. Code

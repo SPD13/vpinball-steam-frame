@@ -26,8 +26,12 @@ struct PinOneInputs
    uint16_t lb, rb, leftTrigger, rightTrigger; // Flippers, magna-saves
    bool triggersAreAxes; // Xbox: axes, pressed past -0.3 (they rest at -1), as in upstream's gamepad layout; USB: buttons
    uint16_t a, b, start, y, view; // Launch ball and start, start, start (the fire button), coin, menu
-   uint16_t dpadLeft, dpadDown, dpadUp, dpadRight; // PinMAME service buttons and menu navigation
+   uint16_t dpadLeft, dpadDown, dpadUp, dpadRight; // Menu navigation, and the PinMAME service buttons with dpadServiceButtons
    uint16_t plungerAxis, nudgeXAxis, nudgeYAxis;
+   // The D-pad also presses the PinMAME service buttons (as upstream's gamepad layout). Not in Xbox mode: the PinOne's tilt buttons may be
+   // set to its D-pad inputs (25 to 28), and a hard nudge then pressed a service button, which changes the volume in a WPC game or opens
+   // its test menu (docs/steam-frame/PinOne Integration.md, section 5)
+   bool dpadServiceButtons = true;
 };
 
 static std::unordered_map<string, PinOneInputs> s_pinOneInputs;
@@ -83,7 +87,7 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
       int count = 0;
       if (SDL_GamepadBinding** const bindings = SDL_GetGamepadBindings(gamepad, &count); bindings)
       {
-         const PinOneInputs in { GamepadButton(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, bindings, count),
+         PinOneInputs in { GamepadButton(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, bindings, count),
             GamepadAxis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, bindings, count), true,
             GamepadButton(SDL_GAMEPAD_BUTTON_SOUTH, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_EAST, bindings, count),
             GamepadButton(SDL_GAMEPAD_BUTTON_START, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_NORTH, bindings, count),
@@ -91,6 +95,7 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
             GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_DOWN, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_UP, bindings, count),
             GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_RIGHTY, bindings, count),
             GamepadAxis(SDL_GAMEPAD_AXIS_LEFTX, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_LEFTY, bindings, count) };
+         in.dpadServiceButtons = false;
          // The flippers and magna-saves are what makes it a PinOne layout; any other control the pad lacks is left out
          if (in.lb != NONE && in.rb != NONE && in.leftTrigger != NONE && in.rightTrigger != NONE)
             s_pinOneInputs[settingsId] = in;
@@ -155,10 +160,13 @@ void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
    map(in.start, input.GetStartActionId());
    map(in.y, input.GetAddCreditActionId(0));
    map(in.view, input.GetOpenInGameUIActionId());
-   map(in.dpadLeft, input.GetServiceActionId(0));
-   map(in.dpadDown, input.GetServiceActionId(1));
-   map(in.dpadUp, input.GetServiceActionId(2));
-   map(in.dpadRight, input.GetServiceActionId(3));
+   if (in.dpadServiceButtons)
+   {
+      map(in.dpadLeft, input.GetServiceActionId(0));
+      map(in.dpadDown, input.GetServiceActionId(1));
+      map(in.dpadUp, input.GetServiceActionId(2));
+      map(in.dpadRight, input.GetServiceActionId(3));
+   }
    map(in.dpadUp, input.GetUIUpActionId());
    map(in.dpadDown, input.GetUIDownActionId());
    map(in.dpadLeft, input.GetUILeftActionId());
