@@ -233,6 +233,8 @@ PropFloat(Player, RumbleFlipperButton, "Flipper Button Rumble"s, "Strength of th
 PropFloat(Player, RumbleNudge, "Nudge Rumble"s, "Strength of the rumble played when the cabinet is nudged, scaled by the cabinet acceleration (0 disables it)"s, 0.f, 3.f, 1.f);
 #ifdef VPX_STEAM_FRAME // Vibrations to the controller that started the game only, see src/steamframe/Vibrations.h
 PropBool(Player, RumbleStartController, "Send vibrations to the controller used to start the game"s, "Only the controller whose button started the game (Start) vibrates. Until Start is pressed on the table, all controllers vibrate"s, true);
+// Pop-up in the lobby when a PinOne without the PinOne Mini mapping connects, see src/steamframe/PinOneLayoutPopup.h
+PropBool(Player, PinOneLayoutPopup, "Propose the PinOne Mini mapping"s, "When a PinOne connects without the PinOne Mini mapping, the lobby proposes it, with the DOF configuration, in a pop-up"s, true);
 #endif
 PropFloat(Player, RumbleBallBall, "Ball Collision Rumble"s, "Strength of the rumble played when two balls collide, scaled by the impact speed (0 disables it)"s, 0.f, 3.f, 1.f);
 PropInt(Player, MinPhysLoopTime, "MinPhysLoopTime"s, ""s, 0, 1000, 0); // Legacy lag reduction hack (e.g. if script execution or physics takes very long, comes at the price of "slower" gameplay). Not supported by BGFX variant (due to its multithreaded loop)

@@ -104,6 +104,15 @@ public:
    uint16_t RegisterDevice(const string& settingsId, DeviceType type, const string& name);
    void SetDeviceDefaultMapping(uint16_t deviceId, const std::function<void(MappingSetupHandler&)>& mapper);
    void SetDeviceIsVRVirtualGamepad(uint16_t deviceId) { m_inputDevices[deviceId].m_isVRVirtualGamepad = true; } // Gamepad emulated from the VR controllers (e.g. Steam Input), already handled through OpenXR
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: whether a layout is proposed for the device in the lobby. A PinOne gets its own layout there instead of its default
+   // one (src/steamframe/PinOneLayoutPopup.h): its flag is set again from it, after SetDeviceDefaultMapping
+   void SetDeviceLayoutPending(uint16_t deviceId, bool pending)
+   {
+      m_inputDevices[deviceId].m_hasPendingLayoutApply = pending;
+      m_hasPendingLayoutApply |= pending;
+   }
+#endif
    void RegisterElementName(uint16_t deviceId, bool isAxis, uint16_t buttonOrAxisId, const string& name);
    void UnregisterDevice(uint16_t deviceId);
    void ClearDeviceMappings(uint16_t deviceId);

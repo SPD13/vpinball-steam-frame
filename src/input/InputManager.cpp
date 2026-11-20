@@ -13,8 +13,10 @@
 #include "renderer/VRDevice.h"
 #include "ui/live/LiveUI.h"
 #ifdef VPX_STEAM_FRAME
+#include "steamframe/ControllerLayouts.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
+#include "steamframe/PinOneLayoutPopup.h"
 #include "steamframe/Vibrations.h"
 #include "steamframe/vrui/UpdateCheck.h"
 #endif
@@ -521,7 +523,13 @@ void InputManager::ProcessInput()
             continue;
          }
          const auto noAutoLayoutId = Settings::GetRegistry().GetPropertyId("Input"s, "Device." + device.m_settingsId + ".NoAutoLayout").value();
+#if defined(VPX_STEAM_FRAME)
+         // Steam Frame Edition: a PinOne gets its own pop-up, turned off by its own setting (src/steamframe/PinOneLayoutPopup.h): a real Xbox
+         // pad may share its settings id, hence its NoAutoLayout
+         if (VPX::ControllerLayouts::HasPinOneLayout(*this, device.m_id) ? !m_appSettings.GetPlayer_PinOneLayoutPopup() : m_appSettings.GetBool(noAutoLayoutId))
+#else
          if (m_appSettings.GetBool(noAutoLayoutId))
+#endif
             device.m_hasPendingLayoutApply = false;
          else if (device.m_type == DeviceType::VRController)
          {
@@ -530,12 +538,11 @@ void InputManager::ProcessInput()
             device.m_hasPendingLayoutApply = false;
          }
 #if defined(VPX_STEAM_FRAME)
-         else // No pop-up: the layouts are offered in the controller's page (src/steamframe/ControllerLayouts.h)
+         else if (!m_player->m_isLobby) // Steam Frame Edition: the layouts are proposed in the lobby only, not in the tables
             device.m_hasPendingLayoutApply = false;
-#else
+#endif
          else
             m_hasPendingLayoutApply = true;
-#endif
       }
    }
    if (m_hasPendingLayoutApply && m_player->m_liveUI && !m_player->m_liveUI->IsOpened())
@@ -545,6 +552,26 @@ void InputManager::ProcessInput()
          if (device.m_hasPendingLayoutApply)
          {
             const uint16_t deviceId = device.m_id;
+#if defined(VPX_STEAM_FRAME)
+            // Steam Frame Edition: a PinOne gets the PinOne Mini mapping and DOF configuration proposed instead of its default layout
+            if (VPX::ControllerLayouts::HasPinOneLayout(*this, deviceId))
+            {
+               if (VPX::PinOneLayoutPopup::Propose(m_player, deviceId,
+                      [this, deviceId]()
+                      {
+                         m_hasPendingLayoutApply = false;
+                         for (auto& device : m_inputDevices)
+                         {
+                            if (device.m_id != deviceId)
+                               m_hasPendingLayoutApply |= device.m_hasPendingLayoutApply;
+                            else
+                               device.m_hasPendingLayoutApply = false;
+                         }
+                      }))
+                  m_hasPendingLayoutApply = false;
+               break;
+            }
+#endif
             const auto noAutoLayoutId = Settings::GetRegistry().GetPropertyId("Input"s, "Device." + device.m_settingsId + ".NoAutoLayout").value();
             if (m_player->m_liveUI->m_inGameUI.ProposeInputLayout(device.m_name,
                    [this, deviceId, noAutoLayoutId](bool isOk, bool isDontAskAnymore)

@@ -102,6 +102,9 @@ target_sources(vpinball PRIVATE
    # DOF switch and PinOne Mini DOF configuration in the PinOne's controller page
    src/steamframe/DofSetup.h
    src/steamframe/DofSetup.cpp
+   # Pop-up proposing the PinOne Mini mapping and DOF configuration when a PinOne connects in the lobby
+   src/steamframe/PinOneLayoutPopup.h
+   src/steamframe/PinOneLayoutPopup.cpp
    # Which controllers are a PinOne (USB, or its Bluetooth Xbox mode by its identity report)
    src/steamframe/PinOneDevices.h
    src/steamframe/PinOneDevices.cpp

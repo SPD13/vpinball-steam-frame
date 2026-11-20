@@ -69,7 +69,7 @@ static uint16_t GamepadAxis(SDL_GamepadAxis axis, SDL_GamepadBinding** bindings,
    return NONE;
 }
 
-void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joystick)
+static void RecordPinOneInputs(InputManager& input, uint16_t deviceId, SDL_Joystick* joystick)
 {
    const string& settingsId = input.GetDeviceSettingId(deviceId);
    const SDL_JoystickID id = SDL_GetJoystickID(joystick);
@@ -126,27 +126,29 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
    }
 }
 
+void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joystick)
+{
+   RecordPinOneInputs(input, deviceId, joystick);
+   // A PinOne without the PinOne layout gets its own pop-up in the lobby (src/steamframe/PinOneLayoutPopup.h), instead of the one proposing
+   // its default layout, which SDLInputHandler::OnJoystickAdded has just evaluated: the PinOne's flag follows its own layout
+   if (HasPinOneLayout(input, deviceId))
+      input.SetDeviceLayoutPending(deviceId, !IsPinOneLayoutApplied(input, deviceId));
+}
+
 bool HasPinOneLayout(InputManager& input, uint16_t deviceId)
 {
    return VPX::PinOneDevices::Get(deviceId).IsPinOne() && s_pinOneInputs.contains(input.GetDeviceSettingId(deviceId));
 }
 
-void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
+// The PinOne layout, given to a mapping handler as InputManager does with a device's default layout: applied (ApplyPinOneLayout) or
+// compared with the controller's mappings (IsPinOneLayoutApplied)
+static void MapPinOneLayout(InputManager& input, uint16_t deviceId, const PinOneInputs& in, InputManager::MappingSetupHandler& handler)
 {
-   const auto found = s_pinOneInputs.find(input.GetDeviceSettingId(deviceId));
-   if (found == s_pinOneInputs.end())
-      return;
-   const PinOneInputs& in = found->second;
-   PLOGI << "Controller layouts: PinOne layout applied to '" << input.GetDeviceName(deviceId) << '\'';
-
-   // As InputManager::ApplyDefaultDeviceMapping: the device's mappings are cleared, then the layout's are added and saved
-   input.ClearDeviceMappings(deviceId);
-   const auto map = [&input, deviceId](uint16_t element, unsigned int action, bool isTrigger = false)
+   const auto map = [&handler, deviceId](uint16_t element, unsigned int action, bool isTrigger = false)
    {
       if (element == NONE)
          return;
-      input.GetInputActions()[action]->AddMapping(isTrigger ? ButtonMapping::Create(deviceId, element, -0.3f) : ButtonMapping::Create(deviceId, element));
-      input.GetInputActions()[action]->SaveMapping(g_settingsService.GetAppSettings());
+      handler.MapAction({ isTrigger ? ButtonMapping::Create(deviceId, element, -0.3f) : ButtonMapping::Create(deviceId, element) }, action);
    };
    map(in.lb, input.GetLeftFlipperActionId());
    map(in.lb, input.GetStagedLeftFlipperActionId());
@@ -181,7 +183,7 @@ void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
    {
       std::unique_ptr<PlungerSensor> plunger = std::make_unique<PlungerSensor>(&input);
       plunger->GetPositionSensor()->SetMapping(SensorMapping::Create(deviceId, in.plungerAxis, SensorMapping::Type::Position));
-      input.m_plungerHandler->AddSensor(plunger);
+      handler.MapPlunger(std::move(plunger));
    }
    if (in.nudgeXAxis != NONE && in.nudgeYAxis != NONE)
    {
@@ -193,10 +195,69 @@ void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
       // notice in a game: the strength starts at the setting's maximum, 200 %, for the moment (docs/steam-frame/PinOne Integration.md,
       // section 10.5)
       gamepadNudge->SetStrengthScale(2.f);
-      std::unique_ptr<VPX::Physics::NudgeSensor> nudge = std::move(gamepadNudge);
-      input.m_nudgeHandler->AddSensor(nudge);
+      handler.MapNudge(std::move(gamepadNudge));
    }
+}
+
+void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
+{
+   const auto found = s_pinOneInputs.find(input.GetDeviceSettingId(deviceId));
+   if (found == s_pinOneInputs.end())
+      return;
+   PLOGI << "Controller layouts: PinOne layout applied to '" << input.GetDeviceName(deviceId) << '\'';
+
+   // As InputManager::ApplyDefaultDeviceMapping: the device's mappings are cleared, then the layout's are added and saved
+   class Apply final : public InputManager::MappingSetupHandler
+   {
+   public:
+      explicit Apply(InputManager& input)
+         : m_input(input)
+      {
+      }
+      bool IsTestingMapping() const override { return false; }
+      void MapAction(const vector<ButtonMapping>& mapping, unsigned int action) override
+      {
+         m_input.GetInputActions()[action]->AddMapping(mapping);
+         m_input.GetInputActions()[action]->SaveMapping(g_settingsService.GetAppSettings());
+      }
+      void MapPlunger(std::unique_ptr<PlungerSensor> sensor) override { m_input.m_plungerHandler->AddSensor(sensor); }
+      void MapNudge(std::unique_ptr<VPX::Physics::NudgeSensor> sensor) override { m_input.m_nudgeHandler->AddSensor(sensor); }
+
+   private:
+      InputManager& m_input;
+   };
+   input.ClearDeviceMappings(deviceId);
+   Apply apply(input);
+   MapPinOneLayout(input, deviceId, found->second, apply);
    g_settingsService.GetAppSettings().Save();
+}
+
+bool IsPinOneLayoutApplied(InputManager& input, uint16_t deviceId)
+{
+   const auto found = s_pinOneInputs.find(input.GetDeviceSettingId(deviceId));
+   if (found == s_pinOneInputs.end())
+      return false;
+
+   // As InputManager::SetDeviceDefaultMapping: every mapping of the layout must already be there (others may be added)
+   class Check final : public InputManager::MappingSetupHandler
+   {
+   public:
+      explicit Check(InputManager& input)
+         : m_input(input)
+      {
+      }
+      bool IsTestingMapping() const override { return true; }
+      void MapAction(const vector<ButtonMapping>& mapping, unsigned int action) override { m_isApplied &= m_input.GetInputActions()[action]->HasMapping(mapping); }
+      void MapPlunger(std::unique_ptr<PlungerSensor> sensor) override { m_isApplied &= m_input.m_plungerHandler->HasSensor(sensor); }
+      void MapNudge(std::unique_ptr<VPX::Physics::NudgeSensor> sensor) override { m_isApplied &= m_input.m_nudgeHandler->HasSensor(sensor); }
+      bool m_isApplied = true;
+
+   private:
+      InputManager& m_input;
+   };
+   Check check(input);
+   MapPinOneLayout(input, deviceId, found->second, check);
+   return check.m_isApplied;
 }
 
 }

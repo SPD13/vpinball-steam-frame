@@ -2,12 +2,13 @@
 
 #pragma once
 
-// Steam Frame Edition: controller layouts are offered in the controller's page (Controllers > the controller), not in a pop-up.
+// Steam Frame Edition: controller layouts in the controller's page (Controllers > the controller), and in a pop-up in the lobby only.
 //
 // Upstream proposes a device's default layout in a modal dialog whenever a controller connects with a mapping that differs from that
 // layout, at every session, and "yes" first erases the mappings the player made for it (InputManager::ApplyDefaultDeviceMapping). With a
-// PinOne in its Bluetooth Xbox mode, that replaced its flippers (sent as the shoulder buttons) by magna-saves. The fork shows no pop-up
-// (InputManager::ProcessInput, all fork builds; the VR controllers still get their layout at once), and the controller's page offers:
+// PinOne in its Bluetooth Xbox mode, that replaced its flippers (sent as the shoulder buttons) by magna-saves. The fork proposes layouts in
+// the lobby only, not in the tables (InputManager::ProcessInput; the VR controllers still get their layout at once), and a PinOne gets
+// its own pop-up there, with the PinOne Mini mapping and DOF (src/steamframe/PinOneLayoutPopup.h). The controller's page offers:
 // - Set default mapping: upstream's default layout of the device (InputManager::ApplyDefaultDeviceMapping).
 // - Set PinOne Mini mapping and DOF Config (src/steamframe/DofSetup.h, which also turns DOF on and installs the PinOne Mini DOF
 //   configuration): the layout of the PinOne pinball controller (Cleveland Software Design), on the PinOne in its Bluetooth
@@ -42,10 +43,12 @@ namespace VPX::ControllerLayouts
 {
 
 // Called at the end of SDLInputHandler::OnJoystickAdded, after PinOneDevices::OnJoystickAdded: records the inputs of the PinOne
-// layout of an identified PinOne in Xbox mode or of the PinOne's USB controller (by settings id, valid from one table to the next), and names the inputs of the latter.
+// layout of an identified PinOne in Xbox mode or of the PinOne's USB controller (by settings id, valid from one table to the next), names
+// the inputs of the latter, and flags a PinOne without the PinOne layout for its pop-up in the lobby (src/steamframe/PinOneLayoutPopup.h).
 void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joystick);
 
 bool HasPinOneLayout(InputManager& input, uint16_t deviceId);
 void ApplyPinOneLayout(InputManager& input, uint16_t deviceId);
+bool IsPinOneLayoutApplied(InputManager& input, uint16_t deviceId); // Every mapping of the PinOne layout is there (others may be added)
 
 }

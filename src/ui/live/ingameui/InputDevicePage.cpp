@@ -26,8 +26,16 @@ void InputDevicePage::BuildPage()
 {
    const auto noAutoLayoutId = Settings::GetRegistry().GetPropertyId("Input"s, std::format("Device.{}.NoAutoLayout", m_deviceSettingId));
 #if defined(VPX_STEAM_FRAME)
-   // No pop-up proposes a layout in the fork: they are offered here (src/steamframe/ControllerLayouts.h)
+   // The layouts are offered here, and proposed in a pop-up in the lobby only: a PinOne's is the PinOne Mini mapping (src/steamframe/ControllerLayouts.h,
+   // src/steamframe/PinOneLayoutPopup.h)
+   const bool isPinOne = VPX::ControllerLayouts::HasPinOneLayout(m_player->m_pininput, m_deviceId);
    if (m_player->m_pininput.HasDeviceDefaultMapping(m_deviceId))
+   {
+      if (noAutoLayoutId.has_value() && !isPinOne)
+         AddItem(std::make_unique<InGameUIItem>( //
+            noAutoLayoutId.value(), //
+            [noAutoLayoutId]() { return g_settingsService.GetAppSettings().GetBool(noAutoLayoutId.value()); }, //
+            [noAutoLayoutId](bool v) { g_settingsService.GetAppSettings().Set(noAutoLayoutId.value(), v, false); }));
       AddItem(std::make_unique<InGameUIItem>("Set default mapping"s, "Replace the mappings of this controller with its default layout."s,
          [this]()
          {
@@ -35,9 +43,14 @@ void InputDevicePage::BuildPage()
             m_player->m_liveUI->m_inGameUI.NavigateBack();
             RequestRebuild();
          }));
+   }
    // Only on a PinOne: its USB controller, or "PinOne (XBox)", told from a real Xbox pad by its identity report (src/steamframe/PinOneDevices.h)
-   if (VPX::ControllerLayouts::HasPinOneLayout(m_player->m_pininput, m_deviceId))
+   if (isPinOne)
    {
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_PinOneLayoutPopup, //
+         []() { return g_settingsService.GetAppSettings().GetPlayer_PinOneLayoutPopup(); }, //
+         [](bool v) { g_settingsService.GetAppSettings().SetPlayer_PinOneLayoutPopup(v, false); }));
       if (const std::string& firmware = VPX::PinOneDevices::Get(m_deviceId).firmware; !firmware.empty())
          AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "PinOne in Bluetooth Xbox mode, firmware "s + firmware));
       // DOF for the PinOne (src/steamframe/DofSetup.h)

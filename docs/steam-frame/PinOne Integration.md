@@ -16,7 +16,7 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 |---|---|---|---|
 | Bluetooth pairing | Fixes the pairing with Linux hosts (NimBLE bug) | Firmware `fix/ble-client-features` | Works on the Frame; [philipellisis/PinOne#9](https://github.com/philipellisis/PinOne/pull/9) open |
 | Steam Input | VPX reads the pads Steam takes over | `src/steamframe/SteamInputGamepads.*` | Fork master, tested |
-| Mapping | *Set PinOne Mini mapping and DOF Config* in the controller's page, no layout pop-up | `src/steamframe/ControllerLayouts.*` | Fork master, tested |
+| Mapping | *Set PinOne Mini mapping and DOF Config* in the controller's page; layout pop-ups in the lobby only, a PinOne's proposing the PinOne Mini mapping | `src/steamframe/ControllerLayouts.*`, `src/steamframe/PinOneLayoutPopup.*` | Fork master; pop-ups not tested yet |
 | Vibrations | Only the controller that pressed Start vibrates | `src/steamframe/Vibrations.*` | Fork master, tested |
 | DOF over Bluetooth | A DOF channel in the Xbox mode, libdof finds it | Firmware `feature/ble-xbox-dof`, `steamframe/patches/libdof` | Fork master, tested on the Frame |
 | DOF configuration | Upload of the DOF Config Tool's zip, backups, a shipped PinOne Mini configuration | `TableLibrary::ImportDofConfig`, `Backup.cpp`, `src/steamframe/DofSetup.*`, `assets/dof/pinone-mini` | Fork master, tested |
@@ -80,13 +80,28 @@ account: [Gamepads and Steam Input](Gamepads%20and%20Steam%20Input.md). Fork mas
 
 Upstream proposes a device's default layout in a pop-up whenever a controller connects with another mapping, and "yes" erases the
 mappings made by hand. For a PinOne in Xbox mode its generic gamepad layout (flippers on the triggers, magna-saves on the shoulder
-buttons) is wrong: the PinOne sends its flippers as LB/RB. The fork shows no pop-up anymore (`InputManager::ProcessInput`, every fork
-build; the VR controllers still get their layout at once), and the controller's page (`InputDevicePage`, Controls > the controller)
-offers the layouts instead:
+buttons) is wrong: the PinOne sends its flippers as LB/RB. From 2026-11-17 the fork showed no pop-up at all; since 2026-11-20 (owner's
+request) the pop-ups are back in the **lobby only**, never in a table, and a PinOne gets its own (below). The controller's page
+(`InputDevicePage`, Controls > the controller) offers the layouts too:
 
 - **Set default mapping**: upstream's default layout of the device.
 - **Set PinOne Mini mapping and DOF Config** (section 9): the PinOne layout, made from the owner's mapping of the Bluetooth PinOne on the
   Frame, on the firmware's default Xbox assignment (`bleButtonMap`).
+
+**Pop-ups in the lobby** (`InputManager::ProcessInput`, `VPX_STEAM_FRAME`):
+
+- **Other controllers** (an Xbox controller, for example): upstream's pop-up (`InputProfilePage`, *Device ... was detected*, Apply or
+  Discard, *Don't ask again*), when the controller's mapping lacks its default layout (`SetDeviceDefaultMapping`), unless *Disable
+  Automatic Layout* (`Device.<id>.NoAutoLayout`) is set; the toggle is back in the controller's page. In a table the pending pop-up is
+  dropped. The VR controllers still get their layout at once, anywhere.
+- **A PinOne** (`ControllerLayouts::HasPinOneLayout`: USB, or *PinOne (XBox)* identified by its report): *PinOne Detected*
+  (`src/steamframe/PinOneLayoutPopup.*`), when its mapping lacks the PinOne layout. `ControllerLayouts::OnJoystickAdded` sets the device's
+  pending flag again from the PinOne layout (`InputManager::SetDeviceLayoutPending`), after upstream evaluated its default layout:
+  `IsPinOneLayoutApplied` runs the layout through a checking `MappingSetupHandler`, as upstream does with default layouts, and
+  `ApplyPinOneLayout` through an applying one, so both use the same description of the layout. **Apply** calls
+  `DofSetup::ApplyPinOneMiniSetup`, as the page's button; **Not now** leaves the mappings (asked again at the next lobby); **Don't show
+  again** sets `Player.PinOneLayoutPopup` off, which the PinOne's page turns back on (*Propose the PinOne Mini mapping*). The PinOne's
+  own setting is used instead of `NoAutoLayout`, which a real Xbox pad may share (same settings id).
 
 | PinOne input | Xbox control | USB button | VPX action | Menu action |
 |---|---|---|---|---|
@@ -311,8 +326,9 @@ listed it as *PinOne (XBox)* and played Addams Family with it. Not checked: a re
 
 `InputDevicePage::BuildPage` (Controls > the controller), in the fork build:
 
-- *Set default mapping*, when the device has one.
+- *Set default mapping*, when the device has one, with upstream's *Disable Automatic Layout* (not on a PinOne): no pop-up proposing it.
 - On a PinOne only (`ControllerLayouts::HasPinOneLayout`: the USB PinOne, or *PinOne (XBox)*):
+  - *Propose the PinOne Mini mapping* (`Player.PinOneLayoutPopup`, on by default): the lobby's pop-up (section 5);
   - an information line *PinOne in Bluetooth Xbox mode, firmware X* (identity report);
   - **Set PinOne Mini mapping and DOF Config** (`DofSetup::ApplyPinOneMiniSetup`): the PinOne layout, the shipped configuration
     copied from `assets/dof/pinone-mini` to `<preferences>/directoutputconfig` (replacing an uploaded one), DOF restarted if it ran (it

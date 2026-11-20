@@ -32,7 +32,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **VR**: the menu on a panel standing in the room, in the table's direction, at an adjustable distance, used with the controllers' pointer; notifications above the menu, or in the middle of the view, sized like the menu text, while it is closed (sections 7 and 8).
 - **No "controller detected" prompt for the VR controllers**: Steam Input also presents the Frame controllers as an Xbox gamepad; in VR, VPX no longer asks to set up a layout for it, since the controllers already work through OpenXR (section 7).
 - **Gamepads with Steam Input on** (Frame build): controllers that Steam Input takes over (Xbox, PlayStation, Switch pads, the PinOne in its Bluetooth Xbox mode) work in VPX without disabling Steam Input for it. Steam does not deliver their input to VPX in the headset, so VPX reads them directly (section 33).
-- **Controller layouts in the controller's page** (Controls > the controller): *Set default mapping* and, for the PinOne (its USB controller, or *PinOne (XBox)* over Bluetooth, told from a real Xbox pad by its firmware's identity report), *Set PinOne Mini mapping and DOF Config* (flippers, magna-saves, fire button as launch ball, plunger, nudge). No pop-up offers a layout when a controller connects anymore, and none erases the mappings made by hand (section 34).
+- **Controller layouts in the controller's page** (Controls > the controller): *Set default mapping* and, for the PinOne (its USB controller, or *PinOne (XBox)* over Bluetooth, told from a real Xbox pad by its firmware's identity report), *Set PinOne Mini mapping and DOF Config* (flippers, magna-saves, fire button as launch ball, plunger, nudge). Layouts are proposed in a pop-up when a controller connects in the lobby only, never in a table: a PinOne gets the PinOne Mini mapping and DOF proposed, other controllers their default layout (section 34).
 - **Vibrations on the controller that started the game** (Controls > *Send vibrations to the controller used to start the game*, on by default): only the controller whose button pressed Start vibrates, instead of every connected one (the VR controllers and a pinball controller together). Until Start is pressed on the table, all controllers vibrate (section 35).
 - **DOF feedback on the PinOne** (2026-11-18, not yet tested on hardware): the table drives the PinOne's outputs through DOF over USB, or over Bluetooth in its Xbox mode with a PinOne firmware that has the DOF channel; the DOF plugin is on by default; the DOF Config Tool's files are uploaded from a browser (section 36).
 - **Eye-tracked foveated rendering, exclusive to this branch and to the Steam Frame build**: full shading only around the point the eyes look at, following the headset's eye tracker, through a fragment shading rate image that the Frame's driver applies in its fast direct render path: 2–4 ms per frame on heavy tables at native 2160×2160 per eye, on by default (Medium); a "Foveated rendering" level (Off / Low / Medium / High), an "Eye-tracked" switch and a status line in the VR settings page. Since 2026-10-30 the tone mapping and anti-aliasing passes are foveated too, about 1.7 ms more per frame ("Foveated tone mapping", on by default, and "Foveated anti-aliasing", Automatic by default: foveated only on the tables that cannot hold their full resolution without it). Not in upstream Visual Pinball, and inert on Windows and macOS, whose builds lack the Vulkan driver support and the bgfx patches (section 9, and `Doc/foveated-rendering.md` for the full technical reference).
@@ -817,8 +817,11 @@ pop-up at the next table, and "yes" made its flipper buttons (sent as the should
 flippers on the triggers and the magna-saves on the shoulder buttons. Mappings are application settings (`Mapping.*` in `[Input]`), not
 per table, so it changed them everywhere.
 
-In every fork build (`VPX_STEAM_FRAME`), `InputManager::ProcessInput` no longer offers layouts (the VR controllers still get theirs at
-once), and the controller's page (`InputDevicePage`, Controls > the controller) has, besides *Erase this device*:
+In every fork build (`VPX_STEAM_FRAME`), `InputManager::ProcessInput` no longer offered layouts (the VR controllers still get theirs at
+once). Since 2026-11-20 the pop-ups are back in the lobby only, never in a table: a PinOne gets its own, proposing the PinOne Mini
+mapping and DOF configuration (`src/steamframe/PinOneLayoutPopup.*`, setting `Player.PinOneLayoutPopup`), other controllers upstream's
+(see docs/steam-frame/PinOne Integration.md, section 5). The controller's page (`InputDevicePage`, Controls > the controller) has,
+besides *Erase this device*:
 
 - **Set default mapping**: upstream's default layout of the device, when it has one.
 - **Set PinOne Mini mapping and DOF Config** (named *Set PinOne mapping* until 2026-11-18): on the PinOne in its Bluetooth Xbox mode
@@ -946,7 +949,7 @@ steamframe/README.md                    how the fork is organized, and how to sy
 steamframe/steamframe.cmake             build of the fork (sources, VPX_STEAM_FRAME, libraries)
 steamframe/deps/libarchive.sh           xz + libarchive, run by platforms/*/external.sh
 steamframe/patches/bgfx/                bgfx patches (see below)
-steamframe/patches/pinmame/             libpinmame patches: memory maps of 4-bit memory, nibble before mask (docs/PinMAME Memory Maps on 4-bit Memory.md); banks followed (docs/PinMAME Memory Maps on Banked Memory.md)
+steamframe/patches/pinmame/             libpinmame patch: banks followed (docs/PinMAME Memory Maps on Banked Memory.md); the one of 4-bit memory is upstream's since 2026-11-20
 steamframe/tools/                       sync-upstream.sh, fold-fixups.py, upstream-report.sh
 src/steamframe/Launcher.h
 src/steamframe/Launcher.cpp             table library, scores, web server, lobby and launcher mode (g_launcher, owned by VPApp)
