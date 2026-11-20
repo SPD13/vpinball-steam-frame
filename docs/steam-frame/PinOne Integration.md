@@ -22,7 +22,7 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 | DOF configuration | Upload of the DOF Config Tool's zip, backups, a shipped PinOne Mini configuration | `TableLibrary::ImportDofConfig`, `Backup.cpp`, `src/steamframe/DofSetup.*`, `assets/dof/pinone-mini` | Fork master, tested |
 | DOF or vibrations | A PinOne follows the table's DOF, or the vibrations on tables DOF doesn't know | `Vibrations.*`, `plugins/dof/DOFPlugin.cpp` | Fork master, tested |
 | Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Built, **not tested** (no hardware), not pushed |
-| Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, branch on `SPD13/PinOne`, PR not opened |
+| Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, [philipellisis/PinOne#10](https://github.com/philipellisis/PinOne/pull/10) open |
 | Nudge speed | Not sent in Xbox mode; a vendor report like DOF is the path if needed | Section 10.3, 10.4 | Owner's decision, not implemented |
 
 ## 2. The PinOne's connections
@@ -322,7 +322,7 @@ value: 0 at rest (the reading within `plungerMid` ± `plungerRestingDeadZone` fo
 `disablePlungerWhenNotInUse`), 0 and the launch button after a quick release, and the quick release delay. At rest the reading is also a
 single ADC sample: the firmware averages only while the plunger moves, since USB sends 0 then.
 
-**Fix** (branch `fix/ble-plunger-rest`, from upstream `main`):
+**Fix** (branch `fix/ble-plunger-rest`, from upstream `main`, [philipellisis/PinOne#10](https://github.com/philipellisis/PinOne/pull/10)):
 
 - `e671e50`: `Plunger` keeps the value it last put on the USB axis (`getReportedValue()`) and the Bluetooth report sends it. The values
   are now the USB ones; only the timing differs: USB is polled every 1 ms, Bluetooth sends a change at most every 8 ms and as the link
@@ -402,7 +402,7 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 | `fix/ble-client-features` | `4b602e9` | Pairing fix (section 3) | Yes, PR #9 |
 | `feature/ble-xbox-dof` | `2ff060d` | DOF report 6, queue, motor order (section 6.2) | Yes, to `SPD13/PinOne` |
 | `feature/ble-xbox-identity` | `c2b667c` | Identity report 7 (section 8.2, `6d2ce85`), plunger fixes cherry-picked | No |
-| `fix/ble-plunger-rest` | `b4bda93` | Plunger value as USB, first report on subscribe (section 10.2), from `main` | Yes, to `SPD13/PinOne` |
+| `fix/ble-plunger-rest` | `b4bda93` | Plunger value as USB, first report on subscribe (section 10.2), from `main` | Yes, PR #10 |
 
 ## 12. Upstream
 
@@ -410,7 +410,7 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 |---|---|---|
 | Pairing fix | philipellisis/PinOne | [#9](https://github.com/philipellisis/PinOne/pull/9) open |
 | Bluetooth DOF channel, identity report | philipellisis/PinOne | Not proposed (stacked on #9) |
-| Bluetooth plunger as USB, first report on subscribe | philipellisis/PinOne | Pull request prepared from `SPD13/PinOne` `fix/ble-plunger-rest`, not opened yet (independent of #9) |
+| Bluetooth plunger as USB, first report on subscribe | philipellisis/PinOne | [#10](https://github.com/philipellisis/PinOne/pull/10) open (2026-11-19, independent of #9) |
 | libdof: PinOne in Xbox mode | vpinball/libdof (and the C# DirectOutput side) | Fork patch only, PR not drafted |
 | DOF plugin's `GetTableConfig`/`OnTableConfigChanged` messages | vpinball/vpinball | Candidate, generic |
 | Everything else (`src/steamframe/*`, the controller page) | | Fork only |
