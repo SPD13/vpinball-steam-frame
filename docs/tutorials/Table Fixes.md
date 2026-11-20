@@ -126,7 +126,7 @@ settings) as `<rom>.nv.bak-<date>` in the `pinmame/nvram` folder of the tables.
 
 ## Your own fixes
 
-A `fixes.json` in the settings folder of the game (`/home/steamos/.local/share/VPinballX/10.8/` on the Frame, shown at the bottom of
+A `fixes.json` in the settings folder of the game (`/home/steamos/.local/share/VPinballX/10.9/` on the Frame, shown at the bottom of
 **Table and ROM fixes**) adds your own recipes, in the format of the shipped ones, and turns shipped ones off: `"disable": ["gts3-zero-settings"]`.
 The format is described in [Table and ROM Fixes](../Table%20and%20ROM%20Fixes.md#how-it-works).
 

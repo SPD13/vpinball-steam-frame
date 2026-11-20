@@ -55,16 +55,31 @@ void FileLocator::SetupPrefPath()
 #endif
 
    // Preference are stored per minor version (grouping all minor revision together, as minor revisions are not allowed to need user setup changes)
-#if defined(VPX_STEAM_FRAME)
-   // Steam Frame Edition: the settings, the table library and the caches stay in the folder of the releases since 0.5.0 (10.8). Upstream's
-   // 10.9.0 would copy all of it, texture caches included, into a new 10.9 folder at the first start, and leave the old one behind.
-   static const string versionPath("10.8"s);
-#else
    static const string versionPath(STR(VP_VERSION_MAJOR) "." STR(VP_VERSION_MINOR));
-#endif
    m_prefPath = basePrefPath / versionPath;
    if (DirExists(m_prefPath))
       return;
+
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the folder of the previous version (settings, table library, statistics, texture caches) is moved, not copied
+   // as below: instant, no second copy of the caches, and never left half-filled if the game is closed during the copy. Going back to an
+   // older release afterwards starts it with default settings.
+   for (int minor = VP_VERSION_MINOR - 1; minor >= 0; minor--)
+   {
+      const std::filesystem::path prevPref = basePrefPath / std::format("{}.{}", VP_VERSION_MAJOR, minor);
+      if (!DirExists(prevPref))
+         continue;
+      std::error_code ec;
+      std::filesystem::rename(prevPref, m_prefPath, ec);
+      if (!ec)
+      {
+         PLOGI << "Preference folder moved from " << prevPref << " to " << m_prefPath;
+         return;
+      }
+      PLOGE << "Unable to move the preference folder " << prevPref << " to " << m_prefPath << " (" << ec.message() << "), copying it instead";
+      break;
+   }
+#endif
 
    // We need to migrate, fix or setup the install for proper operation
    if (std::error_code ec; !std::filesystem::create_directories(m_prefPath, ec))

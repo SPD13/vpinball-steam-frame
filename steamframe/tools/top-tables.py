@@ -26,7 +26,7 @@ VPSDB_URL = "https://virtualpinballspreadsheet.github.io/vps-db/db/vpsdb.json"
 VPS_GAME = "https://virtualpinballspreadsheet.github.io/games?game="
 PINSIDE = "https://pinside.com/pinball/machine/"
 FRAME = "steamos@frame.local"
-FRAME_TABLES = ".local/share/VPinballX/10.8/tables.json"
+FRAME_TABLES = ".local/share/VPinballX/10.9/tables.json"
 
 # Wheels that are not an image a table's thumbnail can use, or that belong to another program.
 WHEEL_NEVER = re.compile(r"animated|apng|zen studios|pinball fx|zaccaria", re.I)

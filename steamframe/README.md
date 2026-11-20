@@ -107,7 +107,7 @@ The workspace folder holds, side by side:
    (`pgrep -a VPinballX`), then `Doc/steam-frame-build/deploy-to-frame.sh`; check that the `sha1sum` of
    `~/devkit-game/vpx_frame/VPinballX_BGFX` on the Frame is the one of `steam-frame-package/VPinballX_BGFX`.
 8. **Test on the Frame** (the owner, in the headset): the checklist below, plus the VR and XR commits of the report. Afterwards, on the
-   Frame: `coredumpctl list` (no VPX crash) and `~/.local/share/VPinballX/10.8/vpinball.log` (`Startup done` and `Table switch` for each
+   Frame: `coredumpctl list` (no VPX crash) and `~/.local/share/VPinballX/10.9/vpinball.log` (`Startup done` and `Table switch` for each
    table, no `OnScriptError`). `Doc/steam-frame-build/frame-run.py` starts and stops the game without the headset on.
 9. **Publish, with the owner's approval**: `git push --force-with-lease=master:<fork master before> fork steamframe-squash:master`, then,
    in `vpinball/` if its tree is clean, `git fetch fork && git reset --hard fork/master`. A release for users is a separate decision
@@ -195,8 +195,11 @@ upstream (528 commits). What changed in the fork with it:
 ### Notes for the next sync
 
 - Upstream moved to 10.9.0 (2026-11-19), whose settings folder is `VPinballX/10.9`, filled at the first start with a copy of the older one.
-  The fork keeps `10.8` (`FileLocator::SetupPrefPath`, `VPX_STEAM_FRAME`): the installer, the backup page, the docs and the test hooks
-  name it, and the copy would double the texture caches. Moving would be a decision of its own, with a migration that moves instead of copying.
+  The fork moved with it (sync of 2026-11-20), but **moves** the previous folder instead of copying it (`FileLocator::SetupPrefPath`,
+  `VPX_STEAM_FRAME`): instant, no second copy of the texture caches, nothing half-filled if the game is closed during the copy; upstream's
+  copy stays as the fallback if the move fails. The docs and the test hooks name `10.9`. The release notes of the first release with it
+  say that going back to an older release (0.7.0 and before, which read `10.8`) starts with default settings and an empty library index;
+  a known limit, not a case to support. The next minor version (10.10) is moved the same way.
 - Upstream's `Player::SetTable` / `TakeTableSwitch` switch tables without leaving the player: the launcher (`Launcher::PlaySelectedTables`)
   could use them instead of its own loop, which would remove most of the hooks of `PlayTableCommand`.
 - Propose the memory maps added by the fork to tomlogic/pinball-memory-maps, then drop the bundled copy.

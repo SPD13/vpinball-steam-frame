@@ -14,7 +14,7 @@ The fixes the application applies by itself, and the tables they apply to, are r
 
 ## First checks
 
-1. Read the VPX log (`~/.local/share/VPinballX/10.8/vpinball.log` on the Steam Frame). `Game name not found: '<name>'` means an unknown ROM name: see the aliases document.
+1. Read the VPX log (`~/.local/share/VPinballX/10.9/vpinball.log` on the Steam Frame). `Game name not found: '<name>'` means an unknown ROM name: see the aliases document.
 2. Check that the ROM is in the shared `pinmame/roms/` folder of the tables folder, under the name the table asks for (`cGameName` in the script), or under the name its alias points to.
 3. If the ROM runs but no credits are added, look at the game's settings in its service menu: see the Gottlieb System 3 document.
 

@@ -155,7 +155,7 @@ In the installer app, after step 1: **Uninstall the game from the Frame...** at 
 | The game is missing from the library | Look under **Library > Non-Steam**. Restart Steam on the Frame if it is still missing. |
 | The Steam dashboard stays open when the game starts | Expected: select **Resume Game** (see step 4). |
 | A table does not start, and its log says "Game name not found" | The table asks PinMAME for a game name it does not know, usually a mod that renames its game. In the browser, open the file manager, **⋮ > Advanced > PinMAME ROM aliases**: the tables in this case are listed at the top. Add a line `name,game` with the game from the table's readme (for example `simpprtyh,simpprty`), save, and start the table again. Its ROM (`game.zip`) must be in the ROM folder. See [PinMAME ROM aliases](#pinmame-rom-aliases). |
-| The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.8/vpinball.log` |
+| The game closes at once | Read its log on the Frame: `ssh steamos@frame.local cat .local/share/VPinballX/10.9/vpinball.log` |
 | Something else | The installer app keeps a log of what it did: `installer.log` in `%LOCALAPPDATA%\vpx-frame-installer` (Windows), `~/Library/Caches/vpx-frame-installer` (macOS) or `~/.cache/vpx-frame-installer` (Linux). Attach it when you [report the problem](https://github.com/SPD13/vpinball-steam-frame/issues). |
 
 Developer Mode stays on after the install: it is how the game is installed and updated. Whether the game keeps working with Developer Mode turned off again has not been checked.
@@ -537,20 +537,20 @@ The state of a fix for a table:
 
 - **A script fix** never changes the `.vpx` file. It writes the patched script next to the table as `<table name>.vbs`, a file that Visual Pinball always loads instead of the script inside the table. When the table came with its own `.vbs`, that one is kept as `<table name>.vbs.orig`, and the fix applies to it.
 - **A table replaced by a new version** (uploaded again) is checked again: the patched script made for the old version is removed, so it never replaces the new script, and the fix is applied again only if the new version still needs it.
-- **What was applied** is kept in `table-fixes.json`, in the game's settings folder (`~/.local/share/VPinballX/10.8/` on the Frame).
-- **The log** (`~/.local/share/VPinballX/10.8/vpinball.log`) has a line for everything the fixes do, starting with `[Fixes]` or `ROM fix`.
+- **What was applied** is kept in `table-fixes.json`, in the game's settings folder (`~/.local/share/VPinballX/10.9/` on the Frame).
+- **The log** (`~/.local/share/VPinballX/10.9/vpinball.log`) has a line for everything the fixes do, starting with `[Fixes]` or `ROM fix`.
 
 To undo a script fix, delete the table's `.vbs` over ssh or in the file manager, and rename `.vbs.orig` back to `.vbs` if there is one. To undo a ROM fix, close the table and rename the `.nv.bak-<date>` file back to `<rom>.nv`.
 
 ### A table that is still broken
 
 1. **Check the usual causes first**: a missing ROM (the game says so when the table starts, and the **ROMs** tab of the file manager lists the missing ones), or a game PinMAME does not know (an **Unknown game** badge, see [PinMAME ROM aliases](#pinmame-rom-aliases)).
-2. **Read the end of the log** after the table failed: `ssh steamos@frame.local tail -200 .local/share/VPinballX/10.8/vpinball.log`, or the **Log Stream** of the file manager. A table that "crashes" at start is often a script that stops itself: look for a `MsgBox prompt=` line or a script error just before `Closing player`. The message a table shows on a computer only goes to the log on the Frame.
+2. **Read the end of the log** after the table failed: `ssh steamos@frame.local tail -200 .local/share/VPinballX/10.9/vpinball.log`, or the **Log Stream** of the file manager. A table that "crashes" at start is often a script that stops itself: look for a `MsgBox prompt=` line or a script error just before `Closing player`. The message a table shows on a computer only goes to the log on the Frame.
 3. **Report it**, with the name and version of the table, where it comes from, and the end of the log: a fix found for one table is shipped to everyone with the next update.
 
 ### Writing your own fix
 
-Fixes can also be added on your Frame, without waiting for an update: write them in `fixes.json` in the game's settings folder (`~/.local/share/VPinballX/10.8/fixes.json` on the Frame), then restart the game. A script fix replaces a text of the table script with another one:
+Fixes can also be added on your Frame, without waiting for an update: write them in `fixes.json` in the game's settings folder (`~/.local/share/VPinballX/10.9/fixes.json` on the Frame), then restart the game. A script fix replaces a text of the table script with another one:
 
 ```json
 {

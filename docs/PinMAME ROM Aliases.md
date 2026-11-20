@@ -10,7 +10,7 @@ VR Room – The Simpsons (Data East 1990) v1.04 loads, but its backglass stays d
 
 On the Steam Frame, the table loads and coins add credits, but the backglass stays off and Start does nothing, so no ball is served. The credits come from the table script, not from the ROM: the ROM never runs.
 
-The VPX log (`~/.local/share/VPinballX/10.8/vpinball.log`) of the session shows the error:
+The VPX log (`~/.local/share/VPinballX/10.9/vpinball.log`) of the session shows the error:
 
 ```
 ERROR [VPXPluginAPIImpl::OnScriptError] Script error reported by plugin (Failure): Game name not found: 'simp'.

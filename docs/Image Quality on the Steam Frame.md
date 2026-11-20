@@ -26,7 +26,7 @@ sparkle, which is shading aliasing rather than edge aliasing. Two changes follow
 
 | Item | Where | Finding |
 |---|---|---|
-| Settings on the headset | `~/.local/share/VPinballX/10.8/VPinballX.ini` | Every `[Player]` graphics entry empty (defaults): reflections *Dynamic*, bloom on, AO on, anisotropic filtering on, 16384 px texture limit, SSR off, `MSAASamples`/`FXAA`/`Sharpen` off, `AAFactor` 100 %. `[PlayerVR] ResFactor = 0.2637` (= 2160² of the 8192² maximum; since the upstream sync of 2026-10-18 the factor is relative to the recommended size, and 2160² is `1.25`). |
+| Settings on the headset | `~/.local/share/VPinballX/10.9/VPinballX.ini` | Every `[Player]` graphics entry empty (defaults): reflections *Dynamic*, bloom on, AO on, anisotropic filtering on, 16384 px texture limit, SSR off, `MSAASamples`/`FXAA`/`Sharpen` off, `AAFactor` 100 %. `[PlayerVR] ResFactor = 0.2637` (= 2160² of the 8192² maximum; since the upstream sync of 2026-10-18 the factor is relative to the recommended size, and 2160² is `1.25`). |
 | Platform reductions | `make/CMakeLists_app.txt:686-716`, `src/core/def.h` | `__LIBVPINBALL__` (the "mobile" flag: 1536 px texture cap, single view) is only set for iOS and Android. The Linux ARM64 build is a full standalone build. |
 | Shader sources | `src/shaders/bgfx/` | One set of sources for all backends (the build compiles every target, SPIR-V included); nothing conditional on the platform. |
 | Anisotropic filtering | `src/renderer/XRVulkanBackend.h:223`, `RenderDevice.cpp:379`, bgfx `renderer_vk.cpp` | The Vulkan device created for OpenXR enables `samplerAnisotropy`; `BGFX_RESET_MAXANISOTROPY` is set, bgfx reads `maxSamplerAnisotropy` from the device properties even for an external device. |
@@ -263,7 +263,7 @@ On the headset (`ssh steamos@<frame>`), with the build deployed in `~/devkit-gam
 
 ```bash
 cd ~/devkit-game/vpx_frame
-INI=~/.local/share/VPinballX/10.8/VPinballX.ini
+INI=~/.local/share/VPinballX/10.9/VPinballX.ini
 TABLE=~/Documents/VPinballX/Tables/<table>.vpx
 # one variant: set the keys (empty = default), play, wait for frames, read the runtime's app GPU time
 sed -i 's/^FXAA = .*/FXAA = 2/' $INI

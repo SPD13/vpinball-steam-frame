@@ -174,12 +174,12 @@ The per-target GPU breakdown needs bgfx view names, which release builds did not
 
 ## 6. Measuring
 
-Two sources, both logged by `VRDevice::LogRuntimeStatus` every 5 s in `~/.local/share/VPinballX/10.8/vpinball.log` on the device:
+Two sources, both logged by `VRDevice::LogRuntimeStatus` every 5 s in `~/.local/share/VPinballX/10.9/vpinball.log` on the device:
 
 1. **Runtime counter** `/perfmetrics_meta/app/gpu_frametime` (`XR_META_performance_metrics`, enabled with `VPX_XR_METRICS=1` or `VPX_GPU_PROFILE=1` since 2026-10-02 — SteamVR 2.17.10 crashes the next session of the same instance when the counters were left enabled on the previous one, so they are measurement-only and disabled before a session is destroyed): the application's GPU time per frame as the compositor sees it. On the Frame it saturates at the 72 Hz period (13.9 ms) as soon as the application cannot keep up, so it tells whether the budget is met, not by how much it is missed.
 2. **Per-target GPU breakdown**, with `VPX_GPU_PROFILE=1` in the environment: bgfx's profiler (`BGFX_DEBUG_PROFILER`) records GPU timestamps per view, and the status line sums them per render target: e.g. `GPU by target (13.70 ms): BackBuffer1 9.80 VRSwapchain 1.70 Playfield 1.10 BloomBuffer1 1.10`. Caveat: with the profiler on, bgfx ends the Vulkan render pass at every view change (`renderer_vk.cpp`, the `profiler.m_enabled` test in the view-change block), so each view becomes its own render pass with its own tile load/store; the absolute numbers are therefore higher than in normal operation, but comparisons between settings remain valid. The current uncommitted build also prints the number of views per target.
 
-Running on the device from ssh with the profiler: `cd ~/devkit-game/vpx_frame; VPX_GPU_PROFILE=1 LD_LIBRARY_PATH=$PWD DISPLAY=:1 ./VPinballX_BGFX -Launcher`, then `grep "GPU by target" ~/.local/share/VPinballX/10.8/vpinball.log | tail`.
+Running on the device from ssh with the profiler: `cd ~/devkit-game/vpx_frame; VPX_GPU_PROFILE=1 LD_LIBRARY_PATH=$PWD DISPLAY=:1 ./VPinballX_BGFX -Launcher`, then `grep "GPU by target" ~/.local/share/VPinballX/10.9/vpinball.log | tail`.
 
 Measurements so far, Ghostbusters VR-room table (heavy), profiler on, the player idle in the room:
 
@@ -376,7 +376,7 @@ already is there (the tonemap writes each coarse block with one color, and FXAA 
 
 ## 12. How to reproduce the measurements
 
-On the device, from ssh (`cd ~/devkit-game/vpx_frame`), with the table's path in `TABLE` and `ResFactor = 0.2637` (`1.25` since the upstream sync of 2026-10-18, which made it relative to the recommended size) in `~/.local/share/VPinballX/10.8/VPinballX.ini`:
+On the device, from ssh (`cd ~/devkit-game/vpx_frame`), with the table's path in `TABLE` and `ResFactor = 0.2637` (`1.25` since the upstream sync of 2026-10-18, which made it relative to the recommended size) in `~/.local/share/VPinballX/10.9/VPinballX.ini`:
 
 ```
 # frame time only (no profiler), the status line every 5 s in the output (VPX_XR_METRICS enables the runtime's counter)

@@ -180,7 +180,7 @@ Without hardware decoding (`[Plugin.PUP] HardwareDecoding = 0`), none of this ha
 
 ## 6. Diagnosing a PuP table
 
-**The log** (`~/.local/share/VPinballX/10.8/vpinball.log` on the Frame) tells most of it:
+**The log** (`~/.local/share/VPinballX/10.9/vpinball.log` on the Frame) tells most of it:
 
 - `[PUP:...] PUP path:` the pack found; `Playlist folder ... is empty`, `PlayFile not found`: missing media.
 - `Screen added: screen={mode=..., screenNum=..., m_customPos={sourceScreen=...}}` and `Replacing previously defined PUP screen`: the
@@ -336,7 +336,7 @@ section 9, which are generic.
 ### Library and import (`src/steamframe/TableLibrary.h/.cpp`)
 
 - **Fields of a table** (`Table`): `usesPup`, `pupPacks` (candidate names), `pupScannedAt`, `rom`, and `hasPupPack` (computed). The
-  first four are cached in `table-stats.json` (preferences folder, `~/.local/share/VPinballX/10.8/` on the Frame) with the modification
+  first four are cached in `table-stats.json` (preferences folder, `~/.local/share/VPinballX/10.9/` on the Frame) with the modification
   date of the table they were read from and `scanVersion`: the script is read again only when the table changes, or when it was read by
   an older version of `GetTableUse` (raise `SCRIPT_SCAN_VERSION` in `TableLibrary.cpp` whenever `GetTableUse` finds other things). `UpdatePupPacks` computes `hasPupPack`
   at every scan, from the folders of the shared pack folder and of each table's `pupvideos` folder.
