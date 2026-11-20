@@ -24,8 +24,8 @@
 //     9 fire                    Start (Menu)      8            Start; menus: confirm
 //     5 front                   Y                 4            Insert coin; menus: up
 //     29                        View              28           In-game menu
-//     25, 28, 27, 26 shifted    D-pad L, D, U, R  24, 27, 26, 25  Menu navigation; by USB also PinMAME service buttons 1 to 4 (Cancel,
-//                                                                 Down, Up, Enter), not in Xbox mode (tilt buttons on the D-pad inputs)
+//     25, 28, 27, 26 shifted    D-pad L, D, U, R  24, 27, 26, 25  Menu navigation only, no PinMAME service buttons (the PinOne's tilt
+//                                                                 buttons may press these inputs)
 //     7 front                   X                 6            Menus: previous item
 //     plunger                   right stick Y     axis Z       Plunger position
 //     accelerometer             left stick X/Y    axes X/Y     Nudge, read as a stick position (as upstream's gamepad layout), 200 %
