@@ -399,21 +399,23 @@ With the PinOne and the VR controllers both connected, only the controller you p
 
 ### The PinOne mapping
 
-| PinOne input | Over Bluetooth (Xbox control) | By USB (button) | In the game |
-| --- | --- | --- | --- |
-| 3, left flipper | LB | 3 | Left flipper (and upper left flipper) |
-| 1, right flipper | RB | 1 | Right flipper (and upper right flipper) |
-| 4, left magna-save | Left trigger | 4 | Left magna-save |
-| 2, right magna-save | Right trigger | 2 | Right magna-save |
-| 6, front button | A | 6 | Launch ball, Start |
-| 8, front button | B | 8 | Start |
-| 9, fire button | Start (Menu) | 9 | Start |
-| 5, front button | Y | 5 | Insert coin |
-| 7, front button | X | 7 | (free) |
-| 29 | View | 29 | Menu |
-| 25 to 28, front buttons with the shift button | D-pad left, right, up, down | 25 to 28 | Menu navigation; by USB also the operator menu buttons (left: Cancel, down: Down, up: Up, right: Enter) |
-| Plunger | Right stick, up and down | Z axis | Plunger |
-| Accelerometer | Left stick | X and Y axes | Nudge, at 200 % strength |
+| PinOne input | Over Bluetooth (Xbox control) | By USB (button) | In the game | In the menus |
+| --- | --- | --- | --- | --- |
+| 3, left flipper | LB | 3 | Left flipper (and upper left flipper) | Previous item |
+| 1, right flipper | RB | 1 | Right flipper (and upper right flipper) | Next item |
+| 4, left magna-save | Left trigger | 4 | Left magna-save | Cancel |
+| 2, right magna-save | Right trigger | 2 | Right magna-save | Cancel |
+| 6, front button | A | 6 | Launch ball, Start | Down |
+| 8, front button | B | 8 | Start | Next item |
+| 9, fire button | Start (Menu) | 9 | Start | Confirm |
+| 5, front button | Y | 5 | Insert coin | Up |
+| 7, front button | X | 7 | (free) | Previous item |
+| 29 | View | 29 | Menu | (opens the menu; Cancel goes back) |
+| 25 to 28, front buttons with the shift button | D-pad left, right, up, down | 25 to 28 | By USB, the operator menu buttons (left: Cancel, down: Down, up: Up, right: Enter); over Bluetooth, nothing | Left: Cancel, right: Confirm, up: next item, down: previous item |
+| Plunger | Right stick, up and down | Z axis | Plunger | |
+| Accelerometer | Left stick | X and Y axes | Nudge, at 200 % strength | |
+
+**Menus.** The PinOne moves in the game's menus with its own buttons (last column): Y and A go up and down (in a grid, the row above or below), X and the left flipper go to the previous item, B and the right flipper to the next one, the fire button confirms and either magna-save cancels. These menu actions only act while a menu is open, as on the keyboard, where the flipper and magna-save keys move in the menus too.
 
 **Nudge strength.** A firm shake of a PinOne only moves its stick about a quarter of the way, and the game takes a full stick for a strong nudge, so at the usual 100 % its nudges were too weak to notice. The PinOne mapping sets the strength of its nudge sensor to 200 %, the most the setting allows (**Controls** > **Nudge**, then the PinOne's sensor). A mapping set before this version keeps 100 %: select **Set PinOne Mini mapping and DOF Config** again, or raise **Nudge Strength** in that page. If nudging is still too weak, make the PinOne's accelerometer more sensitive in its configuration tool: lower its maximum (*Max*), and its dead zone with it; if it becomes too strong, lower the strength in the game. **Operator menu buttons over Bluetooth.** Over Bluetooth, the PinOne mapping leaves the operator menu buttons (Cancel, Down, Up, Enter) off the D-pad, which only moves in the menus. The PinOne's tilt buttons, when on in its configuration tool, press on a hard nudge the inputs they are given, and with them on the D-pad inputs (25 to 28) a hard nudge changed the volume of a WPC game (its Up and Down buttons), and could open its test menu (Enter). To reach a table's operator menu, use the keys 7, 8, 9 and 0, or map the service buttons by hand in the controller's page. By USB, the D-pad keeps them: there, turn the PinOne's tilt buttons off or give them a free button. The game simulates the tilt from the nudges by itself, so the PinOne's tilt buttons are not needed.
 

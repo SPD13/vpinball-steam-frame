@@ -15,18 +15,18 @@
 //   as "PinOne (XBox)", src/steamframe/PinOneDevices.h; not on a real Xbox pad) and on the PinOne's USB controller (39f5:9208, raw button n = PinOne input
 //   n + 1). Made from the owner's mapping of a Bluetooth PinOne on the Frame (2026-11-17), with the firmware's default Xbox assignment:
 //     PinOne input              Xbox control      USB button   VPX action
-//     3 left flipper            LB                2            Left flipper and left staged flipper
-//     1 right flipper           RB                0            Right flipper and right staged flipper
-//     4 left magna-save         left trigger      3            Left magna-save
-//     2 right magna-save        right trigger     1            Right magna-save
-//     6 front                   A                 5            Launch ball and Start
-//     8 front                   B                 7            Start
-//     9 fire                    Start (Menu)      8            Start
-//     5 front                   Y                 4            Insert coin
+//     3 left flipper            LB                2            Left flipper and left staged flipper; menus: previous item
+//     1 right flipper           RB                0            Right flipper and right staged flipper; menus: next item
+//     4 left magna-save         left trigger      3            Left magna-save; menus: cancel
+//     2 right magna-save        right trigger     1            Right magna-save; menus: cancel
+//     6 front                   A                 5            Launch ball and Start; menus: down
+//     8 front                   B                 7            Start; menus: next item
+//     9 fire                    Start (Menu)      8            Start; menus: confirm
+//     5 front                   Y                 4            Insert coin; menus: up
 //     29                        View              28           In-game menu
 //     25, 28, 27, 26 shifted    D-pad L, D, U, R  24, 27, 26, 25  Menu navigation; by USB also PinMAME service buttons 1 to 4 (Cancel,
 //                                                                 Down, Up, Enter), not in Xbox mode (tilt buttons on the D-pad inputs)
-//     7 front                   X                 6            (none)
+//     7 front                   X                 6            Menus: previous item
 //     plunger                   right stick Y     axis Z       Plunger position
 //     accelerometer             left stick X/Y    axes X/Y     Nudge, read as a stick position (as upstream's gamepad layout), 200 %
 //   The PinOne's assignments can be changed in its configuration tool; this layout follows its defaults.

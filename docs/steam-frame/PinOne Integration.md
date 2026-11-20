@@ -88,27 +88,39 @@ offers the layouts instead:
 - **Set PinOne Mini mapping and DOF Config** (section 9): the PinOne layout, made from the owner's mapping of the Bluetooth PinOne on the
   Frame, on the firmware's default Xbox assignment (`bleButtonMap`).
 
-| PinOne input | Xbox control | USB button | VPX action |
-|---|---|---|---|
-| 3, left flipper | LB | 3 | Left flipper, staged left flipper |
-| 1, right flipper | RB | 1 | Right flipper, staged right flipper |
-| 4, left magna-save | Left trigger | 4 | Left magna-save |
-| 2, right magna-save | Right trigger | 2 | Right magna-save |
-| 6 | A | 6 | Launch ball, Start |
-| 8 | B | 8 | Start |
-| 9, fire button | Start | 9 | Start |
-| 5 | Y | 5 | Insert coin |
-| 7 | X | 7 | (free) |
-| 29 | View | 29 | Menu |
-| 25 to 28 | D-pad left, right, up, down | 25 to 28 | Menu navigation; by USB also PinMAME service buttons 1 to 4 (not in Xbox mode, below) |
-| Plunger | Right stick Y | Z axis | Plunger (position) |
-| Accelerometer | Left stick | X, Y axes | Nudge (`GamepadNudge`, read as a position, as upstream's gamepad layout), strength 200 % (section 10.5) |
+| PinOne input | Xbox control | USB button | VPX action | Menu action |
+|---|---|---|---|---|
+| 3, left flipper | LB | 3 | Left flipper, staged left flipper | UI: Previous Item (`UIDown`) |
+| 1, right flipper | RB | 1 | Right flipper, staged right flipper | UI: Next Item (`UIUp`) |
+| 4, left magna-save | Left trigger | 4 | Left magna-save | UI: Cancel (`UILeft`) |
+| 2, right magna-save | Right trigger | 2 | Right magna-save | UI: Cancel (`UILeft`) |
+| 6 | A | 6 | Launch ball, Start | UI: Down (`UIRowDown`) |
+| 8 | B | 8 | Start | UI: Next Item (`UIUp`) |
+| 9, fire button | Start | 9 | Start | UI: Confirm (`UIRight`) |
+| 5 | Y | 5 | Insert coin | UI: Up (`UIRowUp`) |
+| 7 | X | 7 | (free) | UI: Previous Item (`UIDown`) |
+| 29 | View | 29 | Menu | |
+| 25 to 28 | D-pad left, right, up, down | 25 to 28 | By USB, PinMAME service buttons 1 to 4 (not in Xbox mode, below) | As upstream's gamepad layout: `UILeft` (Cancel), `UIRight` (Confirm), `UIUp` (Next Item), `UIDown` (Previous Item) |
+| Plunger | Right stick Y | Z axis | Plunger (position) | |
+| Accelerometer | Left stick | X, Y axes | Nudge (`GamepadNudge`, read as a position, as upstream's gamepad layout), strength 200 % (section 10.5) | |
 
 `ControllerLayouts::OnJoystickAdded` (called at the end of `SDLInputHandler::OnJoystickAdded`) reads the actual bindings of the pad
 through SDL's gamepad mapping (`SDL_GetGamepadBindings`), so the layout uses the inputs SDL maps to LB, RB, the triggers and so on, and
 keeps them by settings id. On USB, raw button *n* is PinOne input *n* + 1, and the inputs get names (*Left Flipper*, *Plunger*...). The
 USB axis order (SDL numbers X, Y, Z, Rx, Ry) has not been checked with the plunger yet. Mappings are global (application settings),
 not per table. Fork master `ecd04ed5f`.
+
+**Menu actions on the PinOne's buttons** (owner's choice, 2026-11-19). Besides the D-pad, the layout maps the fork's menu actions
+(`InputManager`, `VPX_STEAM_FRAME`) to the PinOne's own buttons, last column: Y and A to *UI: Up* and *UI: Down* (`UIRowUp`,
+`UIRowDown`: the row above or below in a grid, otherwise the previous or next item), X and the left flipper to *UI: Previous Item*, B
+and the right flipper to *UI: Next Item* (the fork has no left and right menu actions: previous and next take their place), the fire
+button to *UI: Confirm*, the magna-saves to *UI: Cancel* (the triggers in Xbox mode past -0.3, like the magna-saves). The X button is
+read from SDL's bindings (`SDL_GAMEPAD_BUTTON_WEST`) in Xbox mode, raw button 6 by USB (`PinOneInputs::x`). The game's actions on these
+buttons stay: the menu actions only act while a menu is open (`InGameUI`, `m_useFlipperNav`), as on the keyboard, where the flipper and
+magna-save keys are also the menu keys. In the fork, the menu button (View) only opens the menu; *UI: Cancel* goes back.
+
+The D-pad keeps upstream's menu actions, whose meaning the fork changed: up is *UI: Next Item* (`UIUp`) and down *UI: Previous Item*
+(`UIDown`), left and right *Cancel* and *Confirm*. Y and A give the PinOne an up and down that move as their names say.
 
 **No service buttons on the D-pad in Xbox mode** (owner's decision, 2026-11-19). Upstream's generic gamepad layout
 (`SDLInputHandler.h`) maps the D-pad left, down, up and right to the PinMAME service buttons 1 to 4 (Cancel, Down, Up, Enter) and to

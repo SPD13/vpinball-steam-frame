@@ -28,6 +28,7 @@ struct PinOneInputs
    uint16_t a, b, start, y, view; // Launch ball and start, start, start (the fire button), coin, menu
    uint16_t dpadLeft, dpadDown, dpadUp, dpadRight; // Menu navigation, and the PinMAME service buttons with dpadServiceButtons
    uint16_t plungerAxis, nudgeXAxis, nudgeYAxis;
+   uint16_t x; // Front button 7: free in the game, previous item in the menus
    // The D-pad also presses the PinMAME service buttons (as upstream's gamepad layout). Not in Xbox mode: the PinOne's tilt buttons may be
    // set to its D-pad inputs (25 to 28), and a hard nudge then pressed a service button, which changes the volume in a WPC game or opens
    // its test menu (docs/steam-frame/PinOne Integration.md, section 5)
@@ -94,7 +95,8 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
             GamepadButton(SDL_GAMEPAD_BUTTON_BACK, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_LEFT, bindings, count),
             GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_DOWN, bindings, count), GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_UP, bindings, count),
             GamepadButton(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_RIGHTY, bindings, count),
-            GamepadAxis(SDL_GAMEPAD_AXIS_LEFTX, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_LEFTY, bindings, count) };
+            GamepadAxis(SDL_GAMEPAD_AXIS_LEFTX, bindings, count), GamepadAxis(SDL_GAMEPAD_AXIS_LEFTY, bindings, count),
+            GamepadButton(SDL_GAMEPAD_BUTTON_WEST, bindings, count) };
          in.dpadServiceButtons = false;
          // The flippers and magna-saves are what makes it a PinOne layout; any other control the pad lacks is left out
          if (in.lb != NONE && in.rb != NONE && in.leftTrigger != NONE && in.rightTrigger != NONE)
@@ -122,7 +124,7 @@ void OnJoystickAdded(InputManager& input, uint16_t deviceId, SDL_Joystick* joyst
       input.RegisterElementName(deviceId, false, 3, "Left Magna-Save"s);
       input.RegisterElementName(deviceId, false, 8, "Fire"s);
       // Firmware's Xbox assignment: input 5 Y, 6 A, 7 X, 8 B, 9 Start, 25 D-pad left, 26 right, 27 up, 28 down, 29 View
-      s_pinOneInputs[settingsId] = PinOneInputs { 2, 0, 3, 1, false, 5, 7, 8, 4, 28, 24, 27, 26, 25, 0x0202, 0x0200, 0x0201 };
+      s_pinOneInputs[settingsId] = PinOneInputs { 2, 0, 3, 1, false, 5, 7, 8, 4, 28, 24, 27, 26, 25, 0x0202, 0x0200, 0x0201, 6 };
    }
 }
 
@@ -171,6 +173,18 @@ void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
    map(in.dpadDown, input.GetUIDownActionId());
    map(in.dpadLeft, input.GetUILeftActionId());
    map(in.dpadRight, input.GetUIRightActionId());
+   // The menus also on the PinOne's own buttons (owner's choice, 2026-11-19): Y and A up and down, X and B, like the left and right
+   // flippers, the previous and next item, the fire button confirms, the magna-saves cancel. The game's actions on these buttons stay:
+   // the menu actions only act while a menu is open, as on the keyboard, where the flipper and magna-save keys also move in the menus
+   map(in.y, input.GetUIRowUpActionId());
+   map(in.a, input.GetUIRowDownActionId());
+   map(in.x, input.GetUIDownActionId()); // UI: Previous Item
+   map(in.b, input.GetUIUpActionId()); // UI: Next Item
+   map(in.lb, input.GetUIDownActionId());
+   map(in.rb, input.GetUIUpActionId());
+   map(in.start, input.GetUIRightActionId()); // UI: Confirm
+   map(in.leftTrigger, input.GetUILeftActionId(), in.triggersAreAxes); // UI: Cancel
+   map(in.rightTrigger, input.GetUILeftActionId(), in.triggersAreAxes);
 
    if (in.plungerAxis != NONE)
    {
