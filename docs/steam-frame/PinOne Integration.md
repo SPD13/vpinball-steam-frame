@@ -22,6 +22,8 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 | DOF configuration | Upload of the DOF Config Tool's zip, backups, a shipped PinOne Mini configuration | `TableLibrary::ImportDofConfig`, `Backup.cpp`, `src/steamframe/DofSetup.*`, `assets/dof/pinone-mini` | Fork master, tested |
 | DOF or vibrations | A PinOne follows the table's DOF, or the vibrations on tables DOF doesn't know | `Vibrations.*`, `plugins/dof/DOFPlugin.cpp` | Fork master, tested |
 | Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Built, **not tested** (no hardware), not pushed |
+| Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, not pushed |
+| Nudge speed | Not sent in Xbox mode; a vendor report like DOF is the path if needed | Section 10.3, 10.4 | Owner's decision, not implemented |
 
 ## 2. The PinOne's connections
 
@@ -82,7 +84,7 @@ build; the VR controllers still get their layout at once), and the controller's 
 offers the layouts instead:
 
 - **Set default mapping**: upstream's default layout of the device.
-- **Set PinOne Mini mapping and DOF Config** (section 11): the PinOne layout, made from the owner's mapping of the Bluetooth PinOne on the
+- **Set PinOne Mini mapping and DOF Config** (section 9): the PinOne layout, made from the owner's mapping of the Bluetooth PinOne on the
   Frame, on the firmware's default Xbox assignment (`bleButtonMap`).
 
 | PinOne input | Xbox control | USB button | VPX action |
@@ -284,7 +286,100 @@ with a GATT read (one Bluetooth round trip) or an error at once when the report 
     configuration.
 - *Erase this device*.
 
-## 10. Building and flashing the firmware
+## 10. Plunger and nudge over Bluetooth
+
+### 10.1 The axes each connection carries
+
+| Signal | USB | Bluetooth, Xbox mode | Bluetooth, own profile |
+|---|---|---|---|
+| Nudge position X, Y | X, Y (16 bits) | Left stick X, Y (16 bits) | Left stick X, Y |
+| Plunger | Z (16 bits) | Right stick Y (16 bits) | Right stick Y |
+| Nudge speed X, Y (optional, accelerometer) | Rx, Ry (16 bits) | **Not sent** | **Not sent** |
+| Free | Rz (8 bits) | Right stick X | Right stick X |
+
+The stick each signal goes on is set in the configuration tool (Inputs page for USB, Game Controller page for Bluetooth:
+`usb*Axis`, `ble*Axis`). Both Bluetooth profiles have the Xbox stick layout: 4 two-way 16-bit axes and 2 one-way 10-bit triggers.
+The plunger and the two nudge positions take 3 sticks, so the nudge speed has no room.
+
+The USB report is correct: the firmware registers `_combinedReportDescriptor` (`UsbHid.cpp`), where Z is 16 bits like X, Y, Rx and
+Ry and Rz is 8 bits, the layout the report structure has; checked in the descriptor macOS received (2026-11-19).
+`_hidReportDescriptorGamepad` at the top of the file, with Z and Rz on 8 bits, is a V1 leftover that nothing uses.
+
+### 10.2 Plunger: the same value as USB (firmware, 2026-11-19)
+
+**Symptom.** Over Bluetooth, the table's plunger made small bumps back and forth at rest. In VPX's plunger sensor page the raw line was
+noisy and the filtered line looked smooth. The table follows the filtered value (`PlungerHandler::GetPosition`: a Kalman filter and a
+4 ms average), but the filter is tuned for fast releases and lets slow jitter through; the graph's -1.2 to 1.2 scale and its clamp at
+the fully forward position hid the rest.
+
+**Measured on the Frame** (the kernel's input device for the PinOne, `ABS_RZ`, plunger untouched): the rest level moved between
+-0.33 and -0.065 of the stick from one capture to the next, and the noise between 0.007 and 0.09 (standard deviation, energy at
+30-50 Hz). The noisiest capture was the only one with the Bluetooth link at 7.5 ms (the others at 15 ms). The PinOne never sent its
+rest value.
+
+**Cause.** The Bluetooth report read `Plunger::getAdjustedValue()`, the reading mapped to the axis, while USB gets the processed
+value: 0 at rest (the reading within `plungerMid` ± `plungerRestingDeadZone` for `restingStateMax`, 160 ms, with
+`disablePlungerWhenNotInUse`), 0 and the launch button after a quick release, and the quick release delay. At rest the reading is also a
+single ADC sample: the firmware averages only while the plunger moves, since USB sends 0 then.
+
+**Fix** (branch `fix/ble-plunger-rest`, from upstream `main`):
+
+- `e671e50`: `Plunger` keeps the value it last put on the USB axis (`getReportedValue()`) and the Bluetooth report sends it. The values
+  are now the USB ones; only the timing differs: USB is polled every 1 ms, Bluetooth sends a change at most every 8 ms and as the link
+  allows (every 7.5 to 15 ms), plus a heartbeat every 25 ms.
+- `b4bda93`: reports only go out on a change, from previous values that start at 0. With the plunger at exactly 0 at rest, a host that
+  subscribed while nothing moved never got a first report: it kept an empty one (sticks read as fully deflected) and the heartbeat
+  re-sent it. `BleController::update()` now resets the remembered axes when the subscription starts. The noisy plunger used to hide
+  this.
+
+Cherry-picked on `feature/ble-xbox-identity` (`da9c6e9`, `c2b667c`). Flashed on the owner's PinOne on 2026-11-19 on top of the DOF
+firmware (`3d51cd4`, a local build, no re-pair needed). **Checked on the Frame**: at rest, 30 s without a plunger event, the axis at
+32768 (the stick's center), and 400 raw reports in 10 s, all at 32768. Still to check: the return to 0 after a release (it needs the
+plunger to stop inside the rest window, so the calibrated `plungerMid` matters), a table, the quick release over Bluetooth.
+
+Still open: the noise while the plunger moves (the firmware averages 11 ADC reads taken back to back, which removes no 30-50 Hz noise;
+a median and a 10-20 ms low-pass would), its source (not the ADC2 and radio conflict: GPIO 7 is `ADC1_CH6` on the ESP32-S3, the
+`ADC2_CH7` comment in `Pins.h` and the README is wrong), and why the rest level moves.
+
+### 10.3 Nudge speed in Xbox mode: not sent (owner's decision, 2026-11-19)
+
+The limit is not Bluetooth's: a Bluetooth HID report map can declare any axes, and a report with two more 16-bit values (20 bytes) still
+fits in the smallest Bluetooth packet. It is the Xbox mode's: Windows, Steam, a Quest and SDL's Xbox driver recognise the pad by its
+ids and read the report at the stock Xbox positions, without the report map. The owner keeps the Xbox compatibility strict, so in Xbox
+mode the PinOne sends no nudge speed, and VPX derives the speed from the nudge position (samples every 7.5 to 15 ms instead of the
+PinOne's own rate). Options set aside:
+
+| Option | Why not |
+|---|---|
+| Rx, Ry appended to the Xbox report | No longer the stock report; SDL's Xbox driver, which reads the pad on the Frame, would most likely ignore them |
+| Speed on the free right stick X | Only one axis fits beside the plunger and the two positions |
+| Speed on the triggers | One-way, 10 bits, at rest at 0: a two-way value needs an offset VPX's sensors don't have |
+| The own Bluetooth profile with the USB layout | Not the Xbox mode: the Frame would lose the Xbox compatibility, and libdof only finds the Xbox mode's DOF channel |
+
+### 10.4 Possible path: a vendor report, like DOF
+
+If nudging over Bluetooth needs the speed, it goes through the vendor collection, as DOF (section 6) and the identity (section 8.2) do.
+The stock Xbox report stays as it is, byte for byte.
+
+- **Firmware.** An input report 8 in the `0xFF00` collection (`XboxDescriptor.h`): nudge speed X and Y, 16-bit signed, the values and
+  scale the USB Rx and Ry get (`Accelerometer.cpp`, `usbVelocityXAxis`/`usbVelocityYAxis`). Sent from `BleController::update()` on a
+  change, with the same 8 ms limit as the gamepad report, and once when the host subscribes (section 10.2). Each HID input report is
+  its own GATT characteristic with its own subscription. Capability bit 1 in the identity report (byte 9) tells a host the report
+  exists. The PinOne needs pairing again (new report map).
+- **Hosts.** Programs that use the PinOne as an Xbox pad only read report 1; a vendor input report doesn't create an input device in
+  Linux's HID layer, and hidraw passes it to whoever reads. **To check before relying on it:** SDL's Xbox driver reads the raw reports
+  on the Frame and must skip an unknown report id rather than misread it; Windows and Steam with the extra input report; the extra
+  traffic (one more notification per change, beside the gamepad report and DOF).
+- **VPX.** `PinOneDevices` already opens the collection's path (`SDL_hid_open_path`) for the identity report. A reader keeps it open
+  for a PinOne whose capability bit is set, reads report 8 (`SDL_hid_read`, on its own thread or polled without blocking from the input
+  loop), and hands the values to the input manager as two extra axes of the *PinOne (XBox)* device. The cabinet nudge already takes
+  speed sensors (`CabinetNudgeSensor::GetXVelSensor`/`GetYVelSensor`, in m/s after scale), so the axes map like any other, and the
+  PinOne layout (section 5) maps them by default. As with DOF, VPX's core changes nothing for other controllers.
+
+Upstream: the firmware part would go to philipellisis/PinOne with the DOF channel; the VPX reader stays in the fork, like
+`PinOneDevices`.
+
+## 11. Building and flashing the firmware
 
 On the Mac, `vp_vr/PinOne-build/build.sh` builds whatever branch `vp_vr/PinOne` has checked out (arduino-cli, core esp32 3.3.6, FQBN
 `esp32:esp32:esp32s3usbotg`, libraries in `PinOne-build/libraries`: NimBLE-Arduino 2.3.7, Adafruit PWM Servo 3.0.3, BusIO 1.17.4).
@@ -294,7 +389,9 @@ script moves the sketch body into a `.cpp` file, for which Arduino generates no 
 (about 754 KB).
 
 Flashing: esptool 5.1.0 from Arduino15, `--before default-reset` (the PinOne drops into its ROM loader, `303a:1001`), bootloader at
-`0x0`, partitions `0x8000`, `boot_app0` `0xe000`, application `0x10000`; the configuration (NVS) is kept. The original flash is backed
+`0x0`, partitions `0x8000`, `boot_app0` `0xe000`, application `0x10000`; the configuration (NVS) is kept. The ROM loader comes back
+on another serial port (`/dev/cu.usbmodem11201` instead of `11202`): flash it there with `--before no-reset`, and end with a
+`--after watchdog-reset` command (`read-mac`), since `hard-reset` left it in the loader (2026-11-19). The original flash is backed
 up (8 MB) in `PinOne-build/backup/`. After a firmware that changes the report map, remove the PinOne from the Frame's Bluetooth devices
 and pair it again from the Steam UI.
 
@@ -304,14 +401,16 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 |---|---|---|---|
 | `fix/ble-client-features` | `4b602e9` | Pairing fix (section 3) | Yes, PR #9 |
 | `feature/ble-xbox-dof` | `2ff060d` | DOF report 6, queue, motor order (section 6.2) | Yes, to `SPD13/PinOne` |
-| `feature/ble-xbox-identity` | `6d2ce85` | Identity report 7 (section 8.2) | No |
+| `feature/ble-xbox-identity` | `c2b667c` | Identity report 7 (section 8.2, `6d2ce85`), plunger fixes cherry-picked | No |
+| `fix/ble-plunger-rest` | `b4bda93` | Plunger value as USB, first report on subscribe (section 10.2), from `main` | No |
 
-## 11. Upstream
+## 12. Upstream
 
 | Change | Upstream | State |
 |---|---|---|
 | Pairing fix | philipellisis/PinOne | [#9](https://github.com/philipellisis/PinOne/pull/9) open |
 | Bluetooth DOF channel, identity report | philipellisis/PinOne | Not proposed (stacked on #9) |
+| Bluetooth plunger as USB, first report on subscribe | philipellisis/PinOne | Not proposed (`fix/ble-plunger-rest`, independent of #9) |
 | libdof: PinOne in Xbox mode | vpinball/libdof (and the C# DirectOutput side) | Fork patch only, PR not drafted |
 | DOF plugin's `GetTableConfig`/`OnTableConfigChanged` messages | vpinball/vpinball | Candidate, generic |
 | Everything else (`src/steamframe/*`, the controller page) | | Fork only |
@@ -319,7 +418,7 @@ Branches in `vp_vr/PinOne` (clone of upstream `main` `2256f78`; the owner's fork
 VPX itself needs no change to drive a Bluetooth PinOne on other platforms: libdof does it (with its patch), the firmware gives the
 channel.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Check first |
 |---|---|
@@ -328,9 +427,11 @@ channel.
 | Listed as *Xbox Series X Controller*, no PinOne items | Firmware without the identity report, or the PinOne not paired again after the update; the log's `PinOne:` line |
 | DOF fires nothing | The motors' power supply; port assignments in the DOF Config Tool (a configuration without them lists the tables but fires nothing); `Plugin.DOF.Enable`; libdof's lines in `vpinball.log` (PinOne found, the table's entry) |
 | No vibration on a table | DOF is on and the table is in the DOF database: the PinOne follows the table's DOF (log `Vibrations: the DOF configuration has an entry for this table`) |
+| The table's plunger jitters over Bluetooth | Firmware without `fix/ble-plunger-rest` (raw reading sent); with it, the plunger's rest outside `plungerMid` ± the resting dead zone: calibrate in the configuration tool (section 10.2) |
+| Over Bluetooth, sticks read fully deflected until something moves | Firmware with the plunger fix but without `b4bda93` (no first report, section 10.2) |
 | A real Xbox pad loses its vibrations or gets PinOne items | Should not happen: it has no vendor collection. Look for a `PinOne:` or `Vibrations: ... is a PinOne` log line naming it |
 
-## 13. Code
+## 14. Code
 
 | File | Role |
 |---|---|
@@ -347,4 +448,4 @@ channel.
 | `src/steamframe/TableLibrary.cpp`, `Backup.cpp` | DOF configuration upload, backups |
 | `src/assets/dof/pinone-mini/` | Shipped DOF configuration |
 | `steamframe/patches/libdof/`, `platforms/linux-*/external.sh` | libdof patch |
-| PinOne: `XboxDescriptor.h`, `BleController.cpp/.h`, `Communication.cpp/.h`, `README.md` | Firmware |
+| PinOne: `XboxDescriptor.h`, `BleController.cpp/.h`, `Communication.cpp/.h`, `Plunger.cpp/.h`, `UsbHid.cpp`, `README.md` | Firmware |
