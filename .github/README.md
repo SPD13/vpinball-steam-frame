@@ -413,7 +413,9 @@ With the PinOne and the VR controllers both connected, only the controller you p
 | 29 | View | 29 | Menu |
 | 25 to 28, front buttons with the shift button | D-pad left, right, up, down | 25 to 28 | Operator menu buttons (left: Cancel, down: Down, up: Up, right: Enter) and menu navigation |
 | Plunger | Right stick, up and down | Z axis | Plunger |
-| Accelerometer | Left stick | X and Y axes | Nudge |
+| Accelerometer | Left stick | X and Y axes | Nudge, at 200 % strength |
+
+**Nudge strength.** A firm shake of a PinOne only moves its stick about a quarter of the way, and the game takes a full stick for a strong nudge, so at the usual 100 % its nudges were too weak to notice. The PinOne mapping sets the strength of its nudge sensor to 200 %, the most the setting allows (**Controls** > **Nudge**, then the PinOne's sensor). A mapping set before this version keeps 100 %: select **Set PinOne Mini mapping and DOF Config** again, or raise **Nudge Strength** in that page. If nudging is still too weak, make the PinOne's accelerometer more sensitive in its configuration tool: lower its maximum (*Max*), and its dead zone with it; if it becomes too strong, lower the strength in the game. The PinOne's tilt buttons, when on, press the buttons they are given in the configuration tool on a hard nudge: if one of them is a D-pad direction (25 to 28), a hard nudge presses an operator menu button in the game, so turn the tilt buttons off or give them a free button.
 
 The table follows the PinOne's default settings. If you changed which button sends what in the PinOne's configuration tool (its **Controller** screen for the Xbox mode), map the changed buttons by hand in the controller's page.
 

@@ -23,6 +23,7 @@ Work done from 2026-11-16 to 2026-11-19 with the owner's PinOne (a PinOne Mini, 
 | DOF or vibrations | A PinOne follows the table's DOF, or the vibrations on tables DOF doesn't know | `Vibrations.*`, `plugins/dof/DOFPlugin.cpp` | Fork master, tested |
 | Identity | Tells a PinOne in Xbox mode from a real Xbox pad, lists it as *PinOne (XBox)* | Firmware `feature/ble-xbox-identity`, `src/steamframe/PinOneDevices.*` | Built, **not tested** (no hardware), not pushed |
 | Plunger over Bluetooth | Sends the USB axis value (rest at 0, quick release), and a first report when the host subscribes | Firmware `fix/ble-plunger-rest` | Flashed, rest checked on the Frame, [philipellisis/PinOne#10](https://github.com/philipellisis/PinOne/pull/10) open |
+| Nudge strength | The PinOne layout sets its nudge at 200 %; options to go further | `src/steamframe/ControllerLayouts.cpp`, section 10.5 | Branch `dof-pinone-ble`, not tested in a game |
 | Nudge speed | Not sent in Xbox mode; a vendor report like DOF is the path if needed | Section 10.3, 10.4 | Owner's decision, not implemented |
 
 ## 2. The PinOne's connections
@@ -101,7 +102,7 @@ offers the layouts instead:
 | 29 | View | 29 | Menu |
 | 25 to 28 | D-pad left, right, up, down | 25 to 28 | PinMAME service buttons 1 to 4, menu navigation |
 | Plunger | Right stick Y | Z axis | Plunger (position) |
-| Accelerometer | Left stick | X, Y axes | Nudge (`GamepadNudge`, read as a position, as upstream's gamepad layout) |
+| Accelerometer | Left stick | X, Y axes | Nudge (`GamepadNudge`, read as a position, as upstream's gamepad layout), strength 200 % (section 10.5) |
 
 `ControllerLayouts::OnJoystickAdded` (called at the end of `SDLInputHandler::OnJoystickAdded`) reads the actual bindings of the pad
 through SDL's gamepad mapping (`SDL_GetGamepadBindings`), so the layout uses the inputs SDL maps to LB, RB, the triggers and so on, and
@@ -380,6 +381,56 @@ The stock Xbox report stays as it is, byte for byte.
 Upstream: the firmware part would go to philipellisis/PinOne with the DOF channel; the VPX reader stays in the fork, like
 `PinOneDevices`.
 
+### 10.5 Nudge strength (2026-11-19)
+
+**Symptom.** On Addams Family, shaking the PinOne had no visible effect on the nudge, while the VR controllers' nudge worked. The
+owner checked in the nudge sensor page that the PinOne's input reached VPX: the nudges were there, too weak to notice.
+
+**Path of a nudge.** The firmware sends the accelerometer's acceleration on the left stick (`accelerometerRead()`: the reading minus
+the centering offset, the dead zone, the orientation, the soft limit, then `xValue × 32767 / accelerometerMax`). VPX reads the stick
+with `GamepadNudge`: a full stick is a strong nudge (`StrongNudgeAcceleration`, 0.7 g) times the sensor's strength
+(`Mapping.Nudge<n>.Strength`, 0 to 2, default 1), and `NudgeIntentHandler` turns each peak into an impulse on a cabinet model that
+sways at about 4.5 Hz.
+
+**Measured on the Frame** (firm shakes, the kernel's input device): each nudge jumped from 0 to about 0.20 of the stick, peaked at
+0.20 to 0.26, and fell back to 0 after 20 to 100 ms. No value between 0 and 0.195 ever came: the firmware's dead zone sets readings
+below it to 0 without rescaling the rest, so the first value let through is already the dead zone's size (dead zone / *Max*: about
+0.2 with the owner's settings, 30 / 280 = 0.11 with the defaults). At 100 % the PinOne's nudges were impulses of 0.14 to 0.18 g: all
+alike, and too small to notice in VR.
+
+**Decision (owner, 2026-11-19): 200 % for the moment.** `ApplyPinOneLayout` (*Set PinOne Mini mapping and DOF Config*) creates the
+PinOne's `GamepadNudge` with `SetStrengthScale(2.f)`, the setting's maximum, saved with the sensor (`NudgeHandler::AddSensor`). A
+mapping set before keeps its strength until the button is pressed again. 200 % doubles the impulses (0.28 to 0.36 g for the same
+shakes); it was not tested in a game yet.
+
+**Options for later**, from the simplest:
+
+| Where | Change | Effect | Limits |
+|---|---|---|---|
+| VPX, sensor page | *Nudge Strength* | Scales every PinOne nudge | Capped at 200 % (the property's range): the layout already uses it all |
+| PinOne configuration tool | Lower *Max* (X and Y) | Halving it doubles what the PinOne sends, up to a full stick | Lower the *Dead zone* with it, or the jump at the dead zone grows too (it is dead zone / *Max*) |
+| PinOne configuration tool | Lower the *Dead zone* | Light knocks get through | Too low lets the cabinet's vibrations through (the auto-centering removes slow drift only) |
+| Firmware | Rescale above the dead zone (`(abs(v) - dz) × max / (max - dz)`, as VPX's `SensorMapping` does) instead of cutting below it | Light knocks come out small instead of not at all; no jump at the threshold | Changes the PinOne's response on every host: an option, or a pull request to discuss upstream |
+| VPX, the layout | A strength chosen from the PinOne's *Max* and dead zone (they could go in the identity report) | Nudges of the same size whatever the PinOne's settings | Needs a firmware change; the 200 % cap stays unless the layout scales the axes instead (`SensorMapping` scale) |
+| Firmware and VPX | Nudge speed instead of acceleration on the left stick (section 10.3, 10.4) | VPX's cabinet sensor takes the speed integrated on the PinOne, which keeps a short knock's size at Bluetooth's 7.5 to 15 ms samples | Larger change: an option in the firmware, a capability bit, another mapping |
+
+**Related findings, not changed:**
+
+- **The plunger gate.** With `disableAccelOnPlungerMove` (default on), the firmware holds X and Y at 0 while it considers the plunger
+  moving, that is until the plunger has stayed within `plungerMid` ± `plungerRestingDeadZone` for 160 ms. A plunger that stops
+  outside that window after a launch turns the nudge off until it settles: one more reason to calibrate *Mid* (section 10.2).
+- **Tilt buttons.** On the two hardest left shakes, the firmware's tilt detection (`processTiltButton`, raw reading against
+  `accelerometerTilt`) pressed its tilt button for about 50 ms, which the owner's Bluetooth map sends as D-pad up: an operator menu
+  button (PinMAME service button 3) in the PinOne layout. The tilt buttons should be off or on a free button.
+- **Front nudges.** `NudgeIntentHandler` keeps only negative front values (`nudge.y = min(y, 0)`: a player pushes the cabinet). The
+  PinOne's Y peaks of the test were positive; if they were forward shakes, front nudges are dropped and the Y axis needs reversing
+  (the sensor's *Reversed axis*, or the PinOne's orientation). Not checked yet.
+- **Several nudge sensors.** `NudgeHandler` uses the first active sensor only. The VR controllers' left thumbstick is sensor 0
+  (`XRInputHandler`, OpenXR axes 20 and 21) and stays active for 10 s after a thumbstick nudge, hiding the PinOne meanwhile. The VR
+  bumpers use the nudge actions (keyboard nudge), which are not sensors.
+- The layout maps the axes as `Position` while `GamepadNudge` creates them as `Acceleration`; `GamepadNudge` ignores the type, so only
+  the saved setting differs.
+
 ## 11. Building and flashing the firmware
 
 On the Mac, `vp_vr/PinOne-build/build.sh` builds whatever branch `vp_vr/PinOne` has checked out (arduino-cli, core esp32 3.3.6, FQBN
@@ -431,6 +482,7 @@ channel.
 | No vibration on a table | DOF is on and the table is in the DOF database: the PinOne follows the table's DOF (log `Vibrations: the DOF configuration has an entry for this table`) |
 | The table's plunger jitters over Bluetooth | Firmware without `fix/ble-plunger-rest` (raw reading sent); with it, the plunger's rest outside `plungerMid` ± the resting dead zone: calibrate in the configuration tool (section 10.2) |
 | Over Bluetooth, sticks read fully deflected until something moves | Firmware with the plunger fix but without `b4bda93` (no first report, section 10.2) |
+| Shaking the PinOne barely nudges | The PinOne layout applied again since 200 % (sensor page: *Nudge Strength*); the PinOne's *Max* and dead zone; the plunger at rest (the firmware holds the nudge at 0 while the plunger moves); the VR left thumbstick unused for 10 s (section 10.5) |
 | A real Xbox pad loses its vibrations or gets PinOne items | Should not happen: it has no vendor collection. Look for a `PinOne:` or `Vibrations: ... is a PinOne` log line naming it |
 
 ## 14. Code

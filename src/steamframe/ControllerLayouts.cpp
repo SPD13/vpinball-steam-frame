@@ -176,6 +176,10 @@ void ApplyPinOneLayout(InputManager& input, uint16_t deviceId)
       auto gamepadNudge = std::make_unique<VPX::Physics::GamepadNudge>(&input);
       gamepadNudge->GetXSensor().SetMapping(SensorMapping::Create(deviceId, in.nudgeXAxis, SensorMapping::Type::Position));
       gamepadNudge->GetYSensor().SetMapping(SensorMapping::Create(deviceId, in.nudgeYAxis, SensorMapping::Type::Position));
+      // A firm shake of the owner's PinOne Mini only reached about a quarter of the stick (a full stick is a strong nudge), too weak to
+      // notice in a game: the strength starts at the setting's maximum, 200 %, for the moment (docs/steam-frame/PinOne Integration.md,
+      // section 10.5)
+      gamepadNudge->SetStrengthScale(2.f);
       std::unique_ptr<VPX::Physics::NudgeSensor> nudge = std::move(gamepadNudge);
       input.m_nudgeHandler->AddSensor(nudge);
    }
