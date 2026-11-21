@@ -50,9 +50,9 @@ State of the pull requests already sent (checked with `gh` on 2026-11-18 and aga
 | pinmame#838 libpinmame: the nibble of 4-bit memory before the mask | merged |
 | vpinball#4435 PuP: label draw order of positioned screens | draft, open. Upstream `b394442fa` (draw screens and labels in window stacking order, 2026-11-15) replaced the render passes it reordered, and the sync of 2026-11-20 dropped the fork's commit for upstream's code. Close it, or rework it, once City Hunter and Tomb Raider are checked on the Frame |
 | vpinball#4493 PinMAME plugin: Dip gives the value of the machine until the plugin has its DIP switches (row 1) | draft, open since 2026-11-20, branch `upstream-pr/pinmame-dip-machine-value` of the fork |
-| pinmame#833 (another contributor) memory maps on banked memory | open; the fork keeps its patch until it is merged |
+| pinmame#833 (another contributor) memory maps on banked memory | open, no longer a draft (2026-11-20); the fork keeps its patch until it is merged |
 
-The **Status** lines of `.github/README.md` still give some of these as open.
+The **Status** lines of `.github/README.md` were brought up to date on 2026-11-20.
 
 ## 3. Tier 1: shallow and small (1 to 4 files, under about 120 lines)
 
