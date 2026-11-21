@@ -10,7 +10,7 @@ It completes the "Candidates for merge upstream" section of `.github/README.md`,
 
 - First measured on `fork/master` at `754d33675`, against its merge base with upstream, `28dbb634a` (the sync of 2026-11-13).
 - Measured again on 2026-11-20 after the sync of that day: branch `steamframe-squash` of `vpinball-sync/` at `b1bdd6810`, rebased on
-  upstream `28919b5df` (151 upstream commits more, Visual Pinball 10.9.0), not yet published to `fork/master` (Frame test pending).
+  upstream `28919b5df` (151 upstream commits more, Visual Pinball 10.9.0), published to `fork/master` as `624ff00a6`.
   Every candidate kept its size within a few lines; what the sync changed is in section 7.
 - The fork commits are named by the hashes of `fork/master` before that sync; a sync rewrites them, so look them up by their subject
   (`git log --format='%h %s' origin/master..HEAD | grep '<subject>'`).
@@ -50,6 +50,7 @@ State of the pull requests already sent (checked with `gh` on 2026-11-18 and aga
 | pinmame#838 libpinmame: the nibble of 4-bit memory before the mask | merged |
 | vpinball#4435 PuP: label draw order of positioned screens | draft, open. Upstream `b394442fa` (draw screens and labels in window stacking order, 2026-11-15) replaced the render passes it reordered, and the sync of 2026-11-20 dropped the fork's commit for upstream's code. Close it, or rework it, once City Hunter and Tomb Raider are checked on the Frame |
 | vpinball#4493 PinMAME plugin: Dip gives the value of the machine until the plugin has its DIP switches (row 1) | draft, open since 2026-11-20, branch `upstream-pr/pinmame-dip-machine-value` of the fork |
+| vpinball#4496 Primitive: a mesh that fails to load is dropped instead of crashing the physics (row 3) | draft, open since 2026-11-21, branch `upstream-pr/mesh-load-failure-crash` of the fork |
 | pinmame#833 (another contributor) memory maps on banked memory | open, no longer a draft (2026-11-20); the fork keeps its patch until it is merged |
 
 The **Status** lines of `.github/README.md` were brought up to date on 2026-11-20.
@@ -62,7 +63,7 @@ Mostly fixes, quick to review: the best ones to start with.
 |---|---|---|---|---|---|
 | 1 | PinMAME plugin: `Dip` gives the value of the machine until the plugin has its DIP switches | 1 (`plugins/pinmame/Controller.cpp`) | +4 −2 | `bed4bc097` | **Proposed: draft #4493 (2026-11-20).** Bug fix: `core.vbs` takes `Dip` as the default of its options and writes them back, so the DIP switches were zeroed and saved in the NVRAM (Star Wars Sonic 1987 takes no coin) |
 | 2 | VR visibility mask drawn before the opaque parts | 1 (`src/renderer/RenderView.cpp`) | ~+10 −3 | in `05ff3ef89` | Bug fix: its sort key (z 200000, depth bias 0) put it after every opaque part, so it never masked anything; `Z_LESSEQUAL` instead of `Z_ALWAYS` keeps the hierarchical depth rejection. Still upstream's code on 2026-11-18 |
-| 3 | A mesh that fails to load is dropped | 2 (`src/parts/primitive.cpp/.h`) | ~+44 | `0634aafff` (`Primitive::DropInvalidMesh` only) | Fix of a crash in the physics setup (Dragon Ball Super Saiyan Edition). The lobby message stays in the fork |
+| 3 | A mesh that fails to load is dropped | 2 (`src/parts/primitive.cpp/.h`) | ~+44 | `0634aafff` (`Primitive::DropInvalidMesh` only) | **Proposed: draft #4496 (2026-11-21).** Fix of a crash in the physics setup (Dragon Ball Super Saiyan Edition). The lobby message stays in the fork |
 | 4 | ImGui's font texture never evicted by the texture manager | 2 (`src/renderer/TextureManager.cpp/.h`) | ~+25 | part of `b45a3da3e` (`LoadPinnedTexture`) | Fix. The GPU memory budget taken from the free memory stays in the fork (shared memory of the Frame) |
 | 5 | Parts entirely outside the view not drawn | 2 | +43 | `fa6fb68c6` | Draft of the pull request in `docs/Culling Parts Outside the View.md`, section 7 |
 | 6 | Refraction probes copy only the area of interest of their parts | 3 | +38 −1 | `a7d78c255` | 2.8 ms less GPU per frame on Medieval Madness on the Frame. One line refers to dynamic resolution: drop it. Draft in `docs/steam-frame/Refraction Copies Limited to Their Area.md` |
