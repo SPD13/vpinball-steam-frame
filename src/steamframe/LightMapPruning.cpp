@@ -332,6 +332,9 @@ void LightMapPruning::Prepare(PinTable* table)
    worker();
    for (auto& t : threads)
       t.join();
+   // The light maps of an image that could not be decoded were not sorted: their counts are still zero (a sorted one keeps at least a triangle at
+   // every level), which Trim would apply as is. Without an entry they are drawn in full.
+   std::erase_if(m_counts, [](const auto& entry) { return entry.second.mesh[0] == 0; });
 
    m_lightMaps = lightMaps;
    m_triangles = triangles;
