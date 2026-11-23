@@ -52,6 +52,16 @@ void LightMapPruning::Trim(const Primitive* part, uint32_t first, uint32_t& coun
       }
 }
 
+const std::array<uint32_t, LightMapPruning::kLevels>* LightMapPruning::GetCounts(const Primitive* part, int level) const
+{
+   const auto it = m_counts.find(part);
+   if (it == m_counts.end())
+      return nullptr;
+   if (level < 0)
+      return &it->second.mesh;
+   return static_cast<size_t>(level) < it->second.levels.size() ? &it->second.levels[level] : nullptr;
+}
+
 const char* LightMapPruning::GetLevelName(int level)
 {
    static const char* const names[kLevels + 1] = { "Off", "Low", "Medium", "High" };

@@ -3,6 +3,7 @@
 #include "core/stdafx.h"
 #include "MeshSimplifier.h"
 #include "MeshLevelCache.h"
+#include "MeshTiles.h"
 
 #include "core/player.h"
 #include "core/VPApp.h"
@@ -704,6 +705,9 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table, bool v
 {
    m_enabled = table->GetSettings().GetPlayer_SimplifyMeshes();
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
+   // The tiles of the large parts (made with their index buffers, after this)
+   MeshTiles::SetEnabled(table->GetSettings().GetPlayer_MeshTiles());
+   MeshTiles::ResetStats();
    m_vr = vr;
    m_cache->Close();
    m_nMeshes = m_nShared = m_nCandidates = m_nCandidatesDone = 0;
@@ -1163,24 +1167,31 @@ void MeshSimplifier::LogStats()
    }
 }
 
-std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels)
+std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd, Primitive* part, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels, std::shared_ptr<MeshTiles>& tiles)
 {
    if (levels && (levels->sourceIndices != mesh.NumIndices() || levels->sourceVertices != mesh.NumVertices()))
       levels = nullptr; // The mesh changed since it was simplified
-   if (levels == nullptr)
+   tiles = nullptr;
+   const bool tileable = mesh.NumIndices() / 3 >= MeshTiles::kMinTriangles && mesh.m_animationFrames.empty();
+   if (levels == nullptr && !tileable)
       return std::make_shared<IndexBuffer>(rd, mesh.m_indices);
    // The mesh, then each level
    size_t total = mesh.NumIndices();
-   for (const MeshLevels::Level& level : levels->levels)
-      total += level.indices.size();
+   if (levels)
+      for (const MeshLevels::Level& level : levels->levels)
+         total += level.indices.size();
    vector<unsigned int> indices;
    indices.reserve(total);
    indices.insert(indices.end(), mesh.m_indices.begin(), mesh.m_indices.end());
-   for (MeshLevels::Level& level : levels->levels)
-   {
-      level.first = static_cast<uint32_t>(indices.size());
-      indices.insert(indices.end(), level.indices.begin(), level.indices.end());
-   }
+   if (levels)
+      for (MeshLevels::Level& level : levels->levels)
+      {
+         level.first = static_cast<uint32_t>(indices.size());
+         indices.insert(indices.end(), level.indices.begin(), level.indices.end());
+      }
+   // Each range grouped by tile (only in the buffer: the mesh and the levels keep their order)
+   if (tileable)
+      tiles = MeshTiles::Build(part, mesh, levels.get(), indices);
    return std::make_shared<IndexBuffer>(rd, indices);
 }
 

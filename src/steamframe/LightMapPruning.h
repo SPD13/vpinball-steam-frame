@@ -47,6 +47,10 @@ public:
    // The index range drawn by a light map (its mesh or one of its levels, from its start): shortened to the triangles of the current level
    void Trim(const Primitive* part, uint32_t first, uint32_t& count) const;
 
+   // Indices kept at each level (Low, Medium, High) of a range of a light map sorted when the table loaded ('level' -1: its mesh, else that simplified
+   // level), or null. MeshTiles keeps these starts of the range whole when it groups its triangles by tile.
+   const std::array<uint32_t, kLevels>* GetCounts(const Primitive* part, int level) const;
+
    static const char* GetLevelName(int level); // Off, Low, Medium, High
    size_t GetLightMapCount() const { return m_lightMaps; } // Light maps sorted when the table loaded
    bool WasOffAtLoad() const { return m_offAtLoad; } // Nothing sorted: a level chosen now applies to the next table

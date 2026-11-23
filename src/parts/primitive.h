@@ -17,7 +17,7 @@
 class HitObject;
 class MeshBuffer;
 #if defined(VPX_STEAM_FRAME)
-namespace VPX { struct MeshLevels; }
+namespace VPX { struct MeshLevels; class MeshTiles; }
 #endif
 
 // Indices for RotAndTra:
@@ -316,6 +316,7 @@ public:
 #if defined(VPX_STEAM_FRAME)
    std::shared_ptr<VPX::MeshLevels> m_meshLevels; // Simplified levels of the render mesh, made while the table loads (see steamframe/MeshSimplifier.h)
    int m_meshLevel = -1; // Level drawn in the main view at the last frame (-1: the full mesh)
+   std::shared_ptr<VPX::MeshTiles> m_meshTiles; // Its triangles grouped by tile, for a large part (see steamframe/MeshTiles.h)
 #endif
 
 private:

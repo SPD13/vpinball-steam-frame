@@ -64,6 +64,9 @@ target_sources(vpinball PRIVATE
    src/steamframe/MeshSimplifier.cpp
    src/steamframe/MeshLevelCache.h
    src/steamframe/MeshLevelCache.cpp
+   # Large parts culled by tiles
+   src/steamframe/MeshTiles.h
+   src/steamframe/MeshTiles.cpp
 
    # Straight edges of flashers kept whole (VR room floors far from the table)
    src/steamframe/FlasherOutline.h

@@ -44,6 +44,7 @@ namespace VPX
 {
 
 class MeshLevelCache;
+class MeshTiles;
 struct SimplifiedMesh;
 
 // Simplified levels of a primitive's mesh, from the finest to the coarsest
@@ -74,8 +75,9 @@ public:
    // Logs what was done (once the pool is done) and writes the new levels to the table's cache
    void LogStats();
 
-   // Index buffer of a primitive: its mesh followed by its levels (whose positions it sets). Drops levels made from another mesh.
-   static std::shared_ptr<IndexBuffer> CreateIndexBuffer(RenderDevice* rd, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels);
+   // Index buffer of a primitive: its mesh followed by its levels (whose positions it sets). Drops levels made from another mesh. A large part
+   // gets its triangles grouped by tile in each range ('tiles', see MeshTiles.h; null otherwise).
+   static std::shared_ptr<IndexBuffer> CreateIndexBuffer(RenderDevice* rd, Primitive* part, const Mesh& mesh, std::shared_ptr<MeshLevels>& levels, std::shared_ptr<MeshTiles>& tiles);
 
    // Simplified meshes in use (on for the table when it loaded with the setting on; switched live by the settings page)
    bool IsEnabled() const { return m_enabled; }

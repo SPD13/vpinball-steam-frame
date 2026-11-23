@@ -20,6 +20,7 @@
 #include "steamframe/Passthrough.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/MeshSimplifier.h"
+#include "steamframe/MeshTiles.h"
 #include "steamframe/LightMapPruning.h"
 #include "steamframe/Reflections.h"
 #include "steamframe/SceneBufferFormat.h"
@@ -465,6 +466,21 @@ private:
                   : !simplifier.IsEnabled()  ? std::format("{} parts simplified, drawn in full (off)", parts).c_str()
                   : VPX::IsNaN(saved)        ? std::format("{} parts simplified", parts).c_str()
                                              : std::format("{} parts simplified, {:.0f} % of the triangles left out", parts, saved * 100.f).c_str());
+         }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_MeshTiles, //
+         []() { return MeshTiles::IsEnabled(); }, //
+         [](bool v) { MeshTiles::SetEnabled(v); }));
+      AddItem(std::make_unique<InGameUIItem>("Culling by tiles status"s, "Large parts cut in tiles when the table loaded, and the share of their triangles left out over the last second"s,
+         [](int, const InGameUIItem*)
+         {
+            const int parts = MeshTiles::GetTiledPartCount();
+            const float saved = MeshTiles::GetSavedShare();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(parts == 0 ? "No large part on this table"
+                  : !MeshTiles::IsEnabled()  ? std::format("{} parts in {} tiles, drawn whole (off)", parts, MeshTiles::GetTileTotal()).c_str()
+                  : VPX::IsNaN(saved)        ? std::format("{} parts in {} tiles", parts, MeshTiles::GetTileTotal()).c_str()
+                                             : std::format("{} parts in {} tiles, {:.0f} % of their triangles left out", parts, MeshTiles::GetTileTotal(), saved * 100.f).c_str());
          }));
    }
 };
