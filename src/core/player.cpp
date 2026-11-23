@@ -337,6 +337,9 @@ Player::Player(PinTable *const table, const PlayMode playMode, LoadProgress &loa
    // Setup the audio listener: fixed pose in front of the table for desktop/cabinet play,
    // head tracked pose with per-output spatial/binaural rendering for VR play
    m_audioPlayer->SetTableDimensions(m_ptable->m_right - m_ptable->m_left, m_ptable->m_bottom - m_ptable->m_top);
+#ifdef VPX_STEAM_FRAME
+   SpatialAudioMixer::SetLowCpuBinaural(m_ptable->GetSettings().GetPlayerVR_SpatialAudioLowCpu());
+#endif
    if (stereo3D == STEREO_VR)
       m_audioPlayer->SetSpatialMode(m_ptable->GetSettings().GetPlayerVR_SpatialAudioBackglass(), m_ptable->GetSettings().GetPlayerVR_SpatialAudioPlayfield());
 

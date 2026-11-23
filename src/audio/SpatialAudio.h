@@ -58,6 +58,11 @@ public:
    SpatialAudioListener* GetReferenceListener() { return &m_referenceListener; }
    // Whether the binaural renderer was configured (its HRTF loaded): the mixer stays silent otherwise
    bool IsBinauralReady() const;
+#ifdef VPX_STEAM_FRAME
+   // Steam Frame: libspatialaudio's low CPU binaural mode (symmetric head, half the HRTF convolutions) for the mixers built after
+   // the call (Settings PlayerVR/SpatialAudioLowCpu, off by default, applied when a table starts)
+   static void SetLowCpuBinaural(bool lowCpu);
+#endif
 
    // Opaque implementation, defined in the .cpp (publicly visible for the node struct helpers)
    struct Impl;

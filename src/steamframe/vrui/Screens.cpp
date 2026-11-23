@@ -771,7 +771,7 @@ static vector<Section> GetSections(Screen screen)
    case Screen::Sound:
       return {
          Section { ""s, kAudio, {}, true },
-         Section { "Spatial audio in VR"s, kVR, { Prop(Settings::m_propPlayerVR_SpatialAudioBackglass), Prop(Settings::m_propPlayerVR_SpatialAudioPlayfield) }, false, false },
+         Section { "Spatial audio in VR"s, kVR, { Prop(Settings::m_propPlayerVR_SpatialAudioBackglass), Prop(Settings::m_propPlayerVR_SpatialAudioPlayfield), Prop(Settings::m_propPlayerVR_SpatialAudioLowCpu) }, false, false },
       };
 
    case Screen::Controls:

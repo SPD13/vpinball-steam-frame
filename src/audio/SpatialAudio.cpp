@@ -71,6 +71,10 @@ static constexpr float kPositionFadeMs = 10.f;
 // direct stereo paths. +6dB restores most of the loss while keeping headroom
 // for the up-to-3x close distance attenuation boost
 static constexpr float kBinauralGain = 2.f;
+#ifdef VPX_STEAM_FRAME
+static std::atomic<bool> s_lowCpuBinaural { false };
+void SpatialAudioMixer::SetLowCpuBinaural(bool lowCpu) { s_lowCpuBinaural = lowCpu; }
+#endif
 
 
 struct vpx_spatial_mix_node
@@ -148,7 +152,12 @@ SpatialAudioMixer::SpatialAudioMixer(ma_engine* engine)
    const std::string hrtfPath = g_app ? (g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets) / "fabian-hrir.sofa").string() : std::string();
    try
    {
+#ifdef VPX_STEAM_FRAME
+      m_impl->binauralConfigured = m_impl->binauralizer.Configure(kAmbiOrder, true, sampleRate, kMaxAmbiBlock, tailLength, hrtfPath, s_lowCpuBinaural);
+      PLOGI << "Spatial audio: binaural " << (s_lowCpuBinaural ? "low CPU (symmetric head)" : "full");
+#else
       m_impl->binauralConfigured = m_impl->binauralizer.Configure(kAmbiOrder, true, sampleRate, kMaxAmbiBlock, tailLength, hrtfPath, false);
+#endif
    }
    catch (const std::exception&)
    {
