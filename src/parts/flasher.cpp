@@ -1195,7 +1195,16 @@ void Flasher::Render(const unsigned int renderMask)
          if (m_lightmap != nullptr && m_lightmap->m_d.m_shadows == ShadowMode::RAYTRACED_BALL_SHADOWS)
             m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::lightCenter_doShadow, m_lightmap->m_d.m_vCenter.x, m_lightmap->m_d.m_vCenter.y, m_lightmap->GetCurrentHeight(), 1.0f);
 
+#if defined(VPX_STEAM_FRAME)
+         // Passthrough: what nothing wrote depth to shows the room (fs_pp_passthrough.sc). A flasher hiding what is behind it (a plain blend, mostly
+         // opaque, of an opaque image or of no image) writes depth too, else the room shows through it where no part stands behind (the bottom of
+         // Medieval Madness' backglass image, below the black backglass primitive). Transparent parts drawn after it and behind it are hidden, as it mostly hides them
+         const bool solid = m_renderer->m_vrPassthrough && !m_desktopBackdrop && m_d.m_addBlend == FlasherData::AB_NONE && color.w >= 0.5f
+            && (m_isVideoCap || !pinA || pinA->IsOpaque()) && (!pinB || pinB->IsOpaque());
+         m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, solid ? RenderState::RS_TRUE : RenderState::RS_FALSE);
+#else
          m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+#endif
          if (m_d.m_addBlend != FlasherData::AB_NONE)
             SetupAddBlendState();
          else
