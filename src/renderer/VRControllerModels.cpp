@@ -149,13 +149,30 @@ std::shared_ptr<const VRControllerModels::ReadModel> VRControllerModels::Read(ui
    auto model = std::make_shared<ReadModel>();
    model->id = id;
 
-   // Textures: images stored in the binary (PNG or JPEG)
+   // Textures: images stored in the binary (PNG or JPEG). An image with the same data as an earlier one shares its texture: SteamVR gives
+   // each part of a controller an image of its own, all of them the controller's color texture (frame_controller_<side>_color.png, 2048²),
+   // so the two Steam Frame controllers had 21 textures for 2 images, 470 MB of GPU memory and 260 MB of memory (2026-11-22)
    model->textures.resize(data->images_count);
+   int distinctTextures = 0;
    for (cgltf_size i = 0; i < data->images_count; i++)
    {
       const cgltf_image& image = data->images[i];
       if (const uint8_t* bytes = image.buffer_view ? cgltf_buffer_view_data(image.buffer_view) : nullptr; bytes)
-         model->textures[i] = BaseTexture::CreateFromData(bytes, image.buffer_view->size);
+      {
+         for (cgltf_size j = 0; j < i && model->textures[i] == nullptr; j++)
+         {
+            const cgltf_buffer_view* const other = data->images[j].buffer_view;
+            if (model->textures[j] && other
+               && (other == image.buffer_view || (other->size == image.buffer_view->size && memcmp(cgltf_buffer_view_data(other), bytes, other->size) == 0)))
+               model->textures[i] = model->textures[j];
+         }
+         if (model->textures[i] == nullptr)
+         {
+            model->textures[i] = BaseTexture::CreateFromData(bytes, image.buffer_view->size);
+            if (model->textures[i])
+               distinctTextures++;
+         }
+      }
       if (model->textures[i] == nullptr)
          PLOGW << "OpenXR controller model " << id << ": image " << i << " not loaded (" << (image.mime_type ? image.mime_type : "external file") << ')';
    }
@@ -349,7 +366,7 @@ std::shared_ptr<const VRControllerModels::ReadModel> VRControllerModels::Read(ui
       model->sticker = sticker;
    }
 
-   PLOGI << "OpenXR controller model " << id << ": " << model->nodes.size() << " nodes, " << model->primitives.size() << " meshes, " << data->images_count << " textures";
+   PLOGI << "OpenXR controller model " << id << ": " << model->nodes.size() << " nodes, " << model->primitives.size() << " meshes, " << data->images_count << " images, " << distinctTextures << " textures";
    cgltf_free(data);
    return model;
 }
