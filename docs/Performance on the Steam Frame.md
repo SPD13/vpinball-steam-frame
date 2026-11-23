@@ -1368,8 +1368,9 @@ At 1 ms the loop polls the input less often than the physics steps (up to a mill
 - **Lighter spatial audio.** `PlayerVR.SpatialAudioLowCpu` (*Lighter spatial audio*, Sound screen of the VR menu, section *Spatial audio
   in VR*, off by default). `Player` passes it to `SpatialAudioMixer::SetLowCpuBinaural` before the table's mixers are built, and the
   mixer gives it to `AmbisonicBinauralizer::Configure` as `lowCpuMode` instead of upstream's `false` (symmetric head: half the HRTF
-  convolutions). The log says which one each mixer uses (`Spatial audio: binaural full` or `low CPU (symmetric head)`). Applies to the
-  next table started; to be judged by ear before it could be the default.
+  convolutions). The log says which one each mixer uses (`Spatial audio: binaural full` or `low CPU (symmetric head)`). The item is on
+  the VR settings page (`VRSettingsPage`, which the Sound screen of the new menu shows), and a change rebuilds the audio player at once,
+  as the two other spatial audio switches do, so the two modes can be compared by ear in play; to be judged before it could be the default.
 
 **Worn, as built** (2026-11-22, Medieval Madness, the 13 minutes after the table loaded, minutes 2 to 13 averaged; `heat-watch.sh`
 recording the VPX started from Steam; lighter spatial audio off in both):

@@ -60,8 +60,9 @@ public:
    bool IsBinauralReady() const;
 #ifdef VPX_STEAM_FRAME
    // Steam Frame: libspatialaudio's low CPU binaural mode (symmetric head, half the HRTF convolutions) for the mixers built after
-   // the call (Settings PlayerVR/SpatialAudioLowCpu, off by default, applied when a table starts)
+   // the call (Settings PlayerVR/SpatialAudioLowCpu, off by default, applied when a table starts and by the VR settings page)
    static void SetLowCpuBinaural(bool lowCpu);
+   static bool IsLowCpuBinaural();
 #endif
 
    // Opaque implementation, defined in the .cpp (publicly visible for the node struct helpers)

@@ -74,6 +74,7 @@ static constexpr float kBinauralGain = 2.f;
 #ifdef VPX_STEAM_FRAME
 static std::atomic<bool> s_lowCpuBinaural { false };
 void SpatialAudioMixer::SetLowCpuBinaural(bool lowCpu) { s_lowCpuBinaural = lowCpu; }
+bool SpatialAudioMixer::IsLowCpuBinaural() { return s_lowCpuBinaural; }
 #endif
 
 

@@ -195,6 +195,18 @@ void VRSettingsPage::BuildPage()
       [this]() { return m_player->m_audioPlayer->IsSpatialAudioEnabled(SoundOutTypes::SNDOUT_TABLE); }, //
       [this, recreateAudioPlayer](bool v) { recreateAudioPlayer(m_player->m_audioPlayer->IsSpatialAudioEnabled(SoundOutTypes::SNDOUT_BACKGLASS), v); }));
 
+#ifdef VPX_STEAM_FRAME
+   // Steam Frame: lighter binaural rendering (PlayerVR/SpatialAudioLowCpu), applied at once by rebuilding the audio player's mixers
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayerVR_SpatialAudioLowCpu, //
+      []() { return VPX::SpatialAudioMixer::IsLowCpuBinaural(); }, //
+      [this, recreateAudioPlayer](bool v)
+      {
+         VPX::SpatialAudioMixer::SetLowCpuBinaural(v);
+         recreateAudioPlayer(m_player->m_audioPlayer->IsSpatialAudioEnabled(SoundOutTypes::SNDOUT_BACKGLASS), m_player->m_audioPlayer->IsSpatialAudioEnabled(SoundOutTypes::SNDOUT_TABLE));
+      }));
+#endif
+
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Miscellaneous Settings"s));
 
    AddItem(std::make_unique<InGameUIItem>( //
