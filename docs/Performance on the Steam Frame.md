@@ -1349,15 +1349,55 @@ Measured with temporary switches, one run each (VPX total / logic / sound / PinM
 With all three the Frame's CPU load falls from 1.42 to 1.17 cores; the script's time per frame halves with the passes (its sync timers).
 At 1 ms the loop polls the input less often than the physics steps (up to a millisecond more of latency), so the build uses 500 µs.
 
-**As built.**
-- `Player.LogicLoopSleep` (µs, 500 in the build of the Steam Frame, no menu entry, `VPX::ThreadPlacement::LogicLoopSleepNs`).
-- Silent blocks skip the encoding (`SpatialAudio.cpp`, generic, an upstream candidate).
-- `PlayerVR.SpatialAudioLowCpu`, *Lighter spatial audio* in the Sound screen of the VR menu, off by default: libspatialaudio's low CPU
-  mode assumes a symmetric head, to be judged by ear. Applied when a table starts.
+**As built** (commits 4f52563bf, 287168472, 21be17406):
+
+- **Logic loop sleep.** `Player::MultithreadedGameLoop` reads `VPX::ThreadPlacement::LogicLoopSleepNs(settings)` once before its loop
+  and passes it to `uOverSleep` (`SDL_DelayNS`) when a pass had no frame to prepare; upstream's `uOverSleep(100000)` stays in the `#else`.
+  The value is `Player.LogicLoopSleep` in microseconds (50–2000, 500 by default), declared only in the build of the Steam Frame
+  (`VPX_STEAM_FRAME_HEADSET`), with no menu entry; other builds get upstream's 100 µs. Each pass still runs `UpdateGameLogic` (SDL
+  events, input and OpenXR actions, physics up to the current time, the script's sync timers `FireTimers(-2)`, plugin callbacks), and a
+  frame is still prepared as soon as the render thread asks for one: only the idle passes are fewer. The physics catches up to the
+  current time on each pass, so its 1 ms steps do not change; the input waits at most about 0.5 ms more to be read (0.28 ms between passes
+  at 100 µs, 0.76 ms at 500 µs, with the work of a pass).
+- **Silent blocks.** In `SpatialAudioSource::Impl::Process`, after the position update, a block whose gain is zero (both channels of a
+  stereo source) or whose input samples are all zero writes zeros to its 9 B-format channels and returns, without the encoding
+  (`AmbisonicEncoder::Process`, the `GainInterp` coefficient fades) and the channel extraction. The output is what the encoding would
+  give. The encoder's position fade does not advance while skipped, so a source that sounds again glides from its last position over
+  the 10 ms fade (`kPositionFadeMs`). The mixer still sums the 9 channels of every source (miniaudio's input bus), and the binauralizer's
+  cost per period is unchanged. Generic: an upstream candidate.
+- **Lighter spatial audio.** `PlayerVR.SpatialAudioLowCpu` (*Lighter spatial audio*, Sound screen of the VR menu, section *Spatial audio
+  in VR*, off by default). `Player` passes it to `SpatialAudioMixer::SetLowCpuBinaural` before the table's mixers are built, and the
+  mixer gives it to `AmbisonicBinauralizer::Configure` as `lowCpuMode` instead of upstream's `false` (symmetric head: half the HRTF
+  convolutions). The log says which one each mixer uses (`Spatial audio: binaural full` or `low CPU (symmetric head)`). Applies to the
+  next table started; to be judged by ear before it could be the default.
+
+**Worn, as built** (2026-11-22, Medieval Madness, the 13 minutes after the table loaded, minutes 2 to 13 averaged; `heat-watch.sh`
+recording the VPX started from Steam; lighter spatial audio off in both):
+
+| | Before (624ff00a6) | After (21be17406) |
+|---|---|---|
+| VPX, % of a core | 102.3 | **69.3** |
+| Logic thread | 56.7 | 39.4 |
+| Sound thread | 24.0 | 9.2 |
+| PinMAME | 8.3 | 6.8 |
+| Render thread | 12.1 | 12.8 |
+| Whole device, cores busy | 2.84 | 2.47 |
+| Clock of cores 5–6 (logic thread) | 2 920 MHz | 2 551 MHz |
+| Clock of cores 2–4 | 3 134 MHz | 3 078 MHz |
+| Hottest CPU sensor, mean | 86.6 °C | **81.9 °C** |
+| `cpu3-bottom` / `cpu5-bottom`, mean | 85.3 / 84.3 °C | 81.0 / 78.8 °C |
+| GPU, mean | 80.3 °C | 78.8 °C |
+| CPU peak, seconds at 95 °C or more | 98.1 °C, 5 | 95.7 °C, 2 |
+
+SteamVR did the same work in both (tracking 65 %, `vrserver` 11–13 %, eye tracking 10 %, compositor 9 %), and VPX held 2160² with no
+frame missed. Worn, the sound thread gained more than headless (−14.8 points against −5.5): more sources sound at once in play. The
+one-third cut of VPX's CPU lowers the cores of the logic thread by 5.5 °C and the hottest sensor by about 5 °C; the cores 2 to 4 stay
+near their highest clock, held there by SteamVR. Not the same conditions: the first play ran on the battery (2.6 A drawn), the second
+on USB power at 99 % (no current drawn from the battery), and the second started from a warmer device. The owner found the build
+working in play (Medieval Madness, Addams Family). The fan reached its maximum (about 11 300 rpm) after five minutes in both.
 
 Tools: `Doc/test-hooks/heat-*` (sensor sampler, layout switcher, worn recorder, report) and `cpu-hooks.py`, `cpu-series.sh`,
-`cpu-report.py`. Not settled: the worn gain and the flipper feel at 500 µs (to check in the headset); a few degrees at most are expected
-from a quarter of a core, against the 1.2 cores of SteamVR worn.
+`cpu-report.py`. Not settled: whether lighter spatial audio sounds the same; the 1.2 cores of SteamVR worn, which VPX cannot change.
 
 ## 9. Reproduction
 
