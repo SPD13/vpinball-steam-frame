@@ -1,10 +1,11 @@
 # Upstream Feature Pull Request Candidates
 
-2026-11-18, checked again after the upstream sync of 2026-11-20
+2026-11-18, checked again after the upstream sync of 2026-11-20; rows 31 to 33 (CPU use, from the heat study) added 2026-11-22
 
 The features of the Steam Frame Edition that could be proposed to upstream Visual Pinball (vpinball/vpinball), one pull request per
 feature, ranked by how deep the integration is (how many upstream files a pull request would change) and how big it is (lines of code).
-It completes the "Candidates for merge upstream" section of `.github/README.md`, which lists the fixes already proposed.
+It completes the "Candidates for merge upstream" section of `.github/README.md`, which lists the fixes already proposed. Rows added later take
+the next free numbers, in the tier they belong to, so the row numbers quoted elsewhere stay valid.
 
 ## 1. How it was measured
 
@@ -75,6 +76,8 @@ Mostly fixes, quick to review: the best ones to start with.
 | 11 | Preload of the images named by the table script (`Player.PreloadScriptImages`) | 4 | +71 | `a80d97c77` | No stop when the script first shows an image (World Poker Tour: 1.9 s to 0.1 s). Its setting goes to upstream's settings page |
 | 12 | Valve Frame controller interaction profile (`XR_VALVE_frame_controller_interaction`) | ~3 (`XRInputHandler.h`, `VRDevice.cpp`, `InputAction.cpp`) | ~+80 | in `8e9ea8018` | The d-pad, bumpers and view button for anyone playing upstream's VPX with a Frame on SteamVR |
 | 13 | No controller layout prompt for SteamVR's virtual gamepad | 3 (`SDLInputHandler.h`, `InputManager.h/.cpp`) | ~+40 | in `e635e9c0c` | |
+| 31 | Spatial audio: a silent block skips the ambisonic encoding | 1 (`src/audio/SpatialAudio.cpp`) | +19 | `4f52563bf` | Not guarded: nothing to remove. A source whose gain is zero or whose input block is all zeros writes zeros to its 9 B-format channels instead of encoding them, which gives the same output; its position fade resumes from where it stopped (10 ms glide). On Medieval Madness about 93 sources are processed per audio period and 97 % of their blocks are silent: the sound thread 18.5 → 13.0 % of a core headless on the Frame, 24 → 9 % worn (with row 32). `docs/Performance on the Steam Frame.md`, section 8.17 |
+| 32 | Sleep of the logic loop as a setting (`Player.LogicLoopSleep`) | 2 (`src/core/player.cpp`, `Settings_properties.inl`) | ~+8 | `287168472` | `Player::MultithreadedGameLoop` sleeps 100 µs between passes: on the Frame (Linux) 3,560 passes a second, each polling the SDL events, syncing the OpenXR actions and firing the script's sync timers, while the physics steps every millisecond. At 500 µs: 1,321 passes, the logic thread 40 → 28 % of a core headless, 57 → 39 % worn; the input is read at most about 0.5 ms later. The fork reads it through `ThreadPlacement::LogicLoopSleepNs`, Frame only: the pull request reads the setting in `player.cpp` and keeps upstream's 100 µs as the default, since it trades input latency, so the default is the maintainers' call. Upstream's own comment says Windows sleeps 300 to 500 µs at least, so the gain is where the sleep is precise (measured on Linux only). Section 8.17 |
 
 ## 4. Tier 2: few upstream files, more code (mostly new files)
 
@@ -91,6 +94,7 @@ Mostly fixes, quick to review: the best ones to start with.
 | 22 | Plugin API `ShowMessage` and `ReportMissingFile`, message page | ~5 | ~150 | in `f9073682c`, `e635e9c0c` | The message of a missing ROM |
 | 23 | Controller models from the OpenXR runtime (`XR_EXT_render_model`, `XR_EXT_interaction_render_model`) | ~7 | ~+250, ~620 new | in `8e9ea8018`, `915623159` | cgltf is already in bgfx's `3rdparty`. The animated parts were never seen moving: SteamVR gives every node hidden |
 | 24 | Simplified meshes of heavy tables | 4 to 5 | ~+60, ~2,500 new | `5b6e33dc7`, `856a0fe09`, `31ca1d2d2`, `b49e1f198` | Three pull requests: the simplifier; coarse levels for far parts and their disk cache; flasher outlines kept whole. meshoptimizer is already in bgfx's `3rdparty` |
+| 33 | Lighter spatial audio: libspatialaudio's low CPU binaural mode as a setting (`PlayerVR.SpatialAudioLowCpu`) | 5 (`src/audio/SpatialAudio.cpp/.h`, `src/core/player.cpp`, `Settings_properties.inl`, `VRSettingsPage.cpp`) | ~+35 −4 | `21be17406`, `92d81859c`, `40c0e3e5a` | Upstream passes `false` as `lowCpuMode` to `AmbisonicBinauralizer::Configure`. The low CPU mode assumes a symmetric head: 9 FFT convolutions per period instead of 18, the right ear made from the left one's results: the sound thread 18.5 → 15.1 % of a core headless. The item of `VRSettingsPage` rebuilds the audio player at once, like the two other spatial audio switches. On by default on the Frame (tried by the owner in play, 2026-11-22); for upstream, off by default (desktop CPUs have room) and the guards removed. Section 8.17 |
 | 25 | Web server: pairing, Windows support (network address, UTF-8 paths), upload progress | 2 C++, 3 web | ~150 C++, plus the web pages | in `a596e953f` | RAR and 7z through libarchive as a separate pull request: it adds a dependency to five `external.sh` (`ZipUtils` +177) |
 
 ## 5. Tier 3: deep (the whole renderer or the OpenXR session)
@@ -147,6 +151,6 @@ rows 19, 20 and 28 and section 6 were updated for them.
 ## 8. Suggested order
 
 1. Rows 1 to 4: fixes, the quickest to review.
-2. Rows 5 to 8 and 14: small performance gains with measurements on the Frame.
+2. Rows 5 to 8, 14 and 31 to 33: small performance gains with measurements on the Frame (31 first: no setting, the same sound).
 3. The rest of tier 1, then tier 2, one pull request at a time.
 4. Tier 3: a discussion first, then the pull requests in the order given in its rows (the scaled rendering before the controllers).
