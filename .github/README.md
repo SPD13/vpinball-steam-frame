@@ -412,10 +412,12 @@ With the PinOne and the VR controllers both connected, only the controller you p
 | 9, fire button | Start (Menu) | 9 | Start | Confirm |
 | 5, front button | Y | 5 | Insert coin | Up |
 | 7, front button | X | 7 | (free) | Previous item |
-| 29 | View | 29 | Menu | (opens the menu; Cancel goes back) |
+| 29, fire button with the shift button (left flipper held) | View | 29 | Menu | (opens the menu; Cancel goes back) |
 | 25 to 28, front buttons with the shift button | D-pad left, right, up, down | 25 to 28 | (nothing) | Left: Cancel, right: Confirm, up: next item, down: previous item |
 | Plunger | Right stick, up and down | Z axis | Plunger | |
 | Accelerometer | Left stick | X and Y axes | Nudge, at 200 % strength | |
+
+**Opening the menu.** Hold the left flipper and press the fire button: the menu opens. The left flipper is the PinOne's *shift button* in its default settings: while it is held, the fire button sends input 29 (View over Bluetooth) instead of Start, and the front buttons send the D-pad (25 to 28) instead of their own input, so while the left flipper is held, launch a ball with the plunger rather than with A. If holding the left flipper and pressing fire does nothing, the PinOne's shift button is off or set to another button (some units come that way): set it to button 3, the left flipper, in the PinOne's configuration tool. The VR controllers' menu button opens the menu too.
 
 **Menus.** The PinOne moves in the game's menus with its own buttons (last column): Y and A go up and down (in a grid, the row above or below), X and the left flipper go to the previous item, B and the right flipper to the next one, the fire button confirms and either magna-save cancels. These menu actions only act while a menu is open, as on the keyboard, where the flipper and magna-save keys move in the menus too.
 
