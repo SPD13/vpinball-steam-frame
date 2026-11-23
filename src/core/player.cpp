@@ -2638,6 +2638,9 @@ bool Player::CallbackSteppedGameLoop()
 
 void Player::MultithreadedGameLoop()
 {
+#ifdef VPX_STEAM_FRAME
+   const uint64_t logicSleepNs = VPX::ThreadPlacement::LogicLoopSleepNs(m_ptable->GetSettings()); // Steam Frame: 500 us, see src/steamframe/ThreadPlacement.h
+#endif
    while (GetCloseState() == CS_PLAYING || GetCloseState() == CS_USER_INPUT || GetCloseState() == CS_CLOSE_CAPTURE_SCREENSHOT)
    {
       if (!CallbackSteppedGameLoop())
@@ -2649,7 +2652,11 @@ void Player::MultithreadedGameLoop()
 #else
          // Sadly waiting is very imprecise (at least on Windows) and we suffer a bit from it.
          // On Windows 10/11 experiments show a minimum delay around 300-500us (half a ms) leading to an overall latency around 2ms
+   #ifdef VPX_STEAM_FRAME
+         uOverSleep(logicSleepNs);
+   #else
          uOverSleep(100000);
+   #endif
 #endif
          // The other option would be to use spin wait to achieve sub ms overall latency but this is too CPU intensive:
          // YieldProcessor();

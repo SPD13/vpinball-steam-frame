@@ -141,3 +141,12 @@ void Stop() { }
 }
 
 #endif
+
+uint64_t VPX::ThreadPlacement::LogicLoopSleepNs(const Settings& settings)
+{
+#ifdef VPX_STEAM_FRAME_HEADSET
+   return 1000ull * static_cast<uint64_t>(settings.GetPlayer_LogicLoopSleep());
+#else
+   return 100000ull;
+#endif
+}

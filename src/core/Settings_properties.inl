@@ -165,6 +165,8 @@ PropBool(Player, CompactSceneBuffer, "Compact scene buffer"s, "Store the rendere
 #ifdef VPX_STEAM_FRAME_HEADSET
 // Which cores the threads run on while a table is played, see src/steamframe/ThreadPlacement.h; no menu entry
 PropBool(Player, ThreadPlacement, "Thread placement"s, "Run the render thread, the logic thread and the others on cores of their own while a table is played"s, true);
+// Sleep of the logic loop between two passes, see VPX::ThreadPlacement::LogicLoopSleepNs; no menu entry
+PropInt(Player, LogicLoopSleep, "Logic loop sleep"s, "Microseconds the logic loop sleeps between two passes (input, physics, script sync): longer spends less CPU, shorter polls the input more often"s, 50, 2000, 500);
 #endif
 // What the reflections leave out and their size, see src/steamframe/Reflections.h; off and half by default (Medium performance profile)
 PropEnum(Player, ExtraMirrors, "Extra mirrors"s, "Mirrors other than the playfield's, usually on the walls of a cabinet. Each one draws the whole scene again every frame, which on some tables costs more than anything else. Off leaves them out, and the parts that show them show no reflection. Automatic leaves them out only on a table that cannot hold its full resolution with them"s, int, 1, "On"s, "Off"s, "Automatic"s);

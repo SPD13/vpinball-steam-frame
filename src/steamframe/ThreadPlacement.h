@@ -23,4 +23,10 @@ namespace VPX::ThreadPlacement
 void Start(const Settings& settings); // On the logic thread, when the table is loaded
 void Stop(); // When the table closes: the threads get back the cores they had
 
+// Sleep of the logic loop between two passes, in nanoseconds (Settings Player/LogicLoopSleep in microseconds, build of the Steam Frame, no menu entry). Upstream's loop sleeps
+// 100 us: on the Frame that is about 3,600 passes per second, each one polling the SDL events, syncing the OpenXR actions and firing the script's sync timers, while
+// the physics steps every millisecond. 500 us keeps about 1,300 passes per second, above the physics rate, and spends a third less on the logic thread (Medieval Madness,
+// headless: 40 % of a core -> 28 %, PinMAME 11 % -> 8 %; docs/Performance on the Steam Frame.md, section 8.17). Elsewhere, upstream's 100 us.
+uint64_t LogicLoopSleepNs(const Settings& settings);
+
 }

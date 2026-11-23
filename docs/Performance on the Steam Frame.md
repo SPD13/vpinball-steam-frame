@@ -1308,6 +1308,57 @@ again; `Doc/test-hooks`: `wpt-preload-series.sh`, `preload-report.py`; the frame
 - Left as it is: the upload of a set of large images still takes one frame. Uploading the script's images at load, as the cached ones,
   would remove it, for GPU memory held by images that may never be drawn.
 
+### 8.17 Heat: the logic loop and the spatial audio (2026-11-22)
+
+On 2026-11-20 the Frame reset twice in play (Medieval Madness, then Addams Family), with no kernel panic, no out of memory and a normal
+battery, after its fan control had logged `C3 temperature of 95.x greater than max 95` (sensor `cpu3_bottom_thermal`) 26 times from the
+14th minute of Medieval Madness, the last one 9 s before the first reset. A hard reset leaves no log, so heat is the likely cause, not a
+proven one.
+
+**Worn and headless.** The same table, 34 minutes headless: the CPU peaked at 66 °C. Worn, 14 minutes (2026-11-22): 83 °C after one
+minute, 92–94 °C from the sixth, peaks of 98.1 and 96.5 °C, the GPU at 84–90 °C, the fan at its maximum (11 500 rpm) from the fifth
+minute. Worn, SteamVR uses about 1.2 cores (its tracking service 65 % of a core, `vrserver` 11 %, eye tracking 10 %, compositor 9 %,
+camera drivers about 18 %), on cores 0 to 4, where VPX's own placement (section 8.10) also puts the sound and PinMAME. Cores 2 to 4 then
+stay at their highest clock (3.1 GHz, about 2.1 GHz headless). The core 3 sensor is the hottest most of the time, 1–2 °C above the
+others: no hotspot of its own.
+
+**Layouts do not help.** Headless, alternating 4-minute phases of the current layout with three others (the light threads on cores 0–1,
+everything but the render thread over cores 2–6, PinMAME with the logic thread on 5–6) moved the sensors by ±1 °C. On the small cores the
+sound thread costs three times as much (66–72 % of a core against 22–25 %).
+
+**Where VPX's CPU goes** (Medieval Madness, headless, `perf`, % of one core): logic thread 40 (of its time: the script through its timers 40 %, the
+frame preparation 43 %, SDL event polling 10 %, `xrSyncActions` 8 %, physics 10 %; nested, so they overlap), sound 18.5 (all of it the spatial audio:
+the binaural FFT convolution and the encoding of each source), PinMAME 11, render thread 9. Two causes stand out:
+
+- The logic loop sleeps 100 µs between passes: 3 560 passes per second, each one polling the SDL events, syncing the OpenXR actions and
+  firing the script's sync timers, while the physics steps every millisecond.
+- About 93 spatial sources are processed per audio period, and 97 % of their blocks are silent (loops at volume 0, idle sounds), each
+  one encoded to 9 ambisonic channels all the same.
+
+Measured with temporary switches, one run each (VPX total / logic / sound / PinMAME, % of a core; logic passes per second):
+
+| Variant | VPX | Logic | Sound | PinMAME | Passes/s |
+|---|---|---|---|---|---|
+| As built (two runs) | 79.3 / 80.3 | 40.1 / 40.6 | 18.2 / 18.7 | 11.0 / 10.9 | 3 560 |
+| Logic loop sleep 500 µs | 66.0 | 28.3 | 17.5 | 8.4 | 1 321 |
+| Logic loop sleep 1 ms | 62.6 | 25.1 | 18.3 | 7.6 | 762 |
+| Silent blocks skipped | 75.6 | 40.4 | 13.0 | 12.2 | 3 544 |
+| Binauralizer in low CPU mode | 75.9 | 39.4 | 15.1 | 11.2 | 3 621 |
+| All three (1 ms) | 54.6 | 24.8 | 9.4 | 8.6 | 766 |
+
+With all three the Frame's CPU load falls from 1.42 to 1.17 cores; the script's time per frame halves with the passes (its sync timers).
+At 1 ms the loop polls the input less often than the physics steps (up to a millisecond more of latency), so the build uses 500 µs.
+
+**As built.**
+- `Player.LogicLoopSleep` (µs, 500 in the build of the Steam Frame, no menu entry, `VPX::ThreadPlacement::LogicLoopSleepNs`).
+- Silent blocks skip the encoding (`SpatialAudio.cpp`, generic, an upstream candidate).
+- `PlayerVR.SpatialAudioLowCpu`, *Lighter spatial audio* in the Sound screen of the VR menu, off by default: libspatialaudio's low CPU
+  mode assumes a symmetric head, to be judged by ear. Applied when a table starts.
+
+Tools: `Doc/test-hooks/heat-*` (sensor sampler, layout switcher, worn recorder, report) and `cpu-hooks.py`, `cpu-series.sh`,
+`cpu-report.py`. Not settled: the worn gain and the flipper feel at 500 µs (to check in the headset); a few degrees at most are expected
+from a quarter of a core, against the 1.2 cores of SteamVR worn.
+
 ## 9. Reproduction
 
 From `vpinball/`, with the Frame on the network:
