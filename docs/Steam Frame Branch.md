@@ -43,6 +43,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Performance panel** (a tool to tune the tables, Performance > Device Performance > Performance panel, off by default, saved at once): a panel standing left of the cabinet, facing the player, with the target (2160×2160 per eye at 72 Hz on the Frame), a rating of the table every 30 seconds (green: native resolution 95 % of the time and frames on time; yellow: on time at a lower resolution; red: frames missed, GPU or CPU bound) and the frame rate, resolution, GPU time and use, CPU per thread (logic, render, PinMAME, audio), clocks and temperatures of the last 3 minutes (section 18). The table page of the menu shows the last rating of the table, with its badge, whether the panel was on or not.
 - **Simplified meshes** (Steam Frame > Simplified meshes, on by default in the Frame build, per table or for all): the large 3D parts of heavy tables are drawn with fewer triangles where the difference cannot be seen from the player's eyes, and in full when the player leans in (section 19).
 - **Light-map pruning** (Device Performance > Light maps, Medium by default, Off in the High performance profile, per table or for all): the light maps of baked tables (VLM) leave out their triangles adding too little light to see, live: Off, Low, Medium, High (43, 56, 62 % of the light-map triangles of Medieval Madness). The faint glow of the lights on dark walls ends along triangle edges, mostly from High on (section 25).
+- **Culling by tiles** (Device Performance > Simplified meshes > Culling by tiles, on by default, live): the large parts (3D primitives of at least 4,000 triangles, not animated) are cut into tiles of 200 VPU when the table loads, and only the tiles in the view are drawn: leaning in over Medieval Madness' rules card 8.79 → 6.57 ms on the Frame, the same image (section 37).
 - **Preload script images** (Device Performance > Textures, on by default, per table or for all, next table started): the images a table's script names (such as the "GI off" versions of the parts' images) are prepared when the table starts, like those of its parts, so the first time the script shows them on a table's first play no longer stops the game: World Poker Tour 1.9 s → one frame of 0.1 s when its GI first goes off. Costs a longer first start and memory for images a script names but never shows (section 28).
 - **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
 - **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic, and *Reflection size*, Full or Half (Half by default in the Frame build, since 2026-11-02). Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
@@ -932,6 +933,32 @@ Files: `src/steamframe/TableLibrary.h/.cpp`, `src/steamframe/Launcher.cpp`, `lib
 `src/core/Settings_properties.inl`, `platforms/linux-aarch64/external.sh`, `platforms/linux-x64/external.sh`,
 `steamframe/patches/libdof/` (new), `tests/test-table-library.cpp`.
 
+## 37. Culling by tiles (2026-11-23)
+
+The full account, with the Frame measurements: `docs/steam-frame/Culling by Tiles.md`.
+
+- **Why.** Leaning in close to the playfield of a baked table (Medieval Madness: the rules card, the middle) made the GPU time jump: its
+  large parts span the table, and culling and the simplified levels work per part, so they were drawn whole and at their full mesh
+  while the eyes saw a corner (16 % of the triangles drawn were in the view, 10 cm above the middle of the playfield).
+- **While the table loads.** `MeshSimplifier::CreateIndexBuffer` builds the index buffer of any primitive of at least 4,000 triangles
+  without animation, and `MeshTiles::Build` groups the triangles of each range (the mesh and each simplified level) by the cell of a
+  200 VPU grid laid on the table (the cell of the triangle's centre), with a stable counting sort, inside the shares of light-map
+  pruning (`LightMapPruning::GetCounts`), so `Trim` still keeps a prefix. Only the GPU copy is reordered: the physics and the CPU mesh
+  keep their order. Each range keeps its tiles' boxes and index runs.
+- **Each frame.** After `SelectRange` and `Trim`, `Primitive::Render` asks `MeshTiles::SelectRuns` for the runs to draw: the whole range
+  when the part's box is inside one eye's view, else the runs of the tiles whose box may be seen (`ModelViewProj::IsBoxVisible`), the
+  gaps under 1,024 triangles merged, at most 8 runs; none seen, the part is not drawn. A part using refraction draws one span (its probe
+  dependency attaches to the next draw only). One level for the whole part: mixing levels between tiles would open cracks.
+- **Setting.** `Player.MeshTiles` (on by default), switched live in Device Performance > Simplified meshes, with a status line (tiled
+  parts, tiles, share of their triangles left out over the last second); the log gives the count at the first frame.
+- **Measured on the Frame** (Medieval Madness, 2160 x 2160): rules card 8.79 → 6.57 ms (1,081 → 556 k triangles), the lockbar unchanged,
+  the middle of the playfield 15.29 → 14.16 ms (18 % of the triangles left out: the eyes still see the back half of the table, and most
+  of that view's extra cost is per pixel). On the Mac, captures with it on and off are identical.
+
+Files: `src/steamframe/MeshTiles.h/.cpp` (new), `src/steamframe/MeshSimplifier.h/.cpp`, `src/steamframe/LightMapPruning.h/.cpp`,
+`src/parts/primitive.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`,
+`docs/steam-frame/Culling by Tiles.md`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -941,6 +968,7 @@ Files: `src/steamframe/TableLibrary.h/.cpp`, `src/steamframe/Launcher.cpp`, `lib
 - Standalone desktop builds have the compact scene buffer (section 21) too, on by default (Medium performance profile, `Player.CompactSceneBuffer`); it applies to desktop views as well.
 - Every build with the bgfx renderer: a screen space transparency probe (refraction) copies only the area of interest of the parts using it, with a margin, instead of the whole render target (`RenderProbe::LimitCopyToAreaOfInterest`; `docs/Performance on the Steam Frame.md`, section 8.15; not guarded, a candidate for upstream): the same image, 2.8 ms less GPU per frame on Medieval Madness on the Frame.
 - Standalone desktop builds have light-map pruning (section 25), Medium by default (Medium performance profile): baked tables take longer to load (the sort), and their light maps leave out their faintest triangles. High profile or Off: nothing sorted, every light map drawn in full.
+- Standalone desktop builds have the culling by tiles (section 37), on by default: large parts take a little longer to load (the sort) and draw only their tiles in the view; nothing changes on screen.
 - Standalone desktop builds have the Reflections settings (section 22), with the defaults of the Medium performance profile: extra mirrors and room reflection Off, reflection size Half (High: On, On, Full). Automatic only decides in VR.
 - The dynamic resolution plumbing (render scale on passes and targets) is inert outside VR: the scale stays 1 and every view rect and texture coordinate is what it was.
 - Every build with the bgfx renderer gets the specular anti-aliasing of the material shader (section 12), except through Direct3D 11/12 until the shader headers are regenerated on Windows.
@@ -1017,6 +1045,8 @@ src/renderer/VRControllerModels.cpp
 third-party/include/cgltf/cgltf.h
 src/steamframe/MeshSimplifier.h
 src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19; grouped parts, section 31)
+src/steamframe/MeshTiles.h
+src/steamframe/MeshTiles.cpp            large parts drawn by tiles, only those in the view (section 37)
 src/steamframe/MeshLevelCache.h
 src/steamframe/MeshLevelCache.cpp       simplified levels kept on disk with the texture cache (section 31)
 src/steamframe/FlasherOutline.h

@@ -1,7 +1,7 @@
 # Culling by tiles: large parts drawn only where the view sees them
 
-*2026-11-23. Technical notes on the branch `mesh-tiles` (from fork `master` 09c703db8). Built for the Mac and the Frame; checked on the Mac
-only, as the Frame was not available: its measurements and the headset check are still to do (section 7). The study that led to it:
+*2026-11-23. Technical notes on the branch `mesh-tiles` (from fork `master` 09c703db8, merged into `master` the same day). Built for the Mac
+and the Frame, checked on the Mac (section 6), measured on the Frame and tried in the headset by the owner (section 7). The study that led to it:
 `docs/Performance on the Steam Frame.md`, and the test tools of the close-up study in the documentation repository
 (`test-hooks/lean-*`, `cull-hooks.py`). Paths are relative to the `vpinball` clone.*
 
@@ -20,9 +20,10 @@ only, as the Frame was not available: its measurements and the headset check are
   settings, the menu and the build list.
 - **Setting.** `Player.MeshTiles` (on by default), switched live in Device Performance › Simplified meshes, *Culling by tiles*, with a
   status line: the tiled parts, their tiles, and the share of their triangles left out over the last second.
-- **Expected effect (to measure).** On Medieval Madness, about 600 to 700 k triangles fewer per frame up close; at the 3.8 µs per
-  1,000 triangles measured in the close-up study, 2.3 to 2.6 ms of GPU time per frame. Nothing changes at the lockbar, where the
-  parts are in the view.
+- **Measured on the Frame** (Medieval Madness, 2160 x 2160, section 7). Leaning in over the rules card: 8.79 to 6.57 ms of GPU time
+  per frame, half the triangles left out, the same time as at the lockbar. Over the middle of the playfield: about 1 ms, 18 % of the
+  triangles left out, as the eyes still see the back half of the table; most of what leaning in costs there is per pixel, which
+  culling cannot remove, and the owner still felt the drop in the headset. Nothing changes at the lockbar.
 
 ## 2. The problem
 
@@ -169,19 +170,36 @@ Same image to the bit, as expected from a culling that only leaves out triangles
 
 Not checked on the Mac: the GPU time (the Mac's GPU says nothing of the Frame's), the stereo views, the CPU cost of the tests.
 
-## 7. To do on the Frame
+## 7. Measured on the Frame (2026-11-23)
 
-1. **Headless series** (the close-up study's tools: `perf-hooks.py`, `lean-hooks.py` and, for the counts, `cull-hooks.py` applied to a
-   worktree of the branch; `lean-series.sh` with `INI_SET="Player.MeshTiles=0"` for the reference): lockbar, card and middle static at
-   2160 x 2160 without dynamic resolution, and the moving run with it. What to look for: the GPU time up close (expected -2.3 to
-   -2.6 ms), no change at the lockbar (the reordered buffer could cost the vertex cache a little), the draws per frame (at most 8 per
-   tiled part), the missed frames of the moving run, and the CPU time of the logic thread (about 1,100 box tests per frame on Medieval
-   Madness when nothing is fully in view).
-2. **In the headset**: lean in on the rules card and the inserts with the setting on and off (menu), look for missing pieces at the
-   edges of the view while turning the head quickly, and play a game (light maps switching, reflections).
-3. Then, if it holds: merge into `master`, the performance document, the README's list, and the upstream candidates list.
+Headless runs (the close-up study's tools: `perf-hooks.py`, `lean-hooks.py` and `cull-hooks.py` applied to a worktree of the branch,
+`lean-series.sh` with `TAG=-off INI_SET="Player.MeshTiles=0"`, then `-on`), Medieval Madness, GPU at its top clock (903 MHz) in every
+run. Static views at 2160 x 2160 without dynamic resolution, 120 s each, the first 30 s left out:
 
-Built for the Frame from the branch (no test hooks): to deploy to the dev slot for the headset check.
+| View | Off | On | Triangles drawn (off → on) |
+|---|---|---|---|
+| Lockbar | 6.82 ms | 6.89 ms | 580 k → 567 k |
+| 10 cm above the rules card | 8.79 ms | **6.57 ms** | 1,081 k → 556 k |
+| 10 cm above the middle of the playfield | 15.29 ms | 14.16 ms | 1,153 k → 948 k |
+
+Moving runs with the owner's settings (dynamic resolution on), the eyes going from the lockbar in and out every 20 s:
+
+| Leaning in to | Close, off | Close, on |
+|---|---|---|
+| the rules card | 8.95 ms, resolution 100 % | **6.71 ms**, 100 % (the lockbar: 6.77 ms) |
+| the middle of the playfield | 11.96 ms, resolution 91 % on average, 1.3 % of the frames missed | 11.78 ms, 97 %, 1.2 % missed |
+
+- **The rules card** (and the sides in general): most of the table is out of the view and the tiles leave half the triangles out.
+  Leaning in there now costs what the lockbar costs.
+- **The middle of the playfield**: the eyes, 10 cm above it and looking at it from the player's side, still see the back half of the
+  table; the tiles leave out only 18 % of the triangles, about 1 ms. Static runs over the middle vary by about a millisecond from one
+  run to the next (the attract mode's lights differ: the bloom pass alone went from 0.40 to 1.24 ms). Most of the extra cost of that
+  view is per pixel: rendered at 1512 x 1512 (half the pixels) instead of 2160 x 2160, its two scene passes went from 7.1 to 4.6 ms
+  in the close-up study, which puts about 4.9 ms on the pixels and 2.2 ms on the rest. Up close, the playfield and its light maps, added
+  one over the other, fill the whole view, where at the lockbar the cabinet and the room take part of it.
+- **In the headset** (the owner, same day): leaning in close still drops the performance. Next: what
+  the pixels cost there, light map by light map (`Doc/test-hooks/diag-hooks.py`), `docs/Performance on the Steam Frame.md`.
+- The log line at the first frame: "Culling by tiles: 56 parts of at least 4000 triangles in 1083 tiles of 200 VPU".
 
 ## 8. Limits and what could come next
 
