@@ -73,12 +73,21 @@ private:
 bool Propose(Player* player, uint16_t deviceId, const std::function<void()>& onClosed)
 {
    VPX::InGameUI::InGameUI& ui = player->m_liveUI->m_inGameUI;
-   if (ui.IsOpened())
+   const bool overMenu = ui.IsOpened();
+   if (overMenu && !CanOpenOverMenu(player))
       return false;
    const string name = player->m_pininput.GetDeviceName(deviceId);
    ui.AddPage("popup/pinone_layout"s, [deviceId, name, onClosed]() { return std::make_unique<PinOneLayoutPage>(deviceId, name, onClosed); });
-   ui.Open("popup/pinone_layout"s);
+   if (overMenu)
+      ui.Navigate("popup/pinone_layout"s); // Answered, NavigateBack returns to the picker
+   else
+      ui.Open("popup/pinone_layout"s);
    return true;
+}
+
+bool CanOpenOverMenu(Player* player)
+{
+   return player->m_isLobby && player->m_liveUI->m_inGameUI.IsOpened("tables/picker"s);
 }
 
 }

@@ -545,7 +545,12 @@ void InputManager::ProcessInput()
             m_hasPendingLayoutApply = true;
       }
    }
+#if defined(VPX_STEAM_FRAME)
+   // Steam Frame Edition: the lobby opens on the table picker, over which a PinOne's pop-up opens (upstream's pop-up still waits for the menu to close)
+   if (m_hasPendingLayoutApply && m_player->m_liveUI && (!m_player->m_liveUI->IsOpened() || VPX::PinOneLayoutPopup::CanOpenOverMenu(m_player)))
+#else
    if (m_hasPendingLayoutApply && m_player->m_liveUI && !m_player->m_liveUI->IsOpened())
+#endif
    {
       for (auto& device : m_inputDevices)
       {
@@ -571,6 +576,8 @@ void InputManager::ProcessInput()
                   m_hasPendingLayoutApply = false;
                break;
             }
+            if (m_player->m_liveUI->IsOpened()) // Over the lobby's picker: only a PinOne's pop-up, the others wait for the menu to close
+               continue;
 #endif
             const auto noAutoLayoutId = Settings::GetRegistry().GetPropertyId("Input"s, "Device." + device.m_settingsId + ".NoAutoLayout").value();
             if (m_player->m_liveUI->m_inGameUI.ProposeInputLayout(device.m_name,
