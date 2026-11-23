@@ -23,6 +23,12 @@
 // 0xFF00 vendor collection, which a real Xbox pad has not; matched to the joystick by serial only, the Bluetooth address). Found when
 // the joystick connects (OnJoystickAdded); the DOF plugin's switch (Plugins > DOF > DOF Enable) is read at each vibration, so with DOF off the PinOne gets the
 // vibrations again right away.
+//
+// The same option keeps the table's DOF on the controller that started the game (owner's request, 2026-11-22): a game started from the
+// VR controllers or another gamepad, while a PinOne with a DOF channel is connected, pauses the DOF outputs ("DOF"/"SetOutputsPaused",
+// plugins/dof/DOFPlugin.cpp: lit outputs turned off, events kept and replayed on resume); a game then started from the PinOne resumes
+// them. Before Start is pressed, after a keyboard Start, or with the option off, DOF runs as before. libdof has no per-device switch, so
+// the pause holds every DOF device, not only the PinOne.
 
 #include <cstdint>
 #include <string>
@@ -39,6 +45,9 @@ void OnActionPressed(const std::string& actionSettingId, uint16_t deviceId, cons
 // Called at the end of SDLInputHandler::OnJoystickAdded, after PinOneDevices::OnJoystickAdded: records the controllers the table
 // drives through DOF
 void OnJoystickAdded(uint16_t deviceId, const std::string& name);
+
+// Called when Player.RumbleStartController is changed in the menu: pauses or resumes the DOF outputs
+void OnStartControllerOptionChanged();
 
 // Whether a vibration is sent to the given device
 bool ShouldVibrate(uint16_t deviceId);

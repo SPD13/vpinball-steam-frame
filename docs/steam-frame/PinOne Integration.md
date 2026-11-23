@@ -254,6 +254,22 @@ if (s_dofDevices.contains(deviceId) && DofEnabled() && s_dofTableHasConfig)
 
 Checked on the Frame (2026-11-18): Medieval Madness (in the database) gives DOF only, Apollo (not in it) gives the vibrations.
 
+### 7.3 DOF follows the controller that started the game (2026-11-22, Frame test pending)
+
+The rule of 7.1 held the vibrations back, not the table's DOF: a game started from the VR controllers still fired the PinOne's motors
+through DOF. Owner's request: played from the VR controllers, the PinOne gets no DOF; started from the PinOne, it does. Same option
+(`Player.RumbleStartController`), no new one.
+
+- `Vibrations::DofShouldPause`: the option is on, a PinOne with a DOF channel is connected, and the Start device is a VR controller or
+  another joystick. Not before Start, not after a keyboard Start (a cabinet's key encoder, a PinOne sending keys): DOF runs as before.
+  Re-checked when Start is pressed, a joystick is added, the game starts (Start may come while the table loads) and the option changes.
+- A new generic plugin message, an upstream candidate: `DOF`/`SetOutputsPaused` (data: a `bool*`). The DOF plugin queues it with the
+  events: on pause it sends 0 for every (type, index) the game left non-zero, keeps the later events in its state map without sending
+  them, and on resume sends the current non-zero state back. Each game starts unpaused (the plugin resets it at the game end).
+- libdof has no per-device switch: the pause holds every DOF device, not only the PinOne (none other is expected on the Frame).
+- Logged: `Vibrations: the game is played without the PinOne driven by DOF, its DOF outputs pause` / `... DOF outputs resume`, and the
+  plugin's `Outputs paused by the host` / `Outputs resumed by the host`.
+
 ## 8. Telling a PinOne from an Xbox pad
 
 In Xbox mode the PinOne copies a real Xbox Series X pad on purpose: same name, vendor and product ids, version `0x0509`, report map.
@@ -552,7 +568,7 @@ channel.
 | `src/ui/live/ingameui/InputDevicePage.cpp` | The controller page |
 | `plugins/dof/DOFPlugin.cpp` | Table entry lookup and its messages |
 | `src/core/player.cpp` | `Vibrations::OnGameStarted`/`OnGameEnding` |
-| `src/core/Settings_properties.inl` | `Plugin.DOF.Enable` on by default, `Player.RumbleStartController` |
+| `src/core/Settings_properties.inl` | `Plugin.DOF.Enable` on by default, `Player.RumbleStartController` (also pauses the PinOne's DOF, 7.3) |
 | `src/steamframe/TableLibrary.cpp`, `Backup.cpp` | DOF configuration upload, backups |
 | `src/assets/dof/pinone-mini/` | Shipped DOF configuration |
 | `steamframe/patches/libdof/`, `platforms/linux-*/external.sh` | libdof patch |

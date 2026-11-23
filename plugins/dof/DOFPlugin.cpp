@@ -25,6 +25,7 @@
 #include <cctype>
 #include <filesystem>
 #include <format>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -72,6 +73,12 @@ static bool tableHasConfig = false;
 static unsigned int getTableConfigId = 0;
 static unsigned int onTableConfigChangedId = 0;
 static std::string basePath;
+
+// "DOF"/"SetOutputsPaused" (message data: a bool*), for hosts that send the feedback only to the controller the game is played with: while
+// paused, the outputs lit by the game are turned off and the game's events are kept, not sent; on resume the outputs are set back to the
+// game's current state. Each game starts unpaused.
+static bool outputsPaused = false;
+static unsigned int setOutputsPausedId = 0;
 
 MSGPI_FOLDER_VAL_SETTING(dofPathProp, "DOFPath", "DOF Path", "Folder that contains the directoutputconfig folder (empty = VPX preference folder)", true, "", 1024);
 
@@ -217,9 +224,10 @@ static std::string ResolveRomName(const std::string_view& gameNs, const std::str
 class DOFEventConsumer
 {
 public:
-   DOFEventConsumer(const string& tablePath, const string& gameId, const ControllerDef& controller)
+   DOFEventConsumer(const string& tablePath, const string& gameId, const ControllerDef& controller, const bool paused)
       : m_tablePath(tablePath)
       , m_gameId(gameId)
+      , m_paused(paused)
       , b2sPluginEventStream(
            std::make_unique<B2SPluginEventStream>(msgApi, endpointId, controller, [this](char type, int index, int value) { PostEvent({ static_cast<uint8_t>(type), index, value }); }))
    {
@@ -259,6 +267,9 @@ public:
       m_cv.notify_one();
    }
 
+   // Queued with the events, so the outputs follow them in order
+   void SetPaused(const bool paused) { PostEvent({ paused ? PauseEvent : ResumeEvent, 0, 0 }); }
+
 private:
    void Run()
    {
@@ -278,15 +289,40 @@ private:
             B2SPluginEvent ev = m_queue.front();
             m_queue.pop();
             lock.unlock();
-            pDOF->DataReceive(ev.type, ev.index, ev.value);
+            ProcessEvent(ev);
             lock.lock();
          }
       }
       pDOF->Finish();
    }
 
+   static constexpr uint8_t PauseEvent = 0;
+   static constexpr uint8_t ResumeEvent = 1;
+
+   void ProcessEvent(const B2SPluginEvent& ev)
+   {
+      if (ev.type == PauseEvent || ev.type == ResumeEvent)
+      {
+         const bool paused = ev.type == PauseEvent;
+         if (paused == m_paused)
+            return;
+         m_paused = paused;
+         LOGI(paused ? "Outputs paused by the host"s : "Outputs resumed by the host"s);
+         for (const auto& [key, value] : m_state)
+            if (value != 0)
+               pDOF->DataReceive(static_cast<char>(key >> 32), static_cast<int32_t>(key & 0xFFFFFFFFu), paused ? 0 : value);
+         return;
+      }
+      m_state[(static_cast<uint64_t>(ev.type) << 32) | static_cast<uint32_t>(ev.index)] = ev.value; // The game's state, to restore on resume
+      if (!m_paused)
+         pDOF->DataReceive(ev.type, ev.index, ev.value);
+   }
+
    const string m_tablePath;
    const string m_gameId;
+
+   bool m_paused; // Event thread only
+   std::unordered_map<uint64_t, int32_t> m_state; // Last value of each (type, index), event thread only
 
    std::queue<B2SPluginEvent> m_queue;
    std::mutex m_mutex;
@@ -326,7 +362,7 @@ static void SetupDOF()
    SetTableHasConfig(RomListHasConfig(romList, romName));
 
    LOGI("New game started: gameId="s + controller.gameId + ", romName=" + romName);
-   dofThread = std::make_unique<DOFEventConsumer>(path, romName, controller);
+   dofThread = std::make_unique<DOFEventConsumer>(path, romName, controller, outputsPaused);
 }
 
 }
@@ -345,6 +381,17 @@ static void OnGameEnd(const unsigned int, void*, void*)
    gameEnded = true;
    dofThread = nullptr;
    SetTableHasConfig(false);
+   outputsPaused = false;
+}
+
+static void OnSetOutputsPaused(const unsigned int, void*, void* msgData)
+{
+   const bool paused = *static_cast<const bool*>(msgData);
+   if (paused == outputsPaused)
+      return;
+   outputsPaused = paused;
+   if (dofThread != nullptr)
+      dofThread->SetPaused(paused);
 }
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
@@ -422,6 +469,7 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
    msgApi->SubscribeMsg(endpointId, onGameEndId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END), OnGameEnd, nullptr);
    msgApi->SubscribeMsg(endpointId, getTableConfigId = msgApi->GetMsgID("DOF", "GetTableConfig"), OnGetTableConfig, nullptr);
    onTableConfigChangedId = msgApi->GetMsgID("DOF", "OnTableConfigChanged");
+   msgApi->SubscribeMsg(endpointId, setOutputsPausedId = msgApi->GetMsgID("DOF", "SetOutputsPaused"), OnSetOutputsPaused, nullptr);
 }
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
@@ -433,7 +481,10 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
    msgApi->UnsubscribeMsg(getTableConfigId, OnGetTableConfig, nullptr);
    msgApi->ReleaseMsgID(getTableConfigId);
    msgApi->ReleaseMsgID(onTableConfigChangedId);
+   msgApi->UnsubscribeMsg(setOutputsPausedId, OnSetOutputsPaused, nullptr);
+   msgApi->ReleaseMsgID(setOutputsPausedId);
    tableHasConfig = false;
+   outputsPaused = false;
    gameEnded = false;
    controllers->Unsubscribe();
    controllers = nullptr;

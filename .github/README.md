@@ -401,7 +401,7 @@ The PinOne pinball controller (Cleveland Software Design) works in the game by U
 
 **Set default mapping**, on the same page, applies the game's generic gamepad layout instead (flippers on the triggers, magna-saves on the shoulder buttons), which does not suit the PinOne. Other controllers, such as an Xbox controller, get that default layout proposed in a pop-up when they connect without it, in the lobby only, never in a table; **Disable Automatic Layout** in their page stops it. Mappings are the same for every table.
 
-With the PinOne and the VR controllers both connected, only the controller you press Start on vibrates (in Xbox mode, the PinOne turns the vibrations into its solenoid outputs 1 and 2). To make every controller vibrate, turn off **Send vibrations to the controller used to start the game** in **Controls**.
+With the PinOne and the VR controllers both connected, only the controller you press Start on vibrates (in Xbox mode, the PinOne turns the vibrations into its solenoid outputs 1 and 2). The table's DOF follows the same rule: start the game from the VR controllers and the PinOne's DOF stays quiet; start it from the PinOne and its DOF works. To make every controller vibrate, and keep DOF on whatever controller starts the game, turn off **Send vibrations to the controller used to start the game** in **Controls**.
 
 ### The PinOne mapping
 

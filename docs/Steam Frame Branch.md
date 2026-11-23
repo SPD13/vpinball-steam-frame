@@ -863,6 +863,13 @@ Stopping a vibration is always sent to all. Until Start is pressed on the table 
 vibrate as before; Start pressed on the keyboard leaves none vibrating. The record is cleared when a table starts (`InputManager` is made
 again for each table). Logged: `Vibrations: the game was started from '<device>'`.
 
+The same option keeps the table's DOF on the controller that started the game (2026-11-22, Frame test pending): with a PinOne that has a
+DOF channel connected (section 36), a game started from the VR controllers or another gamepad pauses the DOF outputs, and a game then
+started from the PinOne resumes them. New generic DOF plugin message `DOF`/`SetOutputsPaused` (`bool*`): lit outputs turned off, events
+kept and replayed on resume, each game starts unpaused. Before Start and after a keyboard Start, DOF runs as before. libdof has no
+per-device switch, so the pause holds every DOF device. Details: `docs/steam-frame/PinOne Integration.md` section 7.3. Files:
+`src/steamframe/Vibrations.h/.cpp`, `plugins/dof/DOFPlugin.cpp`, `src/ui/live/ingameui/InputSettingsPage.cpp`.
+
 Files: `src/steamframe/Vibrations.h/.cpp` (new), `src/input/InputAction.cpp`, `src/input/InputManager.cpp`, `src/input/SDLInputHandler.h`,
 `src/input/XRInputHandler.h`, `src/ui/live/ingameui/InputSettingsPage.cpp`, `src/core/Settings_properties.inl`, `steamframe/steamframe.cmake`.
 

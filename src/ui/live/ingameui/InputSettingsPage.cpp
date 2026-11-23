@@ -5,6 +5,9 @@
 
 #include "ui/live/LiveUI.h"
 #include "ui/live/ingameui/InputDevicePage.h"
+#if defined(VPX_STEAM_FRAME)
+#include "steamframe/Vibrations.h"
+#endif
 
 
 namespace VPX::InGameUI
@@ -48,7 +51,11 @@ void InputSettingsPage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayer_RumbleStartController, //
       []() { return g_settingsService.GetAppSettings().GetPlayer_RumbleStartController(); }, //
-      [](bool v) { g_settingsService.GetAppSettings().SetPlayer_RumbleStartController(v, false); }));
+      [](bool v)
+      {
+         g_settingsService.GetAppSettings().SetPlayer_RumbleStartController(v, false);
+         VPX::Vibrations::OnStartControllerOptionChanged(); // Pauses or resumes the PinOne's DOF
+      }));
 #endif
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayer_RumbleFlipperContact, 1.f, "%3.2f"s, //

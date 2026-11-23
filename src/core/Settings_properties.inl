@@ -234,7 +234,7 @@ PropFloat(Player, RumblePlunger, "Plunger Rumble"s, "Strength of the rumble play
 PropFloat(Player, RumbleFlipperButton, "Flipper Button Rumble"s, "Strength of the pulse played when a flipper fires on its button, whether or not it hits a ball (0 disables it). Ball hits on the flipper are the Flipper Contact Rumble."s, 0.f, 3.f, 0.5f);
 PropFloat(Player, RumbleNudge, "Nudge Rumble"s, "Strength of the rumble played when the cabinet is nudged, scaled by the cabinet acceleration (0 disables it)"s, 0.f, 3.f, 1.f);
 #ifdef VPX_STEAM_FRAME // Vibrations to the controller that started the game only, see src/steamframe/Vibrations.h
-PropBool(Player, RumbleStartController, "Send vibrations to the controller used to start the game"s, "Only the controller whose button started the game (Start) vibrates. Until Start is pressed on the table, all controllers vibrate"s, true);
+PropBool(Player, RumbleStartController, "Send vibrations to the controller used to start the game"s, "Only the controller whose button started the game (Start) vibrates, and a PinOne's DOF feedback pauses when the game is started from another controller. Until Start is pressed on the table, all controllers vibrate"s, true);
 // Pop-up in the lobby when a PinOne without the PinOne Mini mapping connects, see src/steamframe/PinOneLayoutPopup.h
 PropBool(Player, PinOneLayoutPopup, "Propose the PinOne Mini mapping"s, "When a PinOne connects without the PinOne Mini mapping, the lobby proposes it, with the DOF configuration, in a pop-up"s, true);
 #endif
