@@ -1366,11 +1366,11 @@ At 1 ms the loop polls the input less often than the physics steps (up to a mill
   the 10 ms fade (`kPositionFadeMs`). The mixer still sums the 9 channels of every source (miniaudio's input bus), and the binauralizer's
   cost per period is unchanged. Generic: an upstream candidate.
 - **Lighter spatial audio.** `PlayerVR.SpatialAudioLowCpu` (*Lighter spatial audio*, Sound screen of the VR menu, section *Spatial audio
-  in VR*, off by default). `Player` passes it to `SpatialAudioMixer::SetLowCpuBinaural` before the table's mixers are built, and the
+  in VR*, on by default since 2026-11-22, see below). `Player` passes it to `SpatialAudioMixer::SetLowCpuBinaural` before the table's mixers are built, and the
   mixer gives it to `AmbisonicBinauralizer::Configure` as `lowCpuMode` instead of upstream's `false` (symmetric head: half the HRTF
   convolutions). The log says which one each mixer uses (`Spatial audio: binaural full` or `low CPU (symmetric head)`). The item is on
   the VR settings page (`VRSettingsPage`, which the Sound screen of the new menu shows), and a change rebuilds the audio player at once,
-  as the two other spatial audio switches do, so the two modes can be compared by ear in play; to be judged before it could be the default.
+  as the two other spatial audio switches do, so the two modes can be compared by ear in play (92d81859c).
 
 **Worn, as built** (2026-11-22, Medieval Madness, the 13 minutes after the table loaded, minutes 2 to 13 averaged; `heat-watch.sh`
 recording the VPX started from Steam; lighter spatial audio off in both):
@@ -1397,8 +1397,21 @@ near their highest clock, held there by SteamVR. Not the same conditions: the fi
 on USB power at 99 % (no current drawn from the battery), and the second started from a warmer device. The owner found the build
 working in play (Medieval Madness, Addams Family). The fan reached its maximum (about 11 300 rpm) after five minutes in both.
 
+**Lighter spatial audio on by default** (2026-11-22). The owner tried the switch in play and found lighter spatial audio working, so
+the build of the Steam Frame turns it on by default
+(`PlayerVR.SpatialAudioLowCpu` true; the mixer's own default follows it until `Player` sets it). What it changes: libspatialaudio's
+binauralizer convolves each of the 9 ambisonic channels with an HRTF filter per ear (18 FFT convolutions per period); in low CPU mode
+it assumes the head is symmetric, so each channel's left and right filters are the same up to the sign of the channels that change
+sign in a left-right mirror (channels 1, 4 and 5 at order 2), and it convolves each channel once, then adds it to one ear and adds or subtracts it to the
+other (9 convolutions), left and right from the same results. It runs once per period on the mixed sound field, not per source, so
+its saving does not depend on how many sounds play: headless it took 3.4 points of a core off VPX (the sound thread 18.5 → 15.1 %).
+A player who hears a difference can turn it off in the same screen. The settings file keeps a value once saved, even one equal to
+the default, so a player who saved it off keeps it off.
+Desktop builds are not affected (the setting and the switch exist only in the Steam Frame builds, which pass `false` as upstream does
+when it is off).
+
 Tools: `Doc/test-hooks/heat-*` (sensor sampler, layout switcher, worn recorder, report) and `cpu-hooks.py`, `cpu-series.sh`,
-`cpu-report.py`. Not settled: whether lighter spatial audio sounds the same; the 1.2 cores of SteamVR worn, which VPX cannot change.
+`cpu-report.py`. Not settled: the 1.2 cores of SteamVR worn, which VPX cannot change.
 
 ## 9. Reproduction
 

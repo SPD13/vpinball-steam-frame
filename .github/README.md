@@ -302,6 +302,10 @@ and the reference tables run at 72 fps, at or close to the panel's full resoluti
 - **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
 - **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
 - **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).
+- **Less CPU, less heat** ([details](/docs/Performance%20on%20the%20Steam%20Frame.md#817-heat-the-logic-loop-and-the-spatial-audio-2026-11-22)): in long sessions the Frame's CPU reached 95 °C (two resets in play, likely from the heat). Worn on Medieval Madness, the first two changes took a third of VPX's CPU away (102 → 69 % of a core) and about 5 °C off the hottest CPU sensor:
+  - **Calmer logic loop**: the game loop waits 500 µs instead of 100 µs between its idle passes (1 300 passes a second instead of 3 560, still above the 1 000 physics steps): the logic thread 57 → 39 % of a core worn, at most half a millisecond more before an input is read.
+  - **Silent sounds skipped**: about 97 % of the 3D sound blocks are silent (loops at volume 0, idle sounds) and are no longer encoded: the sound thread 24 → 9 % of a core worn, the same sound.
+  - **Lighter spatial audio** (Sound screen, on by default): the conversion to the headphones assumes a symmetric head and needs half the filtering: 3.4 points of a core less on top of the others (measured unworn).
 - **Performance panel** (Display & Performance screen): a panel beside the cabinet that rates each table every 30 seconds, with graphs of the frame rate, resolution, GPU and CPU.
 
 ## Backup and restore

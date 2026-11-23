@@ -325,9 +325,9 @@ PropBool(PlayerVR, SpatialAudioBackglass, "Backglass Spatial Audio"s,
 PropBool(PlayerVR, SpatialAudioPlayfield, "Playfield Spatial Audio"s,
    "Render playfield sounds as spatially positioned sources, binauralized for the VR headset, instead of the legacy static pan/fade channel mixing"s, true);
 #ifdef VPX_STEAM_FRAME
-// libspatialaudio's low CPU binaural mode, see SpatialAudioMixer::SetLowCpuBinaural; off by default, in the Sound screen of the VR menu
+// libspatialaudio's low CPU binaural mode, see SpatialAudioMixer::SetLowCpuBinaural; on by default (tested by the owner in play), in the Sound screen of the VR menu
 PropBool(PlayerVR, SpatialAudioLowCpu, "Lighter spatial audio"s,
-   "Assume a symmetric head for the binaural rendering: about half the audio thread's CPU for the headphone conversion, the sound may differ slightly"s, false);
+   "Assume a symmetric head for the binaural rendering: about half the audio thread's CPU for the headphone conversion, the sound may differ slightly"s, true);
 #endif
 PropFloatDyn(PlayerVR, ControllerCabYOffset, "Cabinet Y Offset"s, "Y offset to apply when using controller view centering"s, -150.f, 50.f, 0.f);
 PropFloatDyn(PlayerVR, ControllerCabZOffset, "Cabinet Z Offset"s, "Z offset to apply when using controller view centering"s, -50.f, 50.f, 0.f);

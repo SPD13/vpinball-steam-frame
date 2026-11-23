@@ -72,7 +72,7 @@ static constexpr float kPositionFadeMs = 10.f;
 // for the up-to-3x close distance attenuation boost
 static constexpr float kBinauralGain = 2.f;
 #ifdef VPX_STEAM_FRAME
-static std::atomic<bool> s_lowCpuBinaural { false };
+static std::atomic<bool> s_lowCpuBinaural { true }; // PlayerVR.SpatialAudioLowCpu default, set by Player at start
 void SpatialAudioMixer::SetLowCpuBinaural(bool lowCpu) { s_lowCpuBinaural = lowCpu; }
 bool SpatialAudioMixer::IsLowCpuBinaural() { return s_lowCpuBinaural; }
 #endif
