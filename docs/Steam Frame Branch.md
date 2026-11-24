@@ -1004,6 +1004,24 @@ Files: `src/steamframe/MeshTiles.h/.cpp`, `src/steamframe/MeshSimplifier.h/.cpp`
 
 Files: `src/renderer/VRDevice.cpp`, `docs/Performance on the Steam Frame.md`.
 
+## 41. Dynamic resolution follows the frames the compositor shows late (2026-11-24)
+
+- **Why.** Without the stall band, the image still stuttered turning the head up close. SteamVR shows the previous frame again when a
+  frame is late for its compositor, and OpenXR does not tell: the predicted display time moves by one period, so VPX counted no frame
+  missed. With the headset worn, the Frame's compositor needs about 1.85 ms of GPU and starts about 2.6 ms earlier than unworn, so frames
+  are late from about 10 ms of GPU time at 72 Hz, under the 85 % target (11.8 ms): 20 to 50 % of the frames close over Medieval Madness.
+- **What.** `VPX::CompositorTiming` (`src/steamframe/CompositorTiming.h/.cpp`) reads SteamVR's frame timing (`IVRCompositor::GetFrameTimings`
+  through `libopenvr_api.so`, opened at run time, as a background application); `VRDevice::UpdateLateFramesCut` lowers the target of the
+  dynamic resolution by half a percent per late frame, down to 60 %, and raises it back by 1 % per second after 2 s without one. Setting
+  *Follow late frames* (`PlayerVR/DynamicResolutionLateFrames`, on by default, Device Performance > Dynamic resolution, live). The status
+  line counts the late frames ("compositor: n of m frames late") and shows the lowered target. Without SteamVR (or outside Linux) nothing
+  changes.
+- **Measured** (`docs/Performance on the Steam Frame.md`, section 8.19): headless, frames shown again per second 2.2 -> 0.5 up close, for
+  1 % of scale; worn, SteamVR's reprojected frames 6-26 % -> 3.2 %, the scale at 77-83 % leaning in; the owner: "significantly better".
+
+Files: `src/steamframe/CompositorTiming.h/.cpp` (new), `src/renderer/VRDevice.h/.cpp`, `src/core/Settings_properties.inl`,
+`src/ui/live/ingameui/VRSettingsPage.cpp`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -1092,6 +1110,8 @@ src/steamframe/MeshSimplifier.h
 src/steamframe/MeshSimplifier.cpp       simplified render meshes of heavy tables (section 19; grouped parts, section 31)
 src/steamframe/MeshTiles.h
 src/steamframe/MeshTiles.cpp            large parts drawn by tiles, only those in the view (section 37)
+src/steamframe/CompositorTiming.h
+src/steamframe/CompositorTiming.cpp     frames SteamVR's compositor showed late, for the dynamic resolution (section 41)
 src/steamframe/MeshLevelCache.h
 src/steamframe/MeshLevelCache.cpp       simplified levels kept on disk with the texture cache (section 31)
 src/steamframe/FlasherOutline.h

@@ -14,6 +14,7 @@
 #include "renderer/Sampler.h"
 #include "renderer/VertexBuffer.h"
 #ifdef VPX_STEAM_FRAME
+#include "steamframe/CompositorTiming.h"
 #include "steamframe/Launcher.h"
 #include "steamframe/Passthrough.h"
 #include "steamframe/PerfPanel.h"
@@ -201,6 +202,9 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_dynamicResolution = settings.GetPlayerVR_DynamicResolution();
       m_dynamicResolutionTarget = clamp(settings.GetPlayerVR_DynamicResolutionTarget(), 0.5f, 1.f);
       m_dynamicResolutionSensitivity = clamp(settings.GetPlayerVR_DynamicResolutionSensitivity(), 0, 2);
+      #if defined(VPX_STEAM_FRAME)
+      m_dynamicResolutionLateFrames = settings.GetPlayerVR_DynamicResolutionLateFrames();
+      #endif
       m_dynamicResolutionMinScale = clamp(settings.GetPlayerVR_DynamicResolutionMinScale(), 0.5f, 1.f);
       m_dynamicRenderScale = 1.f; // Each table starts at full size
       m_frameBudgetMs = 0.f; // Learned again from the session's frame periods
@@ -213,6 +217,10 @@ void VRDevice::ApplyTableSettings(const Settings& settings)
       m_stallBreaksLeft = 3;
       m_framesSinceDecrease = 0;
       m_smoothedGpuMs = 0.f;
+      #if defined(VPX_STEAM_FRAME)
+      m_lateFramesCut = 0.f;
+      m_msSinceLateFrame = 0.f;
+      #endif
       #if defined(VPX_STEAM_FRAME)
       // Steam Frame Edition: the performance panel, on or off for all tables (Standalone/PerfPanel, saved by the menu as soon as it is changed)
       VPX::PerfPanel::Get().SetEnabled(g_settingsService.GetAppSettings().GetStandalone_PerfPanel());
@@ -1343,6 +1351,7 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    if (perfPanel)
       ReportPerfPanelFrame(periods, gpuMs);
    m_frameEvents.OnTiming(periods, gpuMs, m_frameBudgetMs);
+   UpdateLateFramesCut(gpuMs);
    #endif
    if (!m_dynamicResolution || gpuMs < 1.f) // No reading, or nothing rendered (the headset is not worn): keep the scale
    {
@@ -1355,7 +1364,7 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
       return;
    }
    const float budgetMs = m_frameBudgetMs;
-   const float targetMs = budgetMs * m_dynamicResolutionTarget;
+   const float targetMs = budgetMs * GetEffectiveDynamicResolutionTarget();
    const float minScale = clamp(m_dynamicResolutionMinScale.load(), 0.5f, 1.f);
    // Frame pacing stall (docs/Performance on the Steam Frame.md, sections 7.5 and 7.6): the render thread waits in submission instead of in
    // xrWaitFrame, and the counter then reads the whole frame period whatever the GPU work (9 ms of it). On the Frame it came from the
@@ -1472,6 +1481,49 @@ void VRDevice::UpdateAutoFoveatedAntialiasing(bool belowFullResolution)
    }
 }
 
+float VRDevice::GetEffectiveDynamicResolutionTarget() const
+{
+   #if defined(VPX_STEAM_FRAME)
+   return max(m_dynamicResolutionTarget.load() - m_lateFramesCut.load(), min(m_dynamicResolutionTarget.load(), kLateFramesMinTarget));
+   #else
+   return m_dynamicResolutionTarget;
+   #endif
+}
+
+#if defined(VPX_STEAM_FRAME)
+// Steam Frame Edition: the target of the dynamic resolution, lowered while the compositor shows frames late (VPX::CompositorTiming). OpenXR does not
+// report them: the predicted display time moves by one period, and the compositor shows the previous frame again, then drops one. With the headset
+// worn, the Frame's compositor needs about 1.9 ms of GPU and starts about 2.6 ms earlier than unworn, so frames become late from about 10 ms of GPU
+// work at 72 Hz, under the 11.8 ms of the 85 % target: close over Medieval Madness, 20 to 50 % of the frames were late, 5 shown twice per second,
+// at a target of 85 % and still at 75 % (docs/Performance on the Steam Frame.md, section 8.19). Each late frame takes the target down by half a
+// percent, down to 60 %; after 2 s without one, it rises back by 1 % per second, up to the setting. Late frames only count when the GPU is busy
+// (smoothed GPU time over half the period): the ones of a table loading, or of a script stalling the CPU, say nothing of the resolution.
+void VRDevice::UpdateLateFramesCut(float gpuMs)
+{
+   VPX::CompositorTiming::Frames frames;
+   if (!m_dynamicResolution || !m_dynamicResolutionLateFrames || m_frameBudgetMs <= 0.f || !VPX::CompositorTiming::Get().Poll(frames))
+   {
+      m_lateFramesCut = 0.f;
+      return;
+   }
+   m_compositorFrames += frames.frames;
+   m_compositorLateFrames += frames.late;
+   const float maxCut = max(0.f, m_dynamicResolutionTarget - kLateFramesMinTarget);
+   if (frames.late > 0 && gpuMs >= 1.f && m_smoothedGpuMs > m_frameBudgetMs * 0.5f)
+   {
+      m_lateFramesCut = min(m_lateFramesCut.load() + 0.005f * static_cast<float>(frames.late), maxCut);
+      m_msSinceLateFrame = 0.f;
+   }
+   else
+   {
+      m_msSinceLateFrame += m_frameBudgetMs;
+      if (m_msSinceLateFrame >= 2000.f)
+         m_lateFramesCut = max(0.f, m_lateFramesCut.load() - 0.01f * m_frameBudgetMs / 1000.f);
+   }
+   m_lateFramesCut = min(m_lateFramesCut.load(), maxCut);
+}
+#endif
+
 string VRDevice::GetDynamicResolutionStatus() const
 {
    if (!m_performanceMetricsExtensionSupported)
@@ -1481,7 +1533,11 @@ string VRDevice::GetDynamicResolutionStatus() const
    const float scale = m_dynamicRenderScale;
    string status = std::format("{}x{} ({:.0f} %)", static_cast<int>(lroundf(static_cast<float>(m_eyeWidth) * scale)), static_cast<int>(lroundf(static_cast<float>(m_eyeHeight) * scale)), scale * 100.f);
    if (m_lastGpuFrameTimeMs > 0.f)
-      status += std::format(", GPU {:.1f} ms of {:.1f} ms (target {:.0f} %)", m_lastGpuFrameTimeMs.load(), m_frameBudgetMs.load(), m_dynamicResolutionTarget.load() * 100.f);
+      status += std::format(", GPU {:.1f} ms of {:.1f} ms (target {:.0f} %)", m_lastGpuFrameTimeMs.load(), m_frameBudgetMs.load(), GetEffectiveDynamicResolutionTarget() * 100.f);
+   #if defined(VPX_STEAM_FRAME)
+   if (m_lateFramesCut > 0.f)
+      status += std::format(", lowered from {:.0f} % for frames the compositor showed late", m_dynamicResolutionTarget.load() * 100.f);
+   #endif
    if (m_dynamicResolutionHeld)
       status += ", held (GPU time at the frame period with every frame on time: frame pacing stall)";
    return status;
@@ -1501,6 +1557,12 @@ void VRDevice::LogRuntimeStatus()
       status += std::format(" (gaze{} L {:.2f},{:.2f} R {:.2f},{:.2f})", m_gazeRayValid ? " ray" : "", m_foveationCenter[0].x, m_foveationCenter[0].y, m_foveationCenter[1].x, m_foveationCenter[1].y);
    status += " | Dynamic resolution: " + GetDynamicResolutionStatus();
    status += std::format(", {} frames missed, {} readings held, {} left out, {} stall breaks", m_missedFrames, m_heldReadings, m_leftOutReadings, m_stallBreaks);
+   #if defined(VPX_STEAM_FRAME)
+   if (VPX::CompositorTiming::Get().IsConnected())
+      status += std::format(", compositor: {} of {} frames late", m_compositorLateFrames, m_compositorFrames);
+   m_compositorFrames = 0;
+   m_compositorLateFrames = 0;
+   #endif
    m_missedFrames = 0;
    m_heldReadings = 0;
    m_leftOutReadings = 0;

@@ -240,6 +240,7 @@ of the device (the same frame costs 2–3 ms more after ten minutes), so the res
 | `PlayerVR/DynamicResolution` | On (headset builds), Off elsewhere | The switch; Off renders at the table's `ResFactor` size |
 | `PlayerVR/DynamicResolutionTarget` | 85 % | GPU time target as a fraction of the frame period (11.8 ms at 72 Hz) |
 | `PlayerVR/DynamicResolutionMinScale` | 70 % | Lowest scale, per axis, of the table's resolution (1512² at 2160²; the Frame's recommended size is 80 %) |
+| `PlayerVR/DynamicResolutionLateFrames` | On | *Follow late frames*: the target is lowered, down to 60 %, while SteamVR's compositor shows frames late, and rises back after 2 calm seconds (`docs/Performance on the Steam Frame.md`, section 8.19) |
 
 A status line on the page and in the log every 5 s: `Dynamic resolution: 1728x1728 (80 %), GPU 11.2 ms of 13.9 ms (target 85 %)`.
 

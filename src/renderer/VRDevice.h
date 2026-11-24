@@ -341,6 +341,10 @@ public:
    void SetDynamicResolutionTarget(float target) { m_dynamicResolutionTarget = clamp(target, 0.5f, 1.f); }
    int GetDynamicResolutionSensitivity() const { return m_dynamicResolutionSensitivity; }
    void SetDynamicResolutionSensitivity(int level) { m_dynamicResolutionSensitivity = clamp(level, 0, 2); }
+#if defined(VPX_STEAM_FRAME)
+   bool GetDynamicResolutionLateFrames() const { return m_dynamicResolutionLateFrames; }
+   void SetDynamicResolutionLateFrames(bool enabled) { m_dynamicResolutionLateFrames = enabled; }
+#endif
    float GetDynamicResolutionMinScale() const { return m_dynamicResolutionMinScale; }
    void SetDynamicResolutionMinScale(float minScale) { m_dynamicResolutionMinScale = clamp(minScale, 0.5f, 1.f); }
    // Scale the next frame renders at (1 when disabled, and while a table image is captured: the capture reads the whole swapchain image, at full sharpness)
@@ -697,6 +701,15 @@ private:
    unsigned int m_stallBreaksLeft = 0; // For the current table (see UpdateDynamicResolution)
    unsigned int m_framesSinceDecrease = 0; // The scale rises again a quarter of a second after it was lowered (see UpdateDynamicResolution)
    float m_smoothedGpuMs = 0.f; // GPU time the scale follows: the readings averaged over a few frames (0 until the first reading of the table)
+   float GetEffectiveDynamicResolutionTarget() const; // The setting, lowered while the compositor shows frames late (Steam Frame Edition)
+#if defined(VPX_STEAM_FRAME)
+   static constexpr float kLateFramesMinTarget = 0.6f;
+   std::atomic<bool> m_dynamicResolutionLateFrames = true; // Settings PlayerVR/DynamicResolutionLateFrames
+   std::atomic<float> m_lateFramesCut = 0.f; // Taken from the target for the frames the compositor showed late (see UpdateLateFramesCut)
+   float m_msSinceLateFrame = 0.f;
+   unsigned int m_compositorFrames = 0, m_compositorLateFrames = 0; // Since the last status log
+   void UpdateLateFramesCut(float gpuMs); // Render thread, once per frame
+#endif
    void UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, const XrTime predictedDisplayTime); // Render thread, once per frame before the frame is prepared
    double m_nextStatusLogTime = 0.;
    void LogRuntimeStatus();

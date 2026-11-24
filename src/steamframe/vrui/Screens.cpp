@@ -779,7 +779,7 @@ static vector<Section> GetSections(Screen screen)
          Section { "Render resolution"s, kVR, { Label("Render resolution"s), Label("Render resolution status"s) }, false, false },
          Section { "Dynamic resolution"s, kVR,
             { Prop(Settings::m_propPlayerVR_DynamicResolution), Prop(Settings::m_propPlayerVR_DynamicResolutionTarget), Prop(Settings::m_propPlayerVR_DynamicResolutionSensitivity),
-               Label("Dynamic resolution sensitivity help"s),
+               Label("Dynamic resolution sensitivity help"s), Prop(Settings::m_propPlayerVR_DynamicResolutionLateFrames),
                Prop(Settings::m_propPlayerVR_DynamicResolutionMinScale),
                Label("Dynamic resolution status"s) },
             false, false },

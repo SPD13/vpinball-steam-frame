@@ -307,6 +307,12 @@ void VRSettingsPage::BuildPage()
          ImGui::AlignTextToFramePadding();
          ImGui::TextDisabled("Low = more sensitive = will switch more often");
       }));
+#if defined(VPX_STEAM_FRAME)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayerVR_DynamicResolutionLateFrames, //
+      [this]() { return m_player->m_vrDevice->GetDynamicResolutionLateFrames(); }, //
+      [this](bool v) { m_player->m_vrDevice->SetDynamicResolutionLateFrames(v); }));
+#endif
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayerVR_DynamicResolutionMinScale, 100.f, "%4.0f %%"s, //
       [this]() { return m_player->m_vrDevice->GetDynamicResolutionMinScale(); }, //

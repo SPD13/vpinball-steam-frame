@@ -58,6 +58,9 @@ target_sources(vpinball PRIVATE
    src/steamframe/PerfPanelLayer.cpp
    src/steamframe/FrameEventLog.h
    src/steamframe/FrameEventLog.cpp
+   # Frames the compositor showed late (SteamVR's frame timing), for the dynamic resolution
+   src/steamframe/CompositorTiming.h
+   src/steamframe/CompositorTiming.cpp
 
    # Simplified render meshes of heavy tables (meshoptimizer's simplifier)
    src/steamframe/MeshSimplifier.h

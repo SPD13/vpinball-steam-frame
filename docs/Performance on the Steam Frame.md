@@ -1486,6 +1486,48 @@ same average scale (0.977 against 0.968); acting on a single slow reading (sensi
 way in, the three were the same (0.03 to 0.05 missed per second, the scale already at 0.91). Darkest Dungeon from the lockbar, twice each:
 one frame missed or none either way, 96 and 97 % of the time at full resolution instead of 100 and 99 % (lowest scale 0.95).
 
+### 8.19 Frames the compositor shows late (2026-11-24)
+
+Without the stall band, the owner still saw the image stutter turning the head up close over Medieval Madness, while VPX counted no
+frame missed. VPX counts a frame missed when the predicted display time of the next one moves by more than a period; SteamVR does not
+move it when a frame is late for its compositor: it shows the previous frame again (reprojected to the new head pose) and drops the late
+one, or shows it a vsync later. SteamVR's own per-frame record (OpenVR `IVRCompositor::GetFrameTimings`, read by a background client,
+`vr-frametiming` below) shows them: a frame presented twice, never presented, or on another vsync than predicted. SteamVR's summary at
+the end of each session (`~/.steam/steam/logs/vrcompositor.txt`, "Cumulative stats for pid", *reprojected*) counts the same.
+
+**Unworn (headless).** The compositor needs about 1.0 ms of GPU per frame; frames become late from about 12.5 ms of application GPU
+time at 72 Hz (13.9 ms period). Turning the head up close (`VPX_PERF_SWING=30,1`), late frames are single GPU spikes, about 2.5 ms over
+their neighbours (not caused by the changes of scale): 2.2 frames shown again per second at the 85 % target (scale 0.97), 0.6 at 80 %,
+none at 75 % (scale 0.95). Counting readings over 90 % of the period as slow changed nothing: the spikes come one at a time.
+
+**Worn.** The compositor needs about 1.85 ms of GPU and starts its work about 2.6 ms earlier: frames become late from about 10 ms of GPU
+time (8-10 ms: 23 % of them late, 11-12 ms: 85 %), under the 11.8 ms of the 85 % target. Close over Medieval Madness, 20 to 50 % of the
+frames were late, 5 shown again per second; SteamVR's summary of the sessions: 6 to 26 % reprojected. A 75 % target (10.4 ms) did not
+feel smoother (7.3 %). Leaving out the depth layer (`XR_KHR_composition_layer_depth`, 10 s on, 10 s off in one session) did not change
+the compositor's GPU time (1.85 ms either way) nor the late frames.
+
+**Follow late frames** (`PlayerVR/DynamicResolutionLateFrames`, on by default, Device Performance > Dynamic resolution, live;
+`src/steamframe/CompositorTiming.h/.cpp`, `VRDevice::UpdateLateFramesCut`): VPX reads the compositor's frame timing itself (SteamVR's
+`libopenvr_api.so`, opened at run time, as a background application next to its OpenXR session) and lowers the target of the dynamic
+resolution by half a percent for each late frame, down to 60 %; after 2 s without one, the target rises by 1 % per second, back to the
+setting. Late frames only count while the GPU is busy (the smoothed GPU time over half the period).
+
+| Medieval Madness, view swinging +-30 degrees at 1 Hz | Shown again per second | Average scale |
+|---|---|---|
+| Headless, 10 cm above the middle, off | 2.2 | 0.974 |
+| Headless, 10 cm above the middle, on (target 73-85 %) | 0.5 | 0.965 |
+| Headless, three quarters of the way in, off | 1.4 | 0.894 |
+| Headless, three quarters of the way in, on | 0.4 | 0.881 |
+
+Worn (the owner, close up, 2026-11-24): the target settled at 60 to 66 %, the scale at 77 to 83 % leaning in and 100 % leaning back,
+0.5 to 2 % of the frames late after the first seconds; SteamVR's summary 3.2 % reprojected (6 to 26 % before). The owner: "significantly
+better".
+
+Tools (`Doc/test-hooks`): `vr-frametiming.cpp` (the background client, built on the Frame with `g++ -O1 -std=c++17 vr-frametiming.cpp
+-I<openvr headers> -ldl`, run with `LD_LIBRARY_PATH=/opt/steamvr/bin/linuxarm64`; one line per compositor frame), `late-report.py` (frames
+shown again, never shown, mispresented per second, against the VPX scale of the same run). Its wall clock is only approximate (the
+compositor's system time drifts from `CLOCK_MONOTONIC` after the Frame sleeps): align it with the VPX log by content, not by time.
+
 
 From `vpinball/`, with the Frame on the network:
 
