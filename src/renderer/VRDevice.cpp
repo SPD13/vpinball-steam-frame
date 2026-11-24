@@ -1363,7 +1363,14 @@ void VRDevice::UpdateDynamicResolution(const XrDuration predictedDisplayPeriod, 
    // frame is on time: a reading at the frame period with no frame missed lately says nothing about the GPU work, and the scale is kept
    // (lowering it would take the table to the minimum within a second). The readings of a stall spread a little around the period (13.4 to
    // 14.2 ms at 72 Hz).
+   // Not on the Frame itself, which has no desktop window: there the readings at the period are real GPU work. Turning the head over Medieval
+   // Madness 10 cm above the playfield, 11 % of them fell in that band and were held, the scale stayed up and 0.78 frames missed their display
+   // per second; without the band, none in 113 s, for the same average scale (docs/Performance on the Steam Frame.md, section 8.18).
+   #if defined(VPX_STEAM_FRAME_HEADSET)
+   m_dynamicResolutionHeld = false;
+   #else
    m_dynamicResolutionHeld = gpuMs > budgetMs * 0.95f && gpuMs < budgetMs * 1.05f && m_framesSinceMissed >= 3;
+   #endif
    // The stall lasts until a frame misses its display (one missed frame ended each stall measured, after 1 to 120 s): when nearly every
    // reading of a second was held, the render thread waits one frame period here, so that one frame misses its display and the pipeline
    // falls back into step. At most a few times per table, in case a load right at the frame period was taken for a stall

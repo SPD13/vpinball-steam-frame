@@ -992,6 +992,18 @@ Files: `src/steamframe/Reflections.h/.cpp`, `src/steamframe/MeshSimplifier.cpp`,
 Files: `src/steamframe/MeshTiles.h/.cpp`, `src/steamframe/MeshSimplifier.h/.cpp`, `src/steamframe/MeshLevelCache.h/.cpp`,
 `src/renderer/VRDevice.h/.cpp`, `src/parts/primitive.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`.
 
+## 40. Dynamic resolution without the stall band on the Frame (2026-11-24)
+
+- **Why.** Turning the head fast up close hitched: single frames missed their display, about one per second, while dynamic resolution
+  kept the scale up. Their GPU time was just over the period, in the band (95 to 105 % of the period, with no frame missed in the last 3)
+  that `VRDevice::UpdateDynamicResolution` held as a frame pacing stall of the desktop window, which the Frame no longer draws.
+- **What.** The Frame build (`VPX_STEAM_FRAME_HEADSET`) no longer holds that band; other builds keep it as a safety net.
+- **Measured on the Frame** (Medieval Madness, 10 cm above the middle, the view swinging +-30 degrees at 1 Hz, dynamic resolution on):
+  0.78 frames missed per second before, none in 113 s after, for the same average scale. Darkest Dungeon from the lockbar: the same
+  missed frames, 96-97 % of the time at full resolution instead of 99-100 % (`docs/Performance on the Steam Frame.md`, section 8.18).
+
+Files: `src/renderer/VRDevice.cpp`, `docs/Performance on the Steam Frame.md`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.

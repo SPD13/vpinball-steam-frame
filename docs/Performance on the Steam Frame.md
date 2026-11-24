@@ -1475,6 +1475,17 @@ every 20 s (the gaze, which a headless run does not have, held at the view cente
 | Three quarters of the way in | 16.13 ms (29 % of frames missed) | 14.43 ms (4.3 %) | 13.26 ms (2.0 %) |
 | 10 cm above the middle | 11.05 ms | 10.19 ms | 9.73 ms |
 
+**Turning the head up close** (`lean-hooks.py` with `VPX_PERF_SWING=30,1`: the view swings +-30 degrees at 1 Hz, up to 190 degrees per
+second, 10 cm above the middle; `frametime-hooks.py`). Still, 10.4 ms and no frame missed; turning, at a fixed 2160 x 2160, the GPU time
+follows the direction of the view (p50 11.5 ms, p90 14.3 ms, 26 % of the frames over the period: the heavier parts of the table come
+into view sideways, with 6 % more triangles), 1.0 frame missed per second, each with its GPU time over the period (the CPU prepares every
+frame in 2.7 ms). With dynamic resolution as it was, still 0.78 per second: 11 % of the readings fell between 95 and 105 % of the
+period, the band held as a frame pacing stall (sections 7.5 and 7.6), and the missed frames averaged 14.2 ms, inside it. The stall came
+from the desktop window, which the Frame no longer draws: its build no longer holds that band. Then no frame missed in 113 s, for the
+same average scale (0.977 against 0.968); acting on a single slow reading (sensitivity Low) changed nothing more. Three quarters of the
+way in, the three were the same (0.03 to 0.05 missed per second, the scale already at 0.91). Darkest Dungeon from the lockbar, twice each:
+one frame missed or none either way, 96 and 97 % of the time at full resolution instead of 100 and 99 % (lowest scale 0.95).
+
 
 From `vpinball/`, with the Frame on the network:
 
