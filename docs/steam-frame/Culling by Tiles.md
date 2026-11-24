@@ -138,6 +138,7 @@ meshes setting: a large part without levels is tiled too.
   and *Culling by tiles status*: `56 parts in 1083 tiles, 77 % of their triangles left out`, or `drawn whole (off)`, or `No large part on
   this table` (`MeshTiles::GetTiledPartCount`, `GetTileTotal`, `GetSavedShare`, counted per second by `SelectRuns` on the logic thread).
 - Log: `Culling by tiles: ...` at the first frame (section 3.1).
+- `Player.TileLevels` (*Detail by tile*, same page): levels by tile, section 8.
 
 ## 5. Files
 
@@ -149,7 +150,8 @@ meshes setting: a large part without levels is tiled too.
 | `src/parts/primitive.h` | `m_meshTiles` (Frame build) |
 | `src/parts/primitive.cpp` | `RenderSetup` passes the part and keeps its tiles; `Render` selects the runs and draws them (`drawMesh`) |
 | `src/core/Settings_properties.inl` | `Player.MeshTiles` |
-| `src/steamframe/vrui/Screens.cpp` | The switch and the status line in the Simplified meshes page |
+| `src/steamframe/vrui/Screens.cpp` | The switch and the status line in the Simplified meshes page; *Detail by tile* (section 8) |
+| Section 8 | `MeshTiles` (`Places`, `GetPlaces`, `TriangleCell`, `ChooseLevels`, `SelectLevelRuns`), `MeshSimplifier` (locks in `Make`, `SelectTileLevels`, `AllowedPerDistance`, `MeshLevels::tileOwner`), `MeshLevelCache` (the flag of the locks), `VRDevice` (`GetGazeTangents`), `Primitive::Render` and `GetFullMatrix`, `Player.TileLevels` |
 | `steamframe/steamframe.cmake` | The new files |
 
 `primitive.cpp`, `primitive.h` and `Settings_properties.inl` are upstream files with LF line endings; the changes are inside the
@@ -232,15 +234,55 @@ What the rest of that view costs, measured the same way (`docs/Performance on th
 1.28 then 1.85 ms, the transparent parts other than the playfield's reflection (playfield, ramps and their refraction copies) 0.71
 then 1.13 ms. The reflection is the next target.
 
-## 8. Limits and what could come next
+## 8. Levels by tile (2026-11-24)
+
+Up close, one level for a whole part spanning the table is the full mesh, as its closest point is under the eyes, while most of its tiles
+are far. Three quarters of the way from the lockbar to 10 cm above the middle of Medieval Madness the eyes see 95 % of the triangles and
+draw them all at the full mesh: 16 ms per frame, the heaviest point of leaning in. Drawing every simplified part at its coarsest level is
+not the answer (holes at the post caps, a faceted dragon: `docs/Performance on the Steam Frame.md`, section 8.18). Each tile now draws
+the level of its own distance.
+
+**No cracks.** Two tiles at different levels meet without cracks only if no level changes their common border. While a large part is
+simplified (`MeshSimplifier::Make`), its vertices are grouped in places (`MeshTiles::Places`: within 0.02 VPU, so that the welded copy
+the simplifier works on for exports of separate triangles, like `BM_Parts`, matches them); a place whose triangles lie in more than one
+cell is a border. The border places and the places next to them are locked (`meshopt_SimplifyVertex_Lock`). A collapse then moves only
+a vertex whose triangles are all in one cell, onto a neighbour that is not on a border: each level keeps the borders of the mesh
+exactly, and each triangle a collapse made has a corner inside its cell. The cell of a triangle, in the mesh, any level, or a light map
+simplified with the part (found by position in the part's places), is the cell of its first corner inside a cell; a triangle with all
+its corners on borders is one of the mesh, unchanged, and takes the cell of the mesh's triangle at the same places. So the part and its
+light maps group every range by the same cells, and a light map draws the part's level tile by tile, exactly on its surface. Light maps
+under `kMinTriangles` are tiled too when their part has levels by tile. Cost: the locks keep more triangles in the coarse levels of
+the whole table (4 VPU: 791 k → 903 k on Medieval Madness), with no time measured from the lockbar with the setting off (6.64 ms, 6.67
+before). The levels are made again once (`kLevelsVersion` 3, cache file version 2 with the flag of the locks).
+
+**Each frame** (main view only; the reflections draw one level for the whole part). The part that owns the levels picks a level for each
+of its tiles in the view, once per frame (`MeshTiles::ChooseLevels`): the coarsest whose error, at the distance from the closest eye to
+the tile, stays under the allowed pixels (*Allowed error*), coarser only with a margin, as before for whole parts. With the gaze
+(`VRDevice::GetGazeTangents`, from the eye gaze ray of the foveated rendering), the error allowed grows from 12 degrees between the gaze and
+the tile's bounding sphere, by 1 every 8 degrees, up to 4 times. At most 3 levels are drawn at once (the finest, the coarsest, one
+between; each tile draws the finest kept at or under its own), as each level adds draws to the part and to each of its light maps. The
+part and its light maps then draw, range by range, the runs of their seen tiles at that range's level (`SelectLevelRuns`), merging
+across tiles not seen, never across a seen tile drawn at another level. Parts with refractions keep one level (their draws are merged).
+
+**Measured on the Frame** (2160 x 2160, headless, the three modes in turn every 20 s, the gaze held at the view center):
+
+| Point | Off | Distance | Distance and gaze |
+|---|---|---|---|
+| Lockbar | 6.64 ms, 575 k triangles | 6.43 ms, 501 k | 6.24 ms, 468 k |
+| Three quarters of the way in | 16.13 ms, 968 k (29 % of frames missed) | 14.43 ms, 656 k (4.3 %) | 13.26 ms, 539 k (2.0 %) |
+| 10 cm above the middle | 11.05 ms, 704 k | 10.19 ms, 521 k | 9.73 ms, 417 k |
+
+On the Mac (paused, the same moment captured off and by distance, over the middle): 728 k → 565 k triangles, the same image (the
+differences are the DMD's animation and a few pixels far at the top of the castle).
+
+**Setting.** `Player.TileLevels` (*Detail by tile*, Simplified meshes page: Off / Distance / Distance and gaze; Distance and gaze by
+default, in the Low and Medium performance profiles, Off in High; live). Without eye tracking, Distance and gaze works as Distance.
+
+## 9. Limits and what could come next
 
 - **Tile size.** 200 VPU is a guess between draws and culling: 5 x 11 tiles on a standard playfield. Smaller tiles cull closer to the
   view but make more runs; the merge rules bound the draws either way. To tune on the Frame with the counts of `cull-hooks.py`.
-- **Level per tile.** Up close the tiles of the far end of the playfield, seen at a grazing angle, are drawn at the full mesh with the
-  near ones. Levels made tile by tile, with the borders between tiles locked in the simplifier (`meshopt_SimplifyVertex_Lock` on the
-  vertices shared by two tiles), could then be mixed without cracks, each tile drawing the level of its own distance. That changes the
-  simplifier, its cache format and the light map pruning tables: a larger piece of work, worth it only if the Frame measurements leave
-  close views over the target.
+- **Level per tile.** Done (section 8). The gaze allowance (12 degrees, 4 times) is a first guess, to be judged in the headset.
 - **Level from the seen tiles.** The level could be picked from the closest seen tile instead of the closest point of the part (a part
   close to the eyes but out of view on that side). Each light map follows its part's level, so the part and its light maps would have to
   agree on the seen tiles within a frame: not done.

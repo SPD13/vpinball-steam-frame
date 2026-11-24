@@ -976,6 +976,22 @@ Files: `src/steamframe/MeshTiles.h/.cpp` (new), `src/steamframe/MeshSimplifier.h
 Files: `src/steamframe/Reflections.h/.cpp`, `src/steamframe/MeshSimplifier.cpp`, `src/core/Settings_properties.inl`,
 `src/steamframe/vrui/Screens.cpp`, `docs/Performance on the Steam Frame.md`, `docs/steam-frame/Performance of the Steam Frame Edition.md`.
 
+## 39. Levels by tile (2026-11-24)
+
+- **Why.** Leaning in over Medieval Madness, the heaviest point is three quarters of the way in (16 ms per frame at 2160 x 2160): the
+  eyes see 95 % of the triangles and every large part draws its full mesh, as its level is picked from its closest point. Drawing the
+  coarsest levels there loses visible detail (post caps, the dragon).
+- **What.** `Player.TileLevels` (*Detail by tile*, Simplified meshes page of Device Performance: Off / Distance / Distance and gaze, the
+  last by default; Low and Medium profiles, Off in High; live): each tile of a large part draws the level of its own distance, with up to
+  4 times more error from 12 degrees away from the gaze. The simplifier locks the vertices on the tile borders and next to them, so tiles at
+  different levels meet without cracks and the light maps follow their part tile by tile (`docs/steam-frame/Culling by Tiles.md`,
+  section 8). The levels are made again once (new cache version).
+- **Measured on the Frame** (headless, the gaze held at the view center): three quarters of the way in 16.13 → 14.43 → 13.26 ms (frames
+  missed 29 → 4.3 → 2.0 %), 10 cm above the middle 11.05 → 10.19 → 9.73 ms, lockbar 6.64 → 6.43 → 6.24 ms.
+
+Files: `src/steamframe/MeshTiles.h/.cpp`, `src/steamframe/MeshSimplifier.h/.cpp`, `src/steamframe/MeshLevelCache.h/.cpp`,
+`src/renderer/VRDevice.h/.cpp`, `src/parts/primitive.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`.
+
 ## Effects on existing builds
 
 - Every build with the bgfx renderer: with Fast, Standard or Quality FXAA, the tonemap writes the luma of the image in the alpha channel of the post-processing target and FXAA reads it with texture gathers (`docs/Performance on the Steam Frame.md`, section 8.5; not guarded, a candidate for upstream): the same image, the FXAA pass 23 % cheaper on the Frame.
@@ -985,7 +1001,7 @@ Files: `src/steamframe/Reflections.h/.cpp`, `src/steamframe/MeshSimplifier.cpp`,
 - Standalone desktop builds have the compact scene buffer (section 21) too, on by default (Medium performance profile, `Player.CompactSceneBuffer`); it applies to desktop views as well.
 - Every build with the bgfx renderer: a screen space transparency probe (refraction) copies only the area of interest of the parts using it, with a margin, instead of the whole render target (`RenderProbe::LimitCopyToAreaOfInterest`; `docs/Performance on the Steam Frame.md`, section 8.15; not guarded, a candidate for upstream): the same image, 2.8 ms less GPU per frame on Medieval Madness on the Frame.
 - Standalone desktop builds have light-map pruning (section 25), Medium by default (Medium performance profile): baked tables take longer to load (the sort), and their light maps leave out their faintest triangles. High profile or Off: nothing sorted, every light map drawn in full.
-- Standalone desktop builds have the culling by tiles (section 37), on by default: large parts take a little longer to load (the sort) and draw only their tiles in the view; nothing changes on screen.
+- Standalone desktop builds have the culling by tiles (section 37), on by default: large parts take a little longer to load (the sort) and draw only their tiles in the view; nothing changes on screen. Levels by tile (section 39) apply there too, by distance (no gaze on a desktop); their levels are made again once.
 - Standalone desktop builds have the Reflections settings (section 22), with the defaults of the Medium performance profile: extra mirrors and room reflection Off, reflection size Half (High: On, On, Full). Automatic only decides in VR.
 - The dynamic resolution plumbing (render scale on passes and targets) is inert outside VR: the scale stays 1 and every view rect and texture coordinate is what it was.
 - Every build with the bgfx renderer gets the specular anti-aliasing of the material shader (section 12), except through Direct3D 11/12 until the shader headers are regenerated on Windows.

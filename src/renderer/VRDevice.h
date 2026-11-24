@@ -433,6 +433,9 @@ public:
 
    Matrix3D* GetVisibilityMaskProjs() { return &m_nextProj[0]; }
    std::shared_ptr<MeshBuffer> GetGazeMarker() const { return m_gazeMarker; } // Debug ring around the foveation spot (VPX_FOVEATION_DEBUG), else null
+   // The gaze of each eye from the last gaze ray located (see LocateGaze), as the tangents of its direction in the view space of the eye (x right, y
+   // up): false without one. Read by the logic thread for the levels by tile (steamframe/MeshTiles.h).
+   bool GetGazeTangents(float (&tangents)[2][2]) const;
 
    void EnableControllerRecenter(bool enable) { m_controllerRecenterEnabled = enable; }
    bool IsControllerRecenterEnabled() const { return m_controllerRecenterEnabled; }
@@ -654,6 +657,9 @@ private:
    XrVector3f m_gazePoint {};
    XrTime m_gazePointTime = 0;
    void LocateGaze(const std::vector<XrView>& views, XrTime displayTime);
+   mutable std::mutex m_gazeTangentsMutex; // The gaze of each eye for GetGazeTangents, written by LocateGaze
+   float m_gazeTangents[2][2] = {};
+   bool m_gazeTangentsValid = false;
    bgfx::TextureHandle UpdateShadingRateImage(int targetWidth, int targetHeight, bool gazeValid); // Invalid when not available
    // VPX_FOVEATION_DEBUG: a ring drawn around the full quality spot of each eye, so the spot can be compared with the gaze in the headset
    XrFovf m_viewFov[2] = {};

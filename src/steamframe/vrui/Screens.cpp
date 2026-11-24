@@ -253,6 +253,7 @@ static const vector<ProfileSetting>& GetProfileSettings()
       { &Settings::m_propPlayerVR_FoveateTonemapping, { 1, 1, 0 } },
       { &Settings::m_propPlayerVR_FoveateAntialiasing, { 1, 0, 0 } }, // Always On, Always Off, Always Off
       { &Settings::m_propPlayer_SimplifyMeshes, { 1, 1, 0 } },
+      { &Settings::m_propPlayer_TileLevels, { 2, 2, 0 } }, // Distance and gaze, Distance and gaze, Off
       { &Settings::m_propPlayer_LightMapPruning, { 2, 2, 0 } }, // Medium, Medium, Off
       { &Settings::m_propPlayer_CompactSceneBuffer, { 1, 1, 0 } },
       { &Settings::m_propPlayer_ExtraMirrors, { 1, 1, 0 } }, // Off, Off, On
@@ -483,6 +484,10 @@ private:
                   : VPX::IsNaN(saved)        ? std::format("{} parts in {} tiles", parts, MeshTiles::GetTileTotal()).c_str()
                                              : std::format("{} parts in {} tiles, {:.0f} % of their triangles left out", parts, MeshTiles::GetTileTotal(), saved * 100.f).c_str());
          }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_TileLevels, //
+         []() { return MeshTiles::GetLevelMode(); }, //
+         [](int, int v) { MeshTiles::SetLevelMode(v); }));
    }
 };
 

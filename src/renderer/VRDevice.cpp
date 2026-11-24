@@ -948,9 +948,22 @@ void VRDevice::FillOwnFoveationMap()
 // Head and eyes are taken at the gaze sample time, so the ray of a fixated point stays put while the head moves, and the point is projected
 // with the views the frame is rendered with; the small vergence between the eyes comes from an assumed fixation distance. The point is
 // smoothed with a short filter (the samples jitter), which a saccade resets.
+bool VRDevice::GetGazeTangents(float (&tangents)[2][2]) const
+{
+   const std::lock_guard<std::mutex> lock(m_gazeTangentsMutex);
+   if (!m_gazeTangentsValid)
+      return false;
+   memcpy(tangents, m_gazeTangents, sizeof(m_gazeTangents));
+   return true;
+}
+
 void VRDevice::LocateGaze(const std::vector<XrView>& views, const XrTime displayTime)
 {
    m_gazeRayValid = false;
+   {
+      const std::lock_guard<std::mutex> lock(m_gazeTangentsMutex);
+      m_gazeTangentsValid = false;
+   }
    if (m_gazeSpace == XR_NULL_HANDLE || !m_foveationEyeTracked || m_foveationMode == 0 || views.size() < 2)
       return;
    // Runtimes may only vouch for the orientation of the gaze pose: the ray then starts between the eyes
@@ -1009,6 +1022,7 @@ void VRDevice::LocateGaze(const std::vector<XrView>& views, const XrTime display
    m_gazePointTime = displayTime;
    m_gazePointValid = true;
    XrVector2f centers[2];
+   float tangents[2][2];
    for (int eye = 0; eye < 2; eye++)
    {
       // Into the eye's view space (OpenXR: x right, y up, looking down -z)
@@ -1028,6 +1042,8 @@ void VRDevice::LocateGaze(const std::vector<XrView>& views, const XrTime display
       const XrFovf& fov = views[eye].fov;
       const float tanL = tanf(fov.angleLeft), tanR = tanf(fov.angleRight), tanD = tanf(fov.angleDown), tanU = tanf(fov.angleUp);
       const float tx = p.x / -p.z, ty = p.y / -p.z;
+      tangents[eye][0] = tx;
+      tangents[eye][1] = ty;
       // Image space of the eye (-1..1, x to the right, y down), the convention of the runtime's foveation center
       centers[eye].x = (2.f * tx - (tanR + tanL)) / (tanR - tanL);
       centers[eye].y = -(2.f * ty - (tanU + tanD)) / (tanU - tanD);
@@ -1035,6 +1051,9 @@ void VRDevice::LocateGaze(const std::vector<XrView>& views, const XrTime display
    m_foveationCenter[0] = centers[0];
    m_foveationCenter[1] = centers[1];
    m_gazeRayValid = true;
+   const std::lock_guard<std::mutex> lock(m_gazeTangentsMutex);
+   memcpy(m_gazeTangents, tangents, sizeof(tangents));
+   m_gazeTangentsValid = true;
 }
 
 bool VRDevice::ReadGaze()

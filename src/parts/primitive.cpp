@@ -1004,36 +1004,50 @@ void Primitive::Render(const unsigned int renderMask)
    }
 
 #if defined(VPX_STEAM_FRAME)
-   // The index range drawn: the full mesh, or the level of its simplified mesh that cannot be told from it at this distance
-   uint32_t drawFirst = 0, drawCount = m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices();
-   // A layer simplified with the part under it draws the level that part draws (its full mesh if the part lost its levels)
-   if (Primitive* const leader = m_meshLevels && m_meshLevels->leader ? m_meshLevels->leader : this; !isUIPass && !m_groupdRendering && m_meshLevels && leader->m_meshLevels)
-   {
-      int renderWidth, renderHeight;
-      m_renderer->GetRenderSize(renderWidth, renderHeight);
-      VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, leader->m_mesh, leader->m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass,
-         leader->m_meshLevel, drawFirst, drawCount);
-   }
-   // A light map draws only its triangles adding enough light (Steam Frame screen, Light maps)
-   if (!isUIPass && !m_groupdRendering && m_d.m_addBlend)
-      VPX::LightMapPruning::Get().Trim(this, drawFirst, drawCount);
-   // A large part draws only the runs of that range whose tiles may be seen (steamframe/MeshTiles.h)
-   VPX::MeshTiles::Run drawRuns[VPX::MeshTiles::kMaxRuns] { { drawFirst, drawCount } };
+   int renderWidth, renderHeight;
+   m_renderer->GetRenderSize(renderWidth, renderHeight);
+   VPX::MeshTiles::Run drawRuns[VPX::MeshTiles::kMaxRuns];
+   const VPX::MeshTiles::Run* runs = drawRuns;
    int nDrawRuns = 1;
-   if (!isUIPass && !m_groupdRendering && m_meshTiles)
+   // In the main view, a large part simplified with its tiles in mind, and the light maps on it, draw each tile at its own level (steamframe/MeshTiles.h;
+   // not with refractions, whose draws are merged in one)
+   if (!isUIPass && !m_groupdRendering && !isReflectionPass && m_meshTiles && m_d.m_szRefractionProbe.empty()
+      && VPX::MeshSimplifier::Get().SelectTileLevels(this, m_renderer->GetMVP(), renderHeight, runs, nDrawRuns))
    {
-      nDrawRuns = m_meshTiles->SelectRuns(m_renderer->GetMVP(), drawFirst, drawCount, drawRuns);
       if (nDrawRuns == 0)
       {
          m_renderer->UpdateBasicShaderMatrix();
          return;
       }
    }
+   else
+   {
+      // The index range drawn: the full mesh, or the level of its simplified mesh that cannot be told from it at this distance
+      uint32_t drawFirst = 0, drawCount = m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices();
+      // A layer simplified with the part under it draws the level that part draws (its full mesh if the part lost its levels)
+      if (Primitive* const leader = m_meshLevels && m_meshLevels->leader ? m_meshLevels->leader : this; !isUIPass && !m_groupdRendering && m_meshLevels && leader->m_meshLevels)
+         VPX::MeshSimplifier::Get().SelectRange(m_meshLevels.get(), m_mesh, leader->m_mesh, leader->m_fullMatrix, m_renderer->GetMVP(), renderHeight, isReflectionPass,
+            leader->m_meshLevel, drawFirst, drawCount);
+      // A light map draws only its triangles adding enough light (Steam Frame screen, Light maps)
+      if (!isUIPass && !m_groupdRendering && m_d.m_addBlend)
+         VPX::LightMapPruning::Get().Trim(this, drawFirst, drawCount);
+      // A large part draws only the runs of that range whose tiles may be seen (steamframe/MeshTiles.h)
+      drawRuns[0] = { drawFirst, drawCount };
+      if (!isUIPass && !m_groupdRendering && m_meshTiles)
+      {
+         nDrawRuns = m_meshTiles->SelectRuns(m_renderer->GetMVP(), drawFirst, drawCount, drawRuns);
+         if (nDrawRuns == 0)
+         {
+            m_renderer->UpdateBasicShaderMatrix();
+            return;
+         }
+      }
+   }
    const auto drawMesh = [&](const bool isTransparent)
    {
       for (int r = 0; r < nDrawRuns; r++)
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, isTransparent, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST,
-            drawRuns[r].first, drawRuns[r].count);
+            runs[r].first, runs[r].count);
    };
 #endif
 

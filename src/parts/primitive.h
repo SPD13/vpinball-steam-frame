@@ -317,6 +317,7 @@ public:
    std::shared_ptr<VPX::MeshLevels> m_meshLevels; // Simplified levels of the render mesh, made while the table loads (see steamframe/MeshSimplifier.h)
    int m_meshLevel = -1; // Level drawn in the main view at the last frame (-1: the full mesh)
    std::shared_ptr<VPX::MeshTiles> m_meshTiles; // Its triangles grouped by tile, for a large part (see steamframe/MeshTiles.h)
+   const Matrix3D& GetFullMatrix() const { return m_fullMatrix; } // Its placement at the last render (levels by tile, see steamframe/MeshTiles.h)
 #endif
 
 private:

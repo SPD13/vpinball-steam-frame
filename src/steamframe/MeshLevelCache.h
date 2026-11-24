@@ -37,6 +37,7 @@ struct SimplifiedMesh final
    std::vector<float> errors; // Error of each level, in VP units
    std::vector<std::vector<unsigned int>> levels; // Indices of each level over the part's vertices
    std::vector<std::vector<std::vector<unsigned int>>> layerLevels; // [layer][level]: indices over the layer's vertices
+   bool tileLocked = false; // Made with the places on the borders of the part's tiles locked (MeshTiles.h, levels by tile)
 };
 
 struct MeshLevelKey final

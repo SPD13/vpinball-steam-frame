@@ -28,6 +28,7 @@
 
 #include "math/Mesh.h"
 #include "math/matrix.h"
+#include "MeshTiles.h"
 
 #include <chrono>
 #include <memory>
@@ -62,6 +63,9 @@ struct MeshLevels final
    // A layer simplified with the part under it: that part, whose bounds, placement and level choice the layer follows, so that both always
    // draw the same level (the layer's levels are the part's levels, on the layer's own vertices)
    Primitive* leader = nullptr;
+   // A large part simplified with the places on the borders of its tiles locked (MeshTiles.h, levels by tile): that part, whose places give the cells
+   // of its tiles and of those of its layers, and which chooses the level of each tile for them all. Null when made without.
+   Primitive* tileOwner = nullptr;
 };
 
 class MeshSimplifier final
@@ -96,6 +100,10 @@ public:
    // of the levels' leader for a layer simplified with the part under it.
    void SelectRange(const MeshLevels* levels, const Mesh& mesh, const Mesh& boundsMesh, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight,
       bool isReflectionPass, int& currentLevel, uint32_t& first, uint32_t& count) const;
+   // Levels by tile (Settings Player/TileLevels, see MeshTiles.h), in the main view: the runs a part draws, each tile at its own level, for a part whose
+   // levels were made with locked tile borders and for the layers simplified with it (light map pruning applied). False when the part draws one range
+   // (SelectRange) instead. 'nRuns' 0: nothing to draw.
+   bool SelectTileLevels(Primitive* part, const ModelViewProj& mvp, int renderHeight, const MeshTiles::Run*& runs, int& nRuns) const;
 
 private:
    MeshSimplifier();
@@ -119,6 +127,9 @@ private:
 
    // Triangles left out, per frame and over one second (SelectRange is called by the logic thread while it prepares a frame)
    void CountFrame(size_t saved) const;
+   // The error allowed per VP unit of distance from the eye (in VP units for an orthographic view), for levels made at the size 'loadSize' of a part
+   // placed by 'fullMatrix'
+   float AllowedPerDistance(const Vertex3Ds& loadSize, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight, bool& orthographic) const;
    mutable unsigned int m_statsFrame = ~0u;
    mutable uint64_t m_frameSaved = 0, m_windowSaved = 0, m_windowTriangles = 0;
    mutable std::chrono::steady_clock::time_point m_windowStart;

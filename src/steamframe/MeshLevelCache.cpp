@@ -17,7 +17,7 @@ namespace
 {
 
 constexpr char kMagic[8] = { 'V', 'P', 'X', 'M', 'L', 'C', 'A', 'C' };
-constexpr uint32_t kFileVersion = 1;
+constexpr uint32_t kFileVersion = 2; // 2: tileLocked
 constexpr const char* kFileName = "simplified-meshes.bin";
 
 void Put32(std::vector<uint8_t>& out, uint32_t v)
@@ -155,10 +155,11 @@ bool MeshLevelCache::Find(const MeshLevelKey& key, size_t partVertices, const st
       return false;
    Reader r { m_file.data() + it->second.offset, it->second.size };
    out = SimplifiedMesh();
-   const uint32_t outcome = r.Get32(), nLevels = r.Get32(), nLayers = r.Get32();
-   if (!r.ok || outcome > static_cast<uint32_t>(SimplifiedMesh::Outcome::Levels) || nLayers != layerVertices.size() || nLevels > 64)
+   const uint32_t outcome = r.Get32(), nLevels = r.Get32(), nLayers = r.Get32(), tileLocked = r.Get32();
+   if (!r.ok || outcome > static_cast<uint32_t>(SimplifiedMesh::Outcome::Levels) || nLayers != layerVertices.size() || nLevels > 64 || tileLocked > 1)
       return false;
    out.outcome = static_cast<SimplifiedMesh::Outcome>(outcome);
+   out.tileLocked = tileLocked != 0;
    out.errors.resize(nLevels);
    out.levels.resize(nLevels);
    for (uint32_t l = 0; l < nLevels && r.ok; l++)
@@ -186,6 +187,7 @@ void MeshLevelCache::Store(const MeshLevelKey& key, const SimplifiedMesh& mesh)
    Put32(blob, static_cast<uint32_t>(mesh.outcome));
    Put32(blob, static_cast<uint32_t>(mesh.levels.size()));
    Put32(blob, static_cast<uint32_t>(mesh.layerLevels.size()));
+   Put32(blob, mesh.tileLocked ? 1u : 0u);
    for (size_t l = 0; l < mesh.levels.size(); l++)
    {
       PutFloat(blob, mesh.errors[l]);

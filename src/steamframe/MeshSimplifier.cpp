@@ -5,12 +5,16 @@
 #include "MeshLevelCache.h"
 #include "MeshTiles.h"
 #include "Reflections.h"
+#include "LightMapPruning.h"
 
 #include "core/player.h"
 #include "core/VPApp.h"
 #include "parts/primitive.h"
 #include "renderer/Renderer.h"
 #include "renderer/IndexBuffer.h"
+#ifdef ENABLE_XR
+#include "renderer/VRDevice.h"
+#endif
 #include "ThreadPool.h"
 #include "meshoptimizer/meshoptimizer.h"
 
@@ -56,7 +60,7 @@ static constexpr float kPlayerReach = 1852.f, kEyeHeight = 2222.f;
 // level kept 1.85 M triangles of the four statues; from 4, as from 0.5, 1.62 M).
 static constexpr float kFinestPixelAngle = 0.0003f;
 // Version of what the levels are made of and how (MeshLevelCache): change it whenever Make or its constants change
-static constexpr uint32_t kLevelsVersion = 1;
+static constexpr uint32_t kLevelsVersion = 3; // 3: tile borders locked (MeshTiles.h, levels by tile)
 // Vertex positions of coinciding meshes differ by less than this, in VP units
 static constexpr float kCoincidence = 0.25f;
 // A mesh with this many vertices per triangle (a closed mesh that shares them has 0.5) is an export of separate triangles, usually each with its
@@ -708,6 +712,7 @@ void MeshSimplifier::Enqueue(progschj::ThreadPool& pool, PinTable* table, bool v
    m_allowedPixels = table->GetSettings().GetPlayer_SimplifyMeshesError();
    // The tiles of the large parts (made with their index buffers, after this)
    MeshTiles::SetEnabled(table->GetSettings().GetPlayer_MeshTiles());
+   MeshTiles::SetLevelMode(table->GetSettings().GetPlayer_TileLevels());
    MeshTiles::ResetStats();
    m_vr = vr;
    m_cache->Close();
@@ -809,6 +814,10 @@ void MeshSimplifier::Simplify(const Group& group)
    add(&startBound, sizeof(startBound));
    add(&p->m_d.m_vSize, sizeof(p->m_d.m_vSize));
    add(&group.matrix, sizeof(group.matrix));
+   const float tableBounds[4] = { p->m_ptable->m_left, p->m_ptable->m_top, p->m_ptable->m_right, p->m_ptable->m_bottom }; // The cells of the tiles
+   add(tableBounds, sizeof(tableBounds));
+   const uint32_t tileConstants[3] = { static_cast<uint32_t>(MeshTiles::kTileSize), static_cast<uint32_t>(MeshTiles::kMaxLevel), static_cast<uint32_t>(MeshTiles::kMinTriangles) };
+   add(tileConstants, sizeof(tileConstants));
    add(p->m_mesh.m_vertices.data(), p->m_mesh.m_vertices.size() * sizeof(Vertex3D_NoTex2));
    add(p->m_mesh.m_indices.data(), p->m_mesh.m_indices.size() * sizeof(unsigned int));
    vector<size_t> layerVertices;
@@ -931,6 +940,23 @@ void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& 
    }
    const size_t nSimplified = pos.size() / 3;
 
+   // Levels by tile (MeshTiles.h): the places on the borders of the cells of a large part, and those next to them, are locked, so that each level changes
+   // the mesh only within cells
+   const std::shared_ptr<const MeshTiles::Places> places = MeshTiles::GetPlaces(p, group.matrix);
+   vector<unsigned char> lock = withLayers ? split.lock : vector<unsigned char>(places ? nSimplified : 0, 0);
+   if (places)
+      for (size_t i = 0; i < nSimplified; i++)
+      {
+         // The vertex of the mesh it stands for: through the copies of the layers, then the welded copy
+         size_t v = withLayers ? split.source[i] : i;
+         if (welded)
+            v = toMesh[v];
+         const uint64_t c = places->Value(places->OfVertex(v));
+         if (c == MeshTiles::Places::kBorder || (c & MeshTiles::Places::kLocked))
+            lock[i] |= meshopt_SimplifyVertex_Lock;
+      }
+   const bool useLock = !lock.empty();
+
    auto levels = std::make_shared<MeshLevels>();
    levels->loadSize = p->m_d.m_vSize;
    levels->sourceIndices = mesh.NumIndices();
@@ -941,7 +967,7 @@ void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& 
    for (size_t i = 0; i < nSimplified; i++)
       ids[i] = static_cast<unsigned int>(i);
    vector<float> localPos = pos, localAttr = attr;
-   vector<unsigned char> localLock = split.lock;
+   vector<unsigned char> localLock = lock;
    vector<int> remap(nSimplified);
    size_t sourceCount = indices.size();
    float sourceError = 0.f;
@@ -954,7 +980,7 @@ void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& 
          weights[0] = weights[1] = weights[2] = normalWeight * bound;
       float stepError = 0.f;
       const size_t n = meshopt_simplifyWithAttributes(dst.data(), local.data(), sourceCount, localPos.data(), ids.size(), sizeof(float) * 3, localAttr.data(),
-         sizeof(float) * 5, weights, 5, withLayers ? localLock.data() : nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute | (welded ? kWeldOptions : 0), &stepError);
+         sizeof(float) * 5, weights, 5, useLock ? localLock.data() : nullptr, 3, bound - sourceError, meshopt_SimplifyErrorAbsolute | (welded ? kWeldOptions : 0), &stepError);
       if (n < 3 * kMinLevelTriangles)
          break;
       if (static_cast<float>(n) > kKeepRatio * static_cast<float>(sourceCount))
@@ -989,11 +1015,11 @@ void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& 
          std::copy_n(&pos[ids[i] * 3], 3, &localPos[i * 3]);
          std::copy_n(&attr[ids[i] * 5], 5, &localAttr[i * 5]);
       }
-      if (withLayers)
+      if (useLock)
       {
          localLock.resize(ids.size());
          for (size_t i = 0; i < ids.size(); i++)
-            localLock[i] = split.lock[ids[i]];
+            localLock[i] = lock[ids[i]];
       }
    }
 
@@ -1050,6 +1076,7 @@ void MeshSimplifier::Make(const Group& group, float startBound, SimplifiedMesh& 
             i = toMesh[i];
 
    out.outcome = levels->levels.empty() ? SimplifiedMesh::Outcome::NoLevels : SimplifiedMesh::Outcome::Levels;
+   out.tileLocked = places != nullptr;
    for (MeshLevels::Level& level : levels->levels)
    {
       out.errors.push_back(level.error);
@@ -1087,6 +1114,7 @@ void MeshSimplifier::Apply(const Group& group, SimplifiedMesh& mesh, double ms, 
       level.error = mesh.errors[l];
    }
    vector<vector<vector<unsigned int>>>& layerLevels = mesh.layerLevels;
+   levels->tileOwner = mesh.tileLocked ? p : nullptr;
    for (Primitive* part : group.parts)
       part->m_meshLevels = levels;
    m_nMeshes += static_cast<int>(group.parts.size() + group.layers.size());
@@ -1109,6 +1137,7 @@ void MeshSimplifier::Apply(const Group& group, SimplifiedMesh& mesh, double ms, 
       layerLevelsOf->sourceIndices = lp->m_mesh.NumIndices();
       layerLevelsOf->sourceVertices = lp->m_mesh.NumVertices();
       layerLevelsOf->leader = p;
+      layerLevelsOf->tileOwner = levels->tileOwner;
       for (size_t l = 0; l < levels->levels.size(); l++)
       {
          MeshLevels::Level& level = layerLevelsOf->levels.emplace_back();
@@ -1173,7 +1202,8 @@ std::shared_ptr<IndexBuffer> MeshSimplifier::CreateIndexBuffer(RenderDevice* rd,
    if (levels && (levels->sourceIndices != mesh.NumIndices() || levels->sourceVertices != mesh.NumVertices()))
       levels = nullptr; // The mesh changed since it was simplified
    tiles = nullptr;
-   const bool tileable = mesh.NumIndices() / 3 >= MeshTiles::kMinTriangles && mesh.m_animationFrames.empty();
+   // Large parts, and the parts and layers with levels by tile whatever their size (MeshTiles.h)
+   const bool tileable = (mesh.NumIndices() / 3 >= MeshTiles::kMinTriangles || (levels && levels->tileOwner)) && mesh.m_animationFrames.empty();
    if (levels == nullptr && !tileable)
       return std::make_shared<IndexBuffer>(rd, mesh.m_indices);
    // The mesh, then each level
@@ -1229,20 +1259,8 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
       distance = min(distance, sqrtf(dx * dx + dy * dy + dz * dz));
    }
 
-   // The levels' errors are for the size at load: scale them by the size now (a script may change it), the largest stretch of the axes
-   const Vertex3Ds& s = levels->loadSize;
-   const float scale = max(max(
-      sqrtf(fullMatrix._11 * fullMatrix._11 + fullMatrix._12 * fullMatrix._12 + fullMatrix._13 * fullMatrix._13) / max(fabsf(s.x), 1e-6f),
-      sqrtf(fullMatrix._21 * fullMatrix._21 + fullMatrix._22 * fullMatrix._22 + fullMatrix._23 * fullMatrix._23) / max(fabsf(s.y), 1e-6f)),
-      sqrtf(fullMatrix._31 * fullMatrix._31 + fullMatrix._32 * fullMatrix._32 + fullMatrix._33 * fullMatrix._33) / max(fabsf(s.z), 1e-6f));
-   // Pixels per unit of the tangent of the angle from the view axis (perspective) or per VP unit (orthographic). Taken at the full render
-   // resolution, not the one of dynamic resolution, so that a lower resolution does not make the parts coarser, which would let it rise again.
-   // The projection may carry a scale of the scene (in VR, the size of the table in the room scales the whole matrix): it cancels in the
-   // divide by w, hence the ratio with the term that gives w.
-   const Matrix3D& proj = mvp.GetProj(0);
-   const bool orthographic = fabsf(proj._34) < 1e-6f * fabsf(proj._22);
-   const float pixelScale = max(fabsf(proj._22 / (orthographic ? proj._44 : proj._34)) * 0.5f * static_cast<float>(renderHeight), 1e-6f);
-   const float allowed = m_allowedPixels * (orthographic ? 1.f : distance) / pixelScale * (isReflectionPass ? kProbeFactor : 1.f) / max(scale, 1e-6f);
+   bool orthographic;
+   const float allowed = AllowedPerDistance(levels->loadSize, fullMatrix, mvp, renderHeight, orthographic) * (orthographic ? 1.f : distance) * (isReflectionPass ? kProbeFactor : 1.f);
 
    int level = -1;
    if (isReflectionPass && Reflections::IsSimplified()) // The coarsest in the reflections (Settings Player/SimplifiedReflections, see Reflections.h)
@@ -1268,6 +1286,66 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
       count = static_cast<uint32_t>(levels->levels[level].indices.size());
    }
    CountFrame((mesh.NumIndices() - count) / 3);
+}
+
+float MeshSimplifier::AllowedPerDistance(const Vertex3Ds& loadSize, const Matrix3D& fullMatrix, const ModelViewProj& mvp, int renderHeight, bool& orthographic) const
+{
+   // The levels' errors are for the size at load: scale them by the size now (a script may change it), the largest stretch of the axes
+   const Vertex3Ds& s = loadSize;
+   const float scale = max(max(
+      sqrtf(fullMatrix._11 * fullMatrix._11 + fullMatrix._12 * fullMatrix._12 + fullMatrix._13 * fullMatrix._13) / max(fabsf(s.x), 1e-6f),
+      sqrtf(fullMatrix._21 * fullMatrix._21 + fullMatrix._22 * fullMatrix._22 + fullMatrix._23 * fullMatrix._23) / max(fabsf(s.y), 1e-6f)),
+      sqrtf(fullMatrix._31 * fullMatrix._31 + fullMatrix._32 * fullMatrix._32 + fullMatrix._33 * fullMatrix._33) / max(fabsf(s.z), 1e-6f));
+   // Pixels per unit of the tangent of the angle from the view axis (perspective) or per VP unit (orthographic). Taken at the full render
+   // resolution, not the one of dynamic resolution, so that a lower resolution does not make the parts coarser, which would let it rise again.
+   // The projection may carry a scale of the scene (in VR, the size of the table in the room scales the whole matrix): it cancels in the
+   // divide by w, hence the ratio with the term that gives w.
+   const Matrix3D& proj = mvp.GetProj(0);
+   orthographic = fabsf(proj._34) < 1e-6f * fabsf(proj._22);
+   const float pixelScale = max(fabsf(proj._22 / (orthographic ? proj._44 : proj._34)) * 0.5f * static_cast<float>(renderHeight), 1e-6f);
+   return m_allowedPixels / pixelScale / max(scale, 1e-6f);
+}
+
+bool MeshSimplifier::SelectTileLevels(Primitive* part, const ModelViewProj& mvp, int renderHeight, const MeshTiles::Run*& runs, int& nRuns) const
+{
+   const MeshLevels* const levels = part->m_meshLevels.get();
+   if (!m_enabled || MeshTiles::GetLevelMode() == MeshTiles::LevelsOff || levels == nullptr || part->m_meshTiles == nullptr || !part->m_meshTiles->HasLevelsByTile())
+      return false;
+   Primitive* const owner = levels->tileOwner;
+   if (owner == nullptr || (owner != part && levels->leader != owner) || owner->m_meshTiles == nullptr || !owner->m_meshTiles->HasLevelsByTile() || owner->m_meshLevels == nullptr
+      || owner->m_meshLevels->levels.size() != levels->levels.size() || part->m_meshTiles->GetNumRanges() != levels->levels.size() + 1)
+      return false;
+
+   // The owner picks the level of each of its tiles, once per frame, for itself and its layers
+   const MeshLevels& ownerLevels = *owner->m_meshLevels;
+   vector<float> errors(ownerLevels.levels.size());
+   for (size_t l = 0; l < errors.size(); l++)
+      errors[l] = ownerLevels.levels[l].error;
+   bool orthographic;
+   const float perDistance = AllowedPerDistance(ownerLevels.loadSize, owner->GetFullMatrix(), mvp, renderHeight, orthographic);
+   float gaze[2][2];
+   bool gazeValid = false;
+   #ifdef ENABLE_XR
+   if (MeshTiles::GetLevelMode() == MeshTiles::LevelsByDistanceAndGaze && g_pplayer->m_vrDevice && mvp.m_nEyes == 2)
+      gazeValid = g_pplayer->m_vrDevice->GetGazeTangents(gaze);
+   #endif
+   owner->m_meshTiles->ChooseLevels(errors, owner->GetFullMatrix(), mvp, perDistance, orthographic, gazeValid ? gaze : nullptr, g_pplayer->m_overall_frames, kCoarserMargin);
+   if (owner == part)
+      owner->m_meshLevel = owner->m_meshTiles->GetFinestChosen(); // For the reflections and a switch back to one level for the part
+
+   // Each range shortened by light map pruning
+   MeshTiles& tiles = *part->m_meshTiles;
+   vector<uint32_t> counts(tiles.GetNumRanges());
+   for (size_t r = 0; r < counts.size(); r++)
+   {
+      counts[r] = tiles.GetRangeIndices(r);
+      if (part->m_d.m_addBlend)
+         LightMapPruning::Get().Trim(part, tiles.GetRangeFirst(r), counts[r]);
+   }
+   size_t drawn = 0;
+   nRuns = tiles.SelectLevelRuns(mvp, *owner->m_meshTiles, counts, runs, drawn);
+   CountFrame(part->m_mesh.NumIndices() > drawn ? (part->m_mesh.NumIndices() - drawn) / 3 : 0);
+   return true;
 }
 
 void MeshSimplifier::CountFrame(size_t saved) const

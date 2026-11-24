@@ -1451,6 +1451,30 @@ channels) over the middle, invisible side by side. Hence `Player.SimplifiedRefle
 most of the same 0.95 ms, more work. The parts' own drawing over the middle (about 3.4 ms more than at the lockbar) is per pixel: the
 playfield and the toys fill the view, with their full-resolution textures.
 
+**Where the frames miss** (`frametime-hooks.py`, `ft-report.py`: the CPU-side times of each frame next to its GPU time, the eyes moving
+from the lockbar to 10 cm above the middle and back every 40 s). The frames miss their display because the GPU runs late; dynamic
+resolution reacts after them, and the change of scale costs nothing (it is a viewport within full-size targets). The CPU side is not
+the cause. With the tiles and the simplified reflections, the close view over the middle holds (10.6 ms, no frame missed); the heaviest
+point is on the way in, three quarters of the way (15 to 16 ms at 2160 x 2160): the eyes are still high enough to see 95 % of the
+triangles, and close enough for every part to draw its full mesh. Held there (`VPX_PERF_LEAN=-0.75,...`): 15.61 ms, and 4.48 ms less with
+every simplified part at its coarsest level, 6.05 ms less without the light maps.
+
+**The coarsest levels up close.** On the Mac, the game paused and the same moment captured at the levels picked and with every
+simplified part at its coarsest level (over the middle 711 k → 178 k triangles): clearly worse. The caps of the posts and the nuts turn
+into black holes (they exist only in the full mesh, and their light maps have nothing left under them), the dragon is faceted and its
+claw loses its fingers, part of the castle's crest and the screws of the lanes go, some patches of light no longer sit on their part.
+Detail has to stay where the eyes are close, and where they look.
+
+**Levels by tile** (`Player.TileLevels`, *Detail by tile*, `docs/steam-frame/Culling by Tiles.md`, section 8): each tile of a large part
+draws the level of its own distance, and away from the gaze up to 4 times more error. Held at the three points, the three modes in turn
+every 20 s (the gaze, which a headless run does not have, held at the view center):
+
+| Point | Off | Distance | Distance and gaze |
+|---|---|---|---|
+| Lockbar | 6.64 ms | 6.43 ms | 6.24 ms |
+| Three quarters of the way in | 16.13 ms (29 % of frames missed) | 14.43 ms (4.3 %) | 13.26 ms (2.0 %) |
+| 10 cm above the middle | 11.05 ms | 10.19 ms | 9.73 ms |
+
 
 From `vpinball/`, with the Frame on the network:
 
