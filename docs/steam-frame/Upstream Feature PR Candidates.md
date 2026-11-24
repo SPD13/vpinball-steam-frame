@@ -49,7 +49,7 @@ State of the pull requests already sent (checked with `gh` on 2026-11-18 and aga
 | vpinball#4439 PuP: a background of a higher priority replaces a looping media | merged 2026-11-15 |
 | vpinball#4449 B2S: backglass GI string IDs are 1-based | merged 2026-11-17 |
 | pinmame#838 libpinmame: the nibble of 4-bit memory before the mask | merged |
-| vpinball#4435 PuP: label draw order of positioned screens | draft, open. Upstream `b394442fa` (draw screens and labels in window stacking order, 2026-11-15) replaced the render passes it reordered, and the sync of 2026-11-20 dropped the fork's commit for upstream's code. Close it, or rework it, once City Hunter and Tomb Raider are checked on the Frame |
+| vpinball#4435 PuP: label draw order of positioned screens | closed 2026-11-23, superseded by upstream `b394442fa` (draw screens and labels in window stacking order, 2026-11-15), which replaced the render passes it reordered; the sync of 2026-11-20 dropped the fork's commit for upstream's code, and City Hunter and Tomb Raider show their scores with it on the Frame |
 | vpinball#4493 PinMAME plugin: Dip gives the value of the machine until the plugin has its DIP switches (row 1) | merged 2026-11-22 |
 | vpinball#4496 Primitive: a mesh that fails to load is dropped instead of crashing the physics (row 3) | merged 2026-11-22 |
 | vpinball#4498 TextureManager: the UI's font texture is never evicted nor degraded (row 4) | merged 2026-11-22 |

@@ -1,8 +1,9 @@
-# PinUP Player: the labels of a screen positioned on another one are hidden by that screen's labels (upstream PR candidate)
+# PinUP Player: the labels of a screen positioned on another one are hidden by that screen's labels (superseded upstream)
 
 **Sync of 2026-11-20:** upstream draws the screens and their labels in window stacking order since b394442fa (2026-11-15), which
-replaced the render passes this change reorders. The fork's commit was dropped for upstream's code; City Hunter and Tomb Raider are
-checked on the Frame with it. The rest of this document describes the change as it was.
+replaced the render passes this change reorders. The fork's commit was dropped for upstream's code; City Hunter and Tomb Raider show
+their scores with it on the Frame (checked 2026-11-23), and the pull request (#4435) was closed on 2026-11-23. The rest of this
+document describes the change as it was.
 
 *2026-10-28. For `vpinball/vpinball` (`plugins/pup/PUPManager.cpp`, `PUPManager::Render`). The fork's commit is "pup: labels of a
 screen positioned on another one are drawn above the labels of that screen"; it applies to upstream `master` (`609d55068`, Oct 29) as it
