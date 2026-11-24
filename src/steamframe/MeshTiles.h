@@ -13,9 +13,13 @@
 //
 // While the index buffer of a large part is made (Primitive::RenderSetup), the triangles of each range it may draw (its mesh, each simplified level)
 // are grouped by the cell of a grid laid on the table, from their center (cells of kTileSize VP units, the same grid for every part, so that a light
-// map and the part under it share their cells). Each group, a tile, gets the box of its triangles. Each frame the tiles of the part are tested
-// against the view, and the part draws only the runs of its index range whose tiles may be seen: a few draws instead of one, merging the tiles that
-// follow each other in the buffer, and the small gaps between them. A part fully in the view draws its range at once as before.
+// map and the part under it share their cells). A triangle longer than a cell (a rail, the side of a ramp) goes to a cell of a coarser grid, the
+// first whose cells are as long as it (kTileSize << level): otherwise it would stretch the box of the small tile of its center across the table, and
+// that tile would always be seen (Medieval Madness, 10 cm above the middle of the playfield, before the coarser grids: 28 of the 64 tiles of
+// BM_Parts outsized, 313 k of its 337 k triangles drawn, 43 k in the view). Each group, a tile, gets the box of its triangles, at most about twice
+// its cell. Each frame the tiles of the part are tested against the view, and the part draws only the runs of its index range whose tiles may be
+// seen: a few draws instead of one, merging the tiles that follow each other in the buffer, and the small gaps between them. A part fully in the
+// view draws its range at once as before.
 //
 // Every tile of a part draws the same level, the one picked for the whole part (MeshSimplifier::SelectRange): mixing levels between tiles would
 // open cracks along their borders, and make light maps overlap there. Light maps sorted by light (LightMapPruning) keep their order: the tiles are
@@ -42,6 +46,8 @@ class MeshTiles final
 public:
    // Grid cell size, in VP units (1 VPU = 0.54 mm): 200 VPU = 10.8 cm, a 5 x 11 grid on a standard playfield
    static constexpr float kTileSize = 200.f;
+   // Coarser grids for the longer triangles: cells of kTileSize << level, up to 6400 VPU (3.5 m)
+   static constexpr int kMaxLevel = 5;
    // Parts whose mesh has fewer triangles than this are not tiled
    static constexpr size_t kMinTriangles = 4000;
    // Most draws a part makes: beyond, the runs separated by the fewest triangles are merged

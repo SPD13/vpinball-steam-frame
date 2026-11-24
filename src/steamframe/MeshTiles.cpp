@@ -34,9 +34,12 @@ struct TileStats
 };
 TileStats s_stats;
 
-uint64_t CellKey(int x, int y)
+// A cell of the grid of a level (x and y within +-1e6): sorting the keys sorts the cells by level, then by row from the top of the table, then from
+// the left
+constexpr int kCellBits = 21, kCellOffset = 1 << 20;
+uint64_t CellKey(int level, int x, int y)
 {
-   return (static_cast<uint64_t>(static_cast<uint32_t>(y)) << 32) | static_cast<uint32_t>(x);
+   return (static_cast<uint64_t>(level) << (2 * kCellBits)) | (static_cast<uint64_t>(y + kCellOffset) << kCellBits) | static_cast<uint64_t>(x + kCellOffset);
 }
 }
 
@@ -107,7 +110,8 @@ std::shared_ptr<MeshTiles> MeshTiles::Build(Primitive* part, const Mesh& mesh, c
       if (static_cast<size_t>(s.first) + s.count > indices.size())
          return nullptr;
 
-   // The cell of each triangle, from its center on the table (the grid starts at the top left corner of the playfield: the same cells for all parts)
+   // The cell of each triangle, from its center on the table, in the grid of the first level whose cells are as long as the triangle (the grids start
+   // at the top left corner of the playfield: the same cells for all parts)
    const PinTable* const table = part->m_ptable;
    const Matrix3D matrix = part->RecalculateMatrices();
    const float left = min(table->m_left, table->m_right), top = min(table->m_top, table->m_bottom);
@@ -120,33 +124,38 @@ std::shared_ptr<MeshTiles> MeshTiles::Build(Primitive* part, const Mesh& mesh, c
    for (const Span& s : spans)
       for (uint32_t i = s.first; i + 2 < s.first + s.count; i += 3)
       {
-         Vertex3Ds c(0.f, 0.f, 0.f);
+         Vertex3Ds p[3];
          for (int k = 0; k < 3; k++)
          {
             const unsigned int vi = indices[i + k];
             if (vi >= nv)
                return nullptr;
             const Vertex3D_NoTex2& v = mesh.m_vertices[vi];
-            c.x += v.x; c.y += v.y; c.z += v.z;
+            p[k] = matrix.MultiplyVectorNoPerspective(Vertex3Ds(v.x, v.y, v.z));
          }
-         c = matrix.MultiplyVectorNoPerspective(Vertex3Ds(c.x / 3.f, c.y / 3.f, c.z / 3.f));
-         const float fx = std::isfinite(c.x) ? std::clamp((c.x - left) / kTileSize, -1e6f, 1e6f) : 0.f;
-         const float fy = std::isfinite(c.y) ? std::clamp((c.y - top) / kTileSize, -1e6f, 1e6f) : 0.f;
-         const uint64_t key = CellKey(static_cast<int>(floorf(fx)), static_cast<int>(floorf(fy)));
+         const float cx = (p[0].x + p[1].x + p[2].x) / 3.f, cy = (p[0].y + p[1].y + p[2].y) / 3.f;
+         const float length = max(max(p[0].x, max(p[1].x, p[2].x)) - min(p[0].x, min(p[1].x, p[2].x)), max(p[0].y, max(p[1].y, p[2].y)) - min(p[0].y, min(p[1].y, p[2].y)));
+         int level = 0;
+         while (level < kMaxLevel && !(length <= kTileSize * static_cast<float>(1 << level))) // Not finite: the coarsest
+            level++;
+         const float size = kTileSize * static_cast<float>(1 << level);
+         const float fx = std::isfinite(cx) ? std::clamp((cx - left) / size, -1e6f, 1e6f) : 0.f;
+         const float fy = std::isfinite(cy) ? std::clamp((cy - top) / size, -1e6f, 1e6f) : 0.f;
+         const uint64_t key = CellKey(level, static_cast<int>(floorf(fx)), static_cast<int>(floorf(fy)));
          cellOf.push_back(key);
          cellIds.emplace(key, 0u);
       }
    if (cellIds.size() < 2)
       return nullptr;
 
-   // Tiles in the order of their cells, by row from the top of the table then from the left, so that a part of the view draws few runs
-   vector<std::pair<int, int>> cells;
+   // Tiles in the order of their cells, by level, then by row from the top of the table, then from the left, so that a part of the view draws few runs
+   vector<uint64_t> cells;
    cells.reserve(cellIds.size());
    for (const auto& [key, id] : cellIds)
-      cells.emplace_back(static_cast<int>(static_cast<uint32_t>(key >> 32)), static_cast<int>(static_cast<uint32_t>(key)));
+      cells.push_back(key);
    std::sort(cells.begin(), cells.end());
    for (size_t t = 0; t < cells.size(); t++)
-      cellIds[CellKey(cells[t].second, cells[t].first)] = static_cast<uint32_t>(t);
+      cellIds[cells[t]] = static_cast<uint32_t>(t);
 
    auto tiles = std::make_shared<MeshTiles>();
    const size_t nTiles = cells.size();
