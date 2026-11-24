@@ -942,7 +942,8 @@ The full account, with the Frame measurements: `docs/steam-frame/Culling by Tile
   while the eyes saw a corner (16 % of the triangles drawn were in the view, 10 cm above the middle of the playfield).
 - **While the table loads.** `MeshSimplifier::CreateIndexBuffer` builds the index buffer of any primitive of at least 4,000 triangles
   without animation, and `MeshTiles::Build` groups the triangles of each range (the mesh and each simplified level) by the cell of a
-  200 VPU grid laid on the table (the cell of the triangle's centre), with a stable counting sort, inside the shares of light-map
+  200 VPU grid laid on the table (the cell of the triangle's centre; a triangle longer than a cell goes to a coarser grid, 200 << level
+  VPU, so that it does not stretch a small tile's box across the table), with a stable counting sort, inside the shares of light-map
   pruning (`LightMapPruning::GetCounts`), so `Trim` still keeps a prefix. Only the GPU copy is reordered: the physics and the CPU mesh
   keep their order. Each range keeps its tiles' boxes and index runs.
 - **Each frame.** After `SelectRange` and `Trim`, `Primitive::Render` asks `MeshTiles::SelectRuns` for the runs to draw: the whole range
@@ -951,9 +952,9 @@ The full account, with the Frame measurements: `docs/steam-frame/Culling by Tile
   dependency attaches to the next draw only). One level for the whole part: mixing levels between tiles would open cracks.
 - **Setting.** `Player.MeshTiles` (on by default), switched live in Device Performance > Simplified meshes, with a status line (tiled
   parts, tiles, share of their triangles left out over the last second); the log gives the count at the first frame.
-- **Measured on the Frame** (Medieval Madness, 2160 x 2160): rules card 8.79 → 6.57 ms (1,081 → 556 k triangles), the lockbar unchanged,
-  the middle of the playfield 15.29 → 14.16 ms (18 % of the triangles left out: the eyes still see the back half of the table, and most
-  of that view's extra cost is per pixel). On the Mac, captures with it on and off are identical.
+- **Measured on the Frame** (Medieval Madness, 2160 x 2160, on and off in turn within one run, with the coarser cells): rules card
+  8.75 → 6.27 ms (1,117 → 452 k triangles, below the lockbar's 6.75 ms), the middle of the playfield 14.23 → 11.85 ms (the eyes still
+  see the back half of the table), the lockbar unchanged. On the Mac, captures with it on and off are identical.
 
 Files: `src/steamframe/MeshTiles.h/.cpp` (new), `src/steamframe/MeshSimplifier.h/.cpp`, `src/steamframe/LightMapPruning.h/.cpp`,
 `src/parts/primitive.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`,

@@ -78,9 +78,11 @@ the part's mesh, then each of its simplified levels, each a range of the buffer.
 1. **Cells.** The center of each triangle of each range is placed on the table (the part's matrix at load, `RecalculateMatrices`), and
    falls in a cell of a grid of `kTileSize` = 200 VP units starting at the top left corner of the playfield. The grid is the same for
    every part, so that a light map and the part under it put the same triangles in the same cell. Cells outside the playfield (rooms,
-   cabinet) are cells like the others. A part on one cell is not tiled.
-2. **Tiles.** The cells used by any range of the part, in the order of the rows of the table then from the left, become its tiles. The
-   box of each tile, in the part's own mesh space, covers its triangles of every range (a simplified triangle has its own center, so a
+   cabinet) are cells like the others. A part on one cell is not tiled. A triangle longer than a cell (in x or y, on the table) goes
+   instead to a cell of a coarser grid, the first whose cells are as long as it (200 << level VPU, levels up to `kMaxLevel` = 5,
+   6400 VPU): its own small cell's box would otherwise stretch across the table and always be seen (section 7.1).
+2. **Tiles.** The cells used by any range of the part, by level, then in the order of the rows of the table, then from the left, become
+   its tiles. The box of each tile (at most about twice its cell), in the part's own mesh space, covers its triangles of every range (a simplified triangle has its own center, so a
    level may place a triangle in a cell next to the one of the mesh's triangles around it).
 3. **Order.** Within each range the triangles are grouped by tile (a stable counting sort: their order within a tile is kept), and
    each range records its entries: for each tile, where its triangles start in the range and how many there are.
@@ -95,7 +97,7 @@ new) cut each range in up to four shares, and the tiles are grouped inside each 
 start of the range, `Trim` is unchanged, and a change of level in the menu still applies at the next frame.
 
 The cost is a pass over the triangles of the large parts: no meshoptimizer work, nothing to cache. The log line `Culling by tiles: <n>
-parts of at least 4000 triangles in <m> tiles of 200 VPU` is written at the first frame. Medieval Madness: 56 parts in 1,083 tiles.
+parts of at least 4000 triangles in <m> tiles of 200 VPU` is written at the first frame. Medieval Madness: 56 parts in 1,312 tiles (1,083 before the coarser cells).
 
 ### 3.2 Each frame: the runs
 
@@ -199,7 +201,36 @@ Moving runs with the owner's settings (dynamic resolution on), the eyes going fr
   one over the other, fill the whole view, where at the lockbar the cabinet and the room take part of it.
 - **In the headset** (the owner, same day): leaning in close still drops the performance. Next: what
   the pixels cost there, light map by light map (`Doc/test-hooks/diag-hooks.py`), `docs/Performance on the Steam Frame.md`.
-- The log line at the first frame: "Culling by tiles: 56 parts of at least 4000 triangles in 1083 tiles of 200 VPU".
+- The log line at the first frame: "Culling by tiles: 56 parts of at least 4000 triangles in 1083 tiles of 200 VPU" (1312 since section 7.1).
+
+### 7.1 Long triangles in coarser cells (fe36765f0, the same day)
+
+The counts of `diag-hooks.py` over the middle showed why the tiles left so little out there: a triangle went to the tile of its center,
+so a long one (a rail, the side of a ramp) stretched that tile's box across the table, and the tile was always seen. BM_Parts had 28
+of its 64 tiles outsized, the largest box 951 x 2170 VPU; 313 k of its 337 k triangles were drawn, 43 k of them in the view. A
+triangle longer than a cell now goes to a cell of a coarser grid, the first whose cells are as long as it (200 << level VPU, up to
+6400): no box is larger than about twice its cell (section 3.1). Medieval Madness gets 1312 tiles instead of 1083.
+
+- **Mac**: tiled triangles left out 19 → 31 % (12 cm above the middle), 77 → 99 % (6 cm above the inserts), 94 → 96 % (close to the
+  apron). The pixel comparison of section 6 needed one change: two runs no longer catch the attract mode at the same moment, so the
+  game is paused and the same moment captured with the tiles on, then off. Identical outside the desktop DMD, which kept running.
+- **Frame**, tiles switched on and off every 20 s within one run (`VPX_DIAG_CYCLE`, mode X), which avoids the run-to-run noise above:
+
+| View | Tiles off | Tiles on | Triangles drawn (off → on) |
+|---|---|---|---|
+| Lockbar | 6.72 ms | 6.75 ms | 589 k → 594 k |
+| 10 cm above the rules card | 8.75 ms | **6.27 ms** | 1,117 k → 452 k |
+| 10 cm above the middle of the playfield | 14.23 ms | **11.85 ms** | 1,194 k → 970 k |
+
+The card view gained most from the change (BM_Parts drawn: 155 k → 72 k triangles) and is now cheaper than the lockbar. Over the middle
+the change itself left out little more (all tiled parts: 679 k → 630 k triangles drawn, 147 k in the view); the 2.4 ms there are what
+the tiles save in all, which the runs of the table above, compared from one run to the next, understated. BM_Parts still draws 312 k
+triangles over the middle: 65 of its 92 tiles are seen, as the view from 10 cm above the playfield reaches the back of the table.
+
+What the rest of that view costs, measured the same way (`docs/Performance on the Steam Frame.md`): the playfield reflection
+0.50 ms at the lockbar and 1.81 ms over the middle (115 k then 300 k triangles drawn in it, already at half size), the light maps
+1.28 then 1.85 ms, the transparent parts other than the playfield's reflection (playfield, ramps and their refraction copies) 0.71
+then 1.13 ms. The reflection is the next target.
 
 ## 8. Limits and what could come next
 
