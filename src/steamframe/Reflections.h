@@ -2,9 +2,10 @@
 
 #pragma once
 
-// Steam Frame Edition: what the reflections leave out, and their size, switched live in the Reflections section of the Steam Frame screen of the VR menu
-// (Settings Player/ExtraMirrors and Player/RoomReflection: Off by default in the build of the Steam Frame, On elsewhere; Player/ReflectionSize: Half
-// in the build of the Steam Frame, Full elsewhere; docs/Performance on the Steam Frame.md, sections 8.6 and 8.8).
+// Steam Frame Edition: what the reflections leave out, their size and their meshes, switched live in the Reflections section of the Steam Frame screen
+// of the VR menu (Settings Player/ExtraMirrors and Player/RoomReflection: Off by default in the build of the Steam Frame, On elsewhere;
+// Player/ReflectionSize: Half in the build of the Steam Frame, Full elsewhere; Player/SimplifiedReflections: on; docs/Performance on the Steam
+// Frame.md, sections 8.6, 8.8 and 8.18).
 //
 // A reflection draws the scene again every frame. What it costs depends mostly on the parts drawn, on the GPU and on the render thread, so leaving parts out
 // saves a lot on the tables where these parts are heavy. Its size counts too where the GPU is the limit: half size per axis saves 0.45 ms per frame on
@@ -41,6 +42,14 @@ int GetReflectionSize();
 void SetReflectionSize(int size); // From the menu: the render targets of the probes are made again at their next render
 float GetProbeScale(); // Of the plane reflection probes, per axis
 unsigned int GetSizeRevision(); // Changes with the size, for the probes to make their render targets again
+
+// Parts drawn in the plane reflections at their most simplified mesh (Settings Player/SimplifiedReflections, on by default; read by
+// MeshSimplifier::SelectRange). Medieval Madness reflects BM_Parts (337 k triangles) alone: one level picked for the whole part from its
+// closest point gives the full mesh as soon as the eyes are over the playfield, though the reflection is half size and blurred. Measured on the
+// Frame at 2160 x 2160, 10 cm above the middle of the playfield: 0.95 ms per frame (316 k triangles drawn in the reflection instead of about 30 k),
+// half of what the whole reflection costs there; 0.61 ms over the rules card, 0.17 ms from the lockbar
+bool IsSimplified();
+void SetSimplified(bool simplified); // From the menu, applied at once
 
 // Tells if a probe is to be rendered at all: false for an extra mirror left out, whose parts then show no reflection
 bool IsProbeShown(const RenderProbe& probe);

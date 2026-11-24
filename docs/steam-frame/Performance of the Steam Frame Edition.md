@@ -573,6 +573,7 @@ The screen of this edition's performance features, behind the Steam Frame icon o
 | | **Room reflection** | On / Off / Automatic | Off | The parts of the VR room in the reflections: 3 to 5 ms on tables with a large room. They stay in the room around you. |
 | | *Status line* | | | Whether the room is left out, or that no part of it reaches the reflections on this table. |
 | | **Reflection size** | Full / Half | Half | The size of the reflections, per axis. Half renders them with a quarter of the pixels: softer reflections, for 0.45 ms less per frame on Darkest Dungeon at 2160², where it halves the slow frames (time at full resolution 95.5 → 98.7 %, missed frames 0.22 → 0.035 per second). Applied at once. |
+| | **Simplified reflections** | on / off | on | Draws the parts in the reflections at their most simplified mesh (with *Simplified meshes* on): the reflection is small and blurred, so it hardly changes on screen. 0.95 ms less per frame leaning in over the middle of Medieval Madness, 0.6 ms over its rules card. |
 | Textures | **Preload script images** | on / off | on | Also prepares, when a table starts, the images its script names ([section 10](#10-memory-threads-loading-and-table-switches)): no stop the first time the script shows one of them on a table's first play (World Poker Tour 1.9 s → 0.1 s), for a longer first start and memory held by the images never shown. Applies to the next table started. |
 | | *Status line* | | | How many images this table's script names that no part uses, and their size in megapixels. |
 

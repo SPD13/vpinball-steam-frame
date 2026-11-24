@@ -301,6 +301,7 @@ and the reference tables run at 72 fps, at or close to the panel's full resoluti
 - **Culling by tiles** (Device Performance screen): large parts drawn only where the view sees them: leaning in over Medieval Madness' rules card 8.8 → 6.3 ms, over the middle 14.2 → 11.9 ms.
 - **Welded meshes and reflection culling**: meshes exported as separate triangles can be simplified, and parts that cannot show in the playfield reflection are not drawn in it: Albator78 from 20 to 11–12 ms, 36 → 72 fps.
 - **Reflections** (Steam Frame screen): extra mirrors and the VR room left out of the reflections, On, Off or Automatic, Off by default: Robot Invasion from 22.7 to 9.4 ms and 2001 from 14.5 to 8.3 ms; Maverick from 16.4 to 11.1 ms and WildWest from 13.9 to 10.9 ms.
+- **Simplified reflections** (Steam Frame screen, Reflections): the parts in the reflections drawn at their most simplified mesh, as the reflection is small and blurred: leaning in over the middle of Medieval Madness 0.95 ms less per frame, with no visible change.
 - **Compact scene buffer** (Steam Frame screen): the scene stored with 4 bytes per pixel instead of 8: 0.9 ms on Addams, 1.5 ms on Ghostbusters.
 - **Faster FXAA**: the anti-aliasing reads the brightness the tone mapping already computed: the pass 23 % cheaper.
 - **Memory and table switches**: about 430 MB less memory per table on Linux, a GPU memory budget that no longer evicts textures, and one VR session for all tables (switches 150–250 ms faster).

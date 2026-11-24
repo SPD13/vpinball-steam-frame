@@ -1413,7 +1413,44 @@ when it is off).
 Tools: `Doc/test-hooks/heat-*` (sensor sampler, layout switcher, worn recorder, report) and `cpu-hooks.py`, `cpu-series.sh`,
 `cpu-report.py`. Not settled: the 1.2 cores of SteamVR worn, which VPX cannot change.
 
-## 9. Reproduction
+### 8.18 Leaning in close: where the GPU time goes (2026-11-23)
+
+Leaning in over Medieval Madness dropped the resolution in the headset. Two views were studied, 10 cm above the rules card and 10 cm
+above the middle of the playfield, looking at it from the player's side, against the lockbar view, at 2160 x 2160 without dynamic
+resolution (headless, `lean-hooks.py`). Static runs differ by more than 1.5 ms from one run to the next (the attract mode's lights), so
+the comparisons below are made within one run: `diag-hooks.py` switches a way of drawing every 20 s (`VPX_DIAG_CYCLE`) and
+`diag-report.py` averages each one, leaving out the 2 s after each switch.
+
+**Culling by tiles** (`docs/steam-frame/Culling by Tiles.md`, with its coarser cells for long triangles, fe36765f0): off and on in the
+same run, lockbar 6.72 → 6.75 ms, rules card 8.75 → 6.27 ms, middle 14.23 → 11.85 ms.
+
+**What is left over the middle** (11.6 ms against 6.7 ms at the lockbar), each line left out in turn:
+
+| Left out | Lockbar | Card | Middle |
+|---|---|---|---|
+| The light maps | 1.28 ms | 0.90 ms | 1.85 ms |
+| All parts but the light maps | 2.92 ms | 2.89 ms | 6.33 ms |
+| The playfield reflection | 0.50 ms | 1.00 ms | 1.98 ms |
+| The transparent parts, playfield included (their refraction copies, and the reflection the playfield asks for) | 1.21 ms | 1.73 ms | 2.94 ms |
+| Light-map pruning at High instead of Medium (far and middle runs of the first series) | 0.14 ms | | 0.05 ms |
+
+The playfield of this table is a baked part (`BM_Playfield`, material with opacity on), not the table's own playfield; without the
+reflection, the transparent parts (playfield, ramps `BM_Layer1` to `4`, two of them with refraction copies) cost 0.71 then 1.13 ms.
+
+**The reflection.** It draws a single part, `BM_Parts` (337 k triangles; the light maps are not reflected, and leaving them out of it
+changes nothing). From the lockbar it draws a simplified level (90 k triangles); over the middle its full mesh (316 k), as the level of a
+part is picked from its closest point, which is then right under the eyes (`cull-hooks.py`, `VPX_CULL_TEST=2` counts the reflection
+pass). Picking the level for the size the reflection is rendered at (half) changed nothing; drawing the coarsest level of every
+simplified part in the reflections saved 0.17 / 0.61 / 0.95 ms (lockbar / card / middle), half of what the whole reflection costs up
+close; the rest is the reflection's own passes. On the Mac (desktop, static prerendering off so that the reflection is drawn every frame,
+the game paused and the same moment captured both ways), the difference is in the reflection only, at most 21 of 765 (sum of the three
+channels) over the middle, invisible side by side. Hence `Player.SimplifiedReflections` (*Simplified reflections*, Reflections page, on;
+`MeshSimplifier::SelectRange` takes the last level in a reflection pass, `src/steamframe/Reflections.h`).
+
+**Not done.** A level per tile in the reflection only (the near tiles keep their detail; cracks between levels would be blurred there):
+most of the same 0.95 ms, more work. The parts' own drawing over the middle (about 3.4 ms more than at the lockbar) is per pixel: the
+playfield and the toys fill the view, with their full-resolution textures.
+
 
 From `vpinball/`, with the Frame on the network:
 

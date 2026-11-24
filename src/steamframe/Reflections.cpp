@@ -33,6 +33,7 @@ static std::atomic<int> s_extraMirrorCount = 0;
 static std::atomic<bool> s_roomPartSeen = false;
 static std::atomic<int> s_reflectionSize = Full;
 static std::atomic<unsigned int> s_sizeRevision = 0;
+static std::atomic<bool> s_simplified = true;
 
 // Automatic mode, on the render thread
 static std::atomic<float> s_playedMs = 0.f;
@@ -55,6 +56,7 @@ void Load(const Settings& settings)
    s_extraMirrors = settings.GetPlayer_ExtraMirrors();
    s_roomReflection = settings.GetPlayer_RoomReflection();
    s_reflectionSize = settings.GetPlayer_ReflectionSize();
+   s_simplified = settings.GetPlayer_SimplifiedReflections();
    s_sizeRevision++;
    s_extraMirrorsAutoOff = false;
    s_roomReflectionAutoOff = false;
@@ -85,6 +87,10 @@ void SetReflectionSize(int size)
 float GetProbeScale() { return s_reflectionSize == Half ? 0.5f : 1.f; }
 
 unsigned int GetSizeRevision() { return s_sizeRevision; }
+
+bool IsSimplified() { return s_simplified; }
+
+void SetSimplified(bool simplified) { s_simplified = simplified; }
 
 bool IsProbeShown(const RenderProbe& probe)
 {

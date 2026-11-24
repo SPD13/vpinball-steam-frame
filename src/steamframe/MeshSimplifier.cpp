@@ -4,6 +4,7 @@
 #include "MeshSimplifier.h"
 #include "MeshLevelCache.h"
 #include "MeshTiles.h"
+#include "Reflections.h"
 
 #include "core/player.h"
 #include "core/VPApp.h"
@@ -1244,8 +1245,11 @@ void MeshSimplifier::SelectRange(const MeshLevels* levels, const Mesh& mesh, con
    const float allowed = m_allowedPixels * (orthographic ? 1.f : distance) / pixelScale * (isReflectionPass ? kProbeFactor : 1.f) / max(scale, 1e-6f);
 
    int level = -1;
-   for (int i = 0; i < static_cast<int>(levels->levels.size()) && levels->levels[i].error <= allowed; i++)
-      level = i;
+   if (isReflectionPass && Reflections::IsSimplified()) // The coarsest in the reflections (Settings Player/SimplifiedReflections, see Reflections.h)
+      level = static_cast<int>(levels->levels.size()) - 1;
+   else
+      for (int i = 0; i < static_cast<int>(levels->levels.size()) && levels->levels[i].error <= allowed; i++)
+         level = i;
    if (!isReflectionPass)
    {
       // Finer at once, coarser with a margin

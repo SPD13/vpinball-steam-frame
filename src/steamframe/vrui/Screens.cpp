@@ -258,6 +258,7 @@ static const vector<ProfileSetting>& GetProfileSettings()
       { &Settings::m_propPlayer_ExtraMirrors, { 1, 1, 0 } }, // Off, Off, On
       { &Settings::m_propPlayer_RoomReflection, { 1, 1, 0 } }, // Off, Off, On
       { &Settings::m_propPlayer_ReflectionSize, { 1, 1, 0 } }, // Half, Half, Full
+      { &Settings::m_propPlayer_SimplifiedReflections, { 1, 1, 0 } },
    };
    return settings;
 }
@@ -649,6 +650,10 @@ private:
          Settings::m_propPlayer_ReflectionSize, //
          []() { return Reflections::GetReflectionSize(); }, //
          [](int, int v) { Reflections::SetReflectionSize(v); }));
+      AddItem(std::make_unique<InGameUIItem>( //
+         Settings::m_propPlayer_SimplifiedReflections, //
+         []() { return Reflections::IsSimplified(); }, //
+         [](bool v) { Reflections::SetSimplified(v); }));
    }
 };
 

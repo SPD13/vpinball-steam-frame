@@ -46,7 +46,7 @@ Changes a player sees, in the standalone builds (details in the numbered section
 - **Culling by tiles** (Device Performance > Simplified meshes > Culling by tiles, on by default, live): the large parts (3D primitives of at least 4,000 triangles, not animated) are cut into tiles of 200 VPU when the table loads, and only the tiles in the view are drawn: leaning in over Medieval Madness' rules card 8.79 → 6.57 ms on the Frame, the same image (section 37).
 - **Preload script images** (Device Performance > Textures, on by default, per table or for all, next table started): the images a table's script names (such as the "GI off" versions of the parts' images) are prepared when the table starts, like those of its parts, so the first time the script shows them on a table's first play no longer stops the game: World Poker Tour 1.9 s → one frame of 0.1 s when its GI first goes off. Costs a longer first start and memory for images a script names but never shows (section 28).
 - **Compact scene buffer** (Steam Frame > Scene buffer, on by default in the Frame build, per table or for all): the scene is rendered with 4 bytes per pixel (RG11B10F) instead of 8, 0.88 ms per frame on Addams and 1.52 ms on Ghostbusters, at the cost of color precision before the tone mapping; switched live (section 21).
-- **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic, and *Reflection size*, Full or Half (Half by default in the Frame build, since 2026-11-02). Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
+- **Reflections** (Steam Frame > Reflections, Off by default in the Frame build, per table or for all): *Extra mirrors* and *Room reflection*, On, Off or Automatic, *Reflection size*, Full or Half (Half by default in the Frame build, since 2026-11-02), and *Simplified reflections*, on by default (since 2026-11-23: the parts in the reflections at their most simplified mesh, section 38). Off leaves out of the reflections the mirrors other than the playfield's, and the parts of the VR room: Robot Invasion 22.7 → 9.4 ms, 2001 14.5 → 8.3 ms, Maverick 16.4 → 11.1 ms, WildWest 13.9 → 10.9 ms (section 22).
 - **Thread placement** (no menu entry, `Player.ThreadPlacement`, Frame build): while a table is played, the render thread runs on core 7, the logic thread on cores 5 and 6 and the others on cores 2 to 4. Worn, Darkest Dungeon spends 62 % of its time at full resolution with it (two plays) against 1.9 to 19.4 % without (three plays); headless with Steam's cores it gains little (section 23).
 - **No hidden desktop render**: the desktop window nobody sees on the Frame no longer gets its own render of the scene (the *Desktop display* setting is forced off and hidden in the Frame build), which takes Addams Family from 18.0 to 11.6 ms per frame at the native 2160×2160: heavy tables now hold 72 fps at the panel resolution (section 13, `docs/Performance on the Steam Frame.md`). Nothing is drawn into that window at all: presenting it into gamescope's 60 Hz Xwayland along the 72 Hz headset frames locked most table starts into a frame pacing stall (the render thread waiting 12 ms per frame, the runtime reporting a full frame of GPU time) and cost 2 ms of render thread per frame otherwise.
 - **Passthrough** (Y on the right controller, or VR & Room > Passthrough, saved at once, so the application starts as it was left): the headset shows your own room around the cabinet instead of the virtual room of the table and of the lobby, switched live. The parts of each table's room are found when it starts (by their part group or collection, and by their size and place around the cabinet) and left out; tables made with a mixed reality room show it. Needs a runtime that blends the game over its passthrough (alpha blend mode, offered by SteamVR on the Frame); otherwise the switch says so and nothing changes (section 26).
@@ -959,6 +959,22 @@ The full account, with the Frame measurements: `docs/steam-frame/Culling by Tile
 Files: `src/steamframe/MeshTiles.h/.cpp` (new), `src/steamframe/MeshSimplifier.h/.cpp`, `src/steamframe/LightMapPruning.h/.cpp`,
 `src/parts/primitive.h/.cpp`, `src/core/Settings_properties.inl`, `src/steamframe/vrui/Screens.cpp`, `steamframe/steamframe.cmake`,
 `docs/steam-frame/Culling by Tiles.md`.
+
+
+## 38. Simplified reflections (2026-11-23)
+
+- **Why.** Over the middle of Medieval Madness the playfield reflection cost 1.98 ms of the 11.6 ms per frame (0.50 ms at the lockbar).
+  It draws one part, `BM_Parts` (337 k triangles), and the level of a simplified part is picked from its closest point, right under the
+  eyes there: the full mesh (316 k triangles) in a reflection rendered at half size and blurred.
+- **What.** `Player.SimplifiedReflections` (on; Reflections page of the Steam Frame screen, live, in the performance profiles: on for
+  Low and Medium, off for High): `MeshSimplifier::SelectRange` takes the last (coarsest) level of a simplified part in a reflection pass,
+  through `Reflections::IsSimplified()`. Needs *Simplified meshes* (no levels otherwise).
+- **Measured on the Frame** (2160 x 2160, on and off in turn within one run): 0.95 ms less over the middle of the playfield, 0.61 ms
+  over the rules card, 0.17 ms from the lockbar. On the Mac the difference is in the reflection only and cannot be seen side by side
+  (`docs/Performance on the Steam Frame.md`, section 8.18).
+
+Files: `src/steamframe/Reflections.h/.cpp`, `src/steamframe/MeshSimplifier.cpp`, `src/core/Settings_properties.inl`,
+`src/steamframe/vrui/Screens.cpp`, `docs/Performance on the Steam Frame.md`, `docs/steam-frame/Performance of the Steam Frame Edition.md`.
 
 ## Effects on existing builds
 
